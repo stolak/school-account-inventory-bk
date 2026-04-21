@@ -1,0 +1,881 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+// datasource db {
+// provider = "postgresql"
+// url      = env("DATABASE_URL")
+// }
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// datasource db {
+//   provider = "postgresql"
+//   url      = env("DATABASE_URL")
+// }
+
+datasource db {
+  provider          = "mysql"
+  url               = env("DATABASE_URL")
+  shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+enum UserType {
+  Admin
+  Merchant
+  Buyer
+}
+
+enum Role {
+  Visitor
+  Admin
+  Merchant
+  Buyer
+  SuperAdmin
+  CustomerSupport
+}
+
+enum DocumentStatus {
+  Pending
+  Approved
+  Rejected
+}
+
+enum MerchantStatus {
+  Pending
+  Approved
+  Rejected
+  Inactive
+  Active
+  Suspended
+  Deleted
+}
+
+enum LoanStatus {
+  Pending
+  Approved
+  Active
+  Cancel
+  Complete
+  Pause
+  Default
+}
+
+enum LoanType {
+  Personal
+  Corporate
+}
+
+enum LoanPenaltyStatus {
+  Active
+  Inactive
+}
+
+enum InvoiceType {
+  Purchase
+  Ecommerce
+  Shopping
+  Services
+  Invoice
+}
+
+enum LoanScheduleStatus {
+  Open
+  Closed
+  Cancelled
+}
+
+enum TierStatus {
+  Active
+  Inactive
+}
+
+enum OutletStatus {
+  Active
+  Inactive
+}
+
+enum RevenueType {
+  Repayment
+  Settlement
+  DownPayment
+}
+
+model User {
+  id              String   @id @default(uuid())
+  password        String
+  firstName       String?
+  lastName        String?
+  profileImageUrl String?
+  phoneNumber     String?
+  email           String   @unique
+  userType        UserType @default(Buyer)
+  role            Role     @default(Visitor)
+  isActive        Boolean  @default(false)
+  isVerified      Boolean  @default(false)
+  isEmailVerified Boolean  @default(false)
+  isPhoneVerified Boolean  @default(false)
+  isDeleted       Boolean  @default(false)
+
+  createdById  String?
+  approvedById String?
+  modifiedById String?
+  merchantId   String? // 👈 Foreign key to Merchant
+  outletId     String? // 👈 Foreign key to Outlet
+
+  createdBy  User? @relation("CreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy User? @relation("ApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  modifiedBy User? @relation("ModifiedBy", fields: [modifiedById], references: [id], onDelete: SetNull)
+
+  createdUsers  User[] @relation("CreatedBy")
+  approvedUsers User[] @relation("ApprovedBy")
+  modifiedUsers User[] @relation("ModifiedBy")
+
+  // 👇 Define relation back to Merchant
+  merchant Merchant? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  // 👇 Define relation back to Outlet
+  outlet Outlet? @relation("OutletUsers", fields: [outletId], references: [id], onDelete: SetNull)
+
+  status       String   @default("active")
+  referralCode String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  buyer          Buyer?
+  buyersCreated  Buyer[] @relation("BuyerCreatedBy")
+  buyersApproved Buyer[] @relation("BuyerApprovedBy")
+  buyersModified Buyer[] @relation("BuyerModifiedBy")
+
+  // Merchants whose terms this user agreed to
+  merchantsTermsAgreed Merchant[] @relation("MerchantTermsAgreedBy")
+
+  // Outlets managed by this user
+  managedOutlets Outlet[] @relation("OutletManager")
+
+  // Password reset tokens
+  passwordResetTokens PasswordResetToken[]
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+model Buyer {
+  id        String @id @default(uuid())
+  liftpayId String @unique @db.VarChar(30)
+  userId    String @unique
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  firstName   String?
+  lastName    String?
+  DOB         String?
+  phoneNumber String?
+  email       String  @unique
+  address     String?
+  gender      String?
+  idType      String?
+  idNumber    String?
+  nin         String?
+  bvn         String?
+  photo       String?
+  state       String?
+  LGA         String?
+  streetName  String?
+  houseNo     String?
+  zipCode     String?
+
+  isActive        Boolean @default(false)
+  isVerified      Boolean @default(false)
+  isEmailVerified Boolean @default(true)
+  isPhoneVerified Boolean @default(true)
+
+  createdById  String?
+  approvedById String?
+  modifiedById String?
+
+  createdBy  User? @relation("BuyerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy User? @relation("BuyerApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  modifiedBy User? @relation("BuyerModifiedBy", fields: [modifiedById], references: [id], onDelete: SetNull)
+
+  status String @default("active")
+
+  IsSalaried                  Boolean   @default(false)
+  SalariedDate                DateTime?
+  IsTermsAndConditionAccepted Boolean   @default(false)
+
+  loans               Loan[]
+  eligibilityAndScore EligibilityAndScore[]
+  scoringInputSnapshots ScoringInputSnapshot[]
+  invoices            Invoice[]
+  revenues            Revenue[]
+  monoConnects        MonoConnect[]
+  accountDetails      AccountDetails[]
+  mandates            InvoiceMandate[]
+  directPays          DirectPay[]
+  paystackTransfers   PaystackTransfer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+//
+
+model Merchant {
+  id                          String  @id @default(uuid())
+  liftpayId                   String  @unique @db.VarChar(30)
+  businessName                String
+  businessEmail               String  @unique
+  authorizedPerson            String?
+  authorizedDesignation       String?
+  authorizedPhoneNo           String?
+  authorizedEmail             String? @unique
+  typeOfServiceOrProducts     String?
+  cacNumber                   String? @unique
+  dateOfIncorporation         String?
+  tin                         String? @unique
+  registrationAddress         String?
+  businessDescription         String? @db.VarChar(30000)
+  businessCategory            String?
+  businessType                String?
+  businessPhone               String? @unique
+  officeWebsite               String? @unique
+  IsTermsAndConditionAccepted Boolean @default(false)
+
+  shareholders MerchantShareHolder[]
+  directors    MerchantDirector[]
+  banks        BankAccount[]
+  authorisers  MerchantAuthoriser[]
+
+  // 👇 One-to-many: A merchant can have many users
+  users User[]
+
+  // User who agreed to terms
+  agreedByUser User? @relation("MerchantTermsAgreedBy", fields: [agreedToTermsBy], references: [id], onDelete: SetNull)
+
+  isBusinessInfoVerified     DocumentStatus? @default(Pending)
+  isAuthorizedPersonVerified DocumentStatus? @default(Pending)
+  isDirectorsVerified        DocumentStatus? @default(Pending)
+  isShareholdersVerified     DocumentStatus? @default(Pending)
+  isAuthorisersVerified      DocumentStatus? @default(Pending)
+  isBankAccountVerified      DocumentStatus? @default(Pending)
+
+  // documents
+  cacCertificate           String?
+  isCACCertificateVerified DocumentStatus? @default(Pending)
+
+  memart                      String?
+  isMEMERTCertificateVerified DocumentStatus? @default(Pending)
+
+  cac2Form               String?
+  isCAC2CAC7FormVerified DocumentStatus? @default(Pending)
+
+  utilityBill         String?
+  utilityBillVerified DocumentStatus? @default(Pending)
+
+  boardResolution         String?
+  boardResolutionVerified DocumentStatus? @default(Pending)
+
+  documentStatus    DocumentStatus? @default(Pending)
+  applicationStatus MerchantStatus? @default(Pending)
+
+  verificationStatus MerchantStatus? @default(Pending)
+
+  bankAccount String?
+  accountName String?
+  walletId    BigInt?
+  bankName    String?
+  bankCode    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  isDeleted                  Boolean?                            @default(false)
+  RejectionReason            RejectionReason[]
+  merchantCharge             Decimal?                            @default(0)
+  isAgreedToTerms            Boolean?                            @default(false)
+  agreedToTermsAt            DateTime?
+  agreedToTermsBy            String?
+  Loan                       Loan[]
+  invoices                   Invoice[]
+  merchantTransactions       MerchantTransaction[]
+  outlets                    Outlet[]
+  revenues                   Revenue[]
+  paystackTransferRecipients PaystackMerchantTransferRecipient[]
+  paystackTransfers          PaystackTransfer[]
+}
+
+model MerchantShareHolder {
+  id          String   @id @default(uuid())
+  merchantId  String
+  merchant    Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  shareholder String?
+  holding     String?
+}
+
+model MerchantDirector {
+  id         String   @id @default(uuid())
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  director   String?
+  position   String?
+  doc        String?
+}
+
+model BankAccount {
+  id            String   @id @default(uuid())
+  bankId        String
+  merchantId    String
+  accountName   String
+  accountNumber String
+  merchant      Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  bank          Bank     @relation(fields: [bankId], references: [id], onDelete: Cascade)
+}
+
+model Bank {
+  id          String        @id @default(uuid())
+  bankCode    String        @unique
+  bankName    String
+  BankAccount BankAccount[]
+}
+
+model MerchantAuthoriser {
+  id              String   @id @default(uuid())
+  merchantId      String
+  authoriserName  String
+  designation     String
+  authoriserEmail String
+  authoriserPhone String
+  bvn             String?
+  nin             String
+  merchant        Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+}
+
+model RejectionReason {
+  id              String   @id @default(uuid())
+  merchantId      String
+  merchant        Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  rejectionReason String   @db.VarChar(10000)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdById     String?
+}
+
+model LoanSetting {
+  id                   String   @id @default("default")
+  loanInterestRate     Decimal
+  maxLoanAmount        Decimal?
+  minLoanAmount        Decimal?
+  maxLoanTenure        Int?     @default(12)
+  minLoanTenure        Int?     @default(1)
+  incomeRatio          Decimal?
+  minDownPayment       Decimal?
+  insuranceRate        Decimal?
+  adminFeeBase1To3     Decimal?
+  adminFeeBase4To12    Decimal?
+  adminFeePercentage   Decimal?
+  adminFeeThreshold    Decimal?
+  upfrontFeePercentage Decimal?
+  upfrontFeeCap        Decimal?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model SettlementSetting {
+  id                     String   @id @default("default")
+  merchantFeeRate        Decimal
+  autoSettlementCharge   Decimal
+  manualSettlementCharge Decimal
+  Tx                     Int      @default(0)
+  timeOfAutoSettlement   String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+}
+
+model TimeOutSetting {
+  id                      String   @id @default("default")
+  accountlinkingTimeout   Int      @default(5)
+  directPayTimeout        Int      @default(5)
+  scoringTimeout          Int      @default(5)
+  merchantCreationTimeout Int      @default(5)
+  planselectionTimeout    Int      @default(5)
+  upfrontPaymentTimeout   Int      @default(5)
+  maxLinkAttempts         Int      @default(2)
+  periodBetweenAttempts   Int      @default(6)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model Loan {
+  id                   String            @id @default(uuid())
+  liftpayId            String            @unique @db.VarChar(30)
+  buyerId              String
+  buyer                Buyer             @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  invoiceId            String?           @unique
+  invoice              Invoice?          @relation("InvoiceLoan", fields: [invoiceId], references: [id], onDelete: SetNull)
+  loanAmount           Decimal
+  purchaseAmount       Decimal?
+  downPaymentAmount    Decimal?
+  merchantId           String?
+  merchant             Merchant?         @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  referenceNumber      String?
+  adminCharge          Decimal?
+  insurance            Decimal?
+  monthlyRepayment     Decimal?
+  loanTenure           Int
+  loanInterestRate     Decimal
+  loanStartDate        DateTime
+  loanEndDate          DateTime?
+  loanStatus           LoanStatus
+  loanType             LoanType
+  loanPurpose          String
+  loanDocument         String?
+  loanDocumentVerified DocumentStatus?   @default(Pending)
+  loanSchedules        LoanSchedule[]
+  loanTransactions     LoanTransaction[]
+  mandates             InvoiceMandate[]  @relation("LoanMandate")
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+  revenues             Revenue[]
+}
+
+model LoanSchedule {
+  id                     String                   @id @default(uuid())
+  loanId                 String
+  start                  DateTime
+  end                    DateTime
+  status                 LoanScheduleStatus       @default(Open)
+  expectedPayment        Decimal
+  expectedBalance        Decimal?                 @default(0)
+  expectedClosingBalance Decimal?                 @default(0)
+  actualPayment          Decimal?
+  loan                   Loan                     @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  penaltySchedule        LoanPenaltySchedule[]
+  debitTrialSchedule     LoanDebitTrialSchedule[]
+  openingBalance         Decimal?                 @default(0)
+  isExecuted             Boolean                  @default(false)
+  executedAt             DateTime?
+  createdAt              DateTime                 @default(now())
+  updatedAt              DateTime                 @updatedAt
+  loanTransactions       LoanTransaction[]
+}
+
+model LoanPenaltySchedule {
+  id             String       @id @default(uuid())
+  loanScheduleId String
+  loanSchedule   LoanSchedule @relation(fields: [loanScheduleId], references: [id], onDelete: Cascade)
+  start          DateTime
+  end            DateTime
+  percentage     Decimal
+  isExecuted     Boolean      @default(false)
+  executedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model LoanDebitTrialSchedule {
+  id             String       @id @default(uuid())
+  loanScheduleId String
+  loanSchedule   LoanSchedule @relation(fields: [loanScheduleId], references: [id], onDelete: Cascade)
+  start          DateTime
+  end            DateTime
+  isExecuted     Boolean      @default(false)
+  executedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
+
+model LoanPenalty {
+  id         String            @id @default(uuid())
+  dayAfter   Int
+  percentage Decimal
+  status     LoanPenaltyStatus @default(Inactive)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+}
+
+model LoanDebitTrial {
+  id        String            @id @default(uuid())
+  dayAfter  Int
+  status    LoanPenaltyStatus @default(Inactive)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+}
+
+model LoanTransaction {
+  id                String            @id @default(uuid())
+  liftpayId         String            @unique @db.VarChar(30)
+  loanId            String
+  loan              Loan              @relation(fields: [loanId], references: [id], onDelete: Restrict)
+  transactionType   TransactionType
+  transactionStatus TransactionStatus @default(Pending)
+  scheduleId        String?
+  schedule          LoanSchedule?     @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  creditAmount      Decimal           @default(0)
+  debitAmount       Decimal           @default(0)
+  description       String
+  referenceNumber   String?           @unique
+  transactionDate   DateTime
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+}
+
+model MerchantTransaction {
+  id              String                  @id @default(uuid())
+  liftpayId       String                  @unique @db.VarChar(30)
+  merchantId      String
+  merchant        Merchant                @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  invoiceRef      String?
+  invoice         Invoice?                @relation(fields: [invoiceRef], references: [id], onDelete: SetNull)
+  credit          Decimal                 @default(0)
+  debit           Decimal                 @default(0)
+  transactionType MerchantTransactionType
+  transactionDate DateTime
+  description     String
+  status          TransactionStatus       @default(Pending)
+  isSettled       Boolean                 @default(false)
+  groupReference  String?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+}
+
+enum TransactionType {
+  principal
+  interest
+  penalty
+  other
+}
+
+enum TransactionStatus {
+  Pending
+  Completed
+  Failed
+}
+
+enum InvoiceStatus {
+  Pending
+  Paid
+  Cancelled
+}
+
+enum MandateStatus {
+  Pending
+  Active
+  Completed
+  Failed
+  Cancelled
+}
+
+enum DirectPayStatus {
+  Pending
+  Processing
+  Completed
+  Failed
+  Cancelled
+}
+
+enum MerchantTransactionType {
+  Credit
+  Debit
+  Refund
+  Payment
+  Withdrawal
+  AutoSettlement
+  ManualSettlement
+  MerchantCharge
+  PayoutCharge
+  Other
+}
+
+model EligibilityAndScore {
+  id                      String   @id @default(uuid())
+  buyerId                 String
+  buyer                   Buyer    @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  approved                Boolean  @default(false)
+  eligibility             Decimal
+  score                   Decimal
+  dtiScore                Decimal? @default(0)
+  employmentDurationScore Decimal? @default(0)
+  creditHistoryScore      Decimal? @default(0)
+  averageBalanceScore     Decimal? @default(0)
+  employmentStatusScore   Decimal? @default(0)
+  overdraftScore          Decimal? @default(0)
+  message                 String
+  finalApprovedLoan       Decimal
+  maxEligibleLoan         Decimal
+  monthlyRepayment        Decimal
+  approvedPurchaseAmount  Decimal
+  requiredDownPayment     Decimal
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+/// Persisted `ScoringInput` from `scoringService.ts` for later scoring / reprocessing.
+/// Map to `ScoringInput`: `monthlyIncomes`, `liquidityBuffer`, and `riskFactor` are stored as JSON
+/// (arrays/objects) to match the TypeScript interfaces exactly.
+model ScoringInputSnapshot {
+  id      String @id @default(uuid())
+  buyerId String?
+  buyer   Buyer? @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+
+  // IncomeRecurrentInput
+  incomeMonths        Int
+  dominantSourceCount Int
+  isFiftMonth         Boolean
+  isSixtMonth         Boolean
+
+  // IncomeStabilityInput (monthlyIncomes: number[])
+  averageIncome  Decimal @db.Decimal(15, 2)
+  monthlyIncomes Json
+
+  netCashFlowPositiveCount Int
+
+  // LiquidityBufferInput (months[], recurringIncomeExists, optional estimates)
+  liquidityBuffer Json
+
+  creditHistory Int
+
+  // MonthlyScores { M1..M6 }
+  riskFactor Json
+
+  overdraftEvents                 Int?
+  overdraftDeepestNegativeBalance Decimal? @db.Decimal(15, 2)
+  overdraftNegativeDays           Int?
+  overdraftRecent                 Boolean
+
+  existingLoanRepayment Decimal @db.Decimal(15, 2)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([buyerId])
+}
+
+model Invoice {
+  id                   String                @id @default(uuid())
+  liftpayId            String                @unique @db.VarChar(30)
+  customerName         String
+  customerEmail        String
+  customerPhoneNumber  String
+  dueDate              DateTime
+  note                 String?
+  amount               Decimal
+  buyerId              String?
+  buyer                Buyer?                @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  merchantId           String
+  merchant             Merchant              @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  outletId             String?
+  outlet               Outlet?               @relation(fields: [outletId], references: [id], onDelete: SetNull)
+  items                Item[]
+  status               InvoiceStatus         @default(Pending)
+  type                 InvoiceType           @default(Purchase)
+  loan                 Loan?                 @relation("InvoiceLoan")
+  merchantTransactions MerchantTransaction[]
+  mandates             InvoiceMandate[]
+  directPays           DirectPay[]
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  revenues             Revenue[]
+}
+
+model InvoiceMandate {
+  id               String        @id @default(uuid())
+  invoiceId        String
+  invoice          Invoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  loanId           String?
+  loan             Loan?         @relation("LoanMandate", fields: [loanId], references: [id], onDelete: SetNull)
+  monoMandateId    String?
+  monoAccountId    String
+  monoCustomerId   String
+  buyerId          String
+  buyer            Buyer         @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  referenceId      String
+  amount           Decimal
+  updateMandateUrl String?
+  tenure           Int?
+  downPayment      Decimal?
+  status           MandateStatus @default(Pending)
+  directPays       DirectPay[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+}
+
+model DirectPay {
+  id             String          @id @default(uuid())
+  invoiceId      String
+  invoice        Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  mandateId      String?
+  mandate        InvoiceMandate? @relation(fields: [mandateId], references: [id], onDelete: SetNull)
+  type           DirectPayType   @default(Other)
+  amount         Decimal
+  status         DirectPayStatus @default(Pending)
+  buyerId        String
+  buyer          Buyer           @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  reference      String          @unique
+  monoUrl        String?
+  monoAccountId  String
+  monoCustomerId String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  isActive       Boolean         @default(true)
+}
+
+enum DirectPayType {
+  LoanRepayment
+  DownPayment
+  Other
+}
+
+model Item {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Int
+  amount      Decimal
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Tier {
+  id         String     @id @default(uuid())
+  name       String
+  from       Decimal
+  to         Decimal
+  status     TierStatus @default(Active)
+  discounted Decimal
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+}
+
+model Outlet {
+  id         String       @id @default(uuid())
+  name       String
+  address    String       @db.Text
+  managerId  String?
+  manager    User?        @relation("OutletManager", fields: [managerId], references: [id], onDelete: SetNull)
+  merchantId String
+  merchant   Merchant     @relation(fields: [merchantId], references: [id], onDelete: Restrict)
+  invoices   Invoice[]
+  users      User[]       @relation("OutletUsers")
+  status     OutletStatus @default(Active)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model Revenue {
+  id              String        @id @default(uuid())
+  liftpayId       String        @unique @db.VarChar(30)
+  credit          Decimal       @default(0)
+  debit           Decimal       @default(0)
+  description     String
+  parentTable     String?
+  type            RevenueType
+  status          RevenueStatus @default(Pending)
+  referenceIds    String        @db.Text // Stored as JSON array string
+  detail          String?       @db.Text
+  buyerId         String?
+  buyer           Buyer?        @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  merchantId      String?
+  merchant        Merchant?     @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  loanId          String?
+  loan            Loan?         @relation(fields: [loanId], references: [id], onDelete: SetNull)
+  invoiceId       String?
+  invoice         Invoice?      @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  transactionDate DateTime
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+}
+
+enum RevenueStatus {
+  Pending
+  Completed
+  Failed
+  Cancelled
+}
+
+enum MonoConnectStatus {
+  Active
+  Inactive
+}
+
+enum PaystackTransferStatus {
+  Pending
+  Processing
+  Success
+  Failed
+  Cancelled
+}
+
+model MonoConnect {
+  id        String            @id @default(uuid())
+  buyerId   String
+  buyer     Buyer             @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  accountId String            @db.VarChar(50)
+  status    MonoConnectStatus @default(Active)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([buyerId, accountId])
+}
+
+model AccountDetails {
+  id                    String   @id @default(uuid())
+  accountId             String?
+  buyerId               String
+  buyer                 Buyer    @relation(fields: [buyerId], references: [id], onDelete: Cascade)
+  bankStatement         String?  @db.Text
+  employmentType        String?
+  monthlyIncome         Decimal? @db.Decimal(15, 2)
+  overdraft             Decimal? @db.Decimal(15, 2)
+  existingLoanRepayment Decimal? @db.Decimal(15, 2)
+  creditHistory         String?  @db.Text
+  employmentDuration    Int? // in months
+  averageBalance        Decimal? @db.Decimal(15, 2)
+  status                Boolean  @default(true)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
+
+model PaystackMerchantTransferRecipient {
+  id            String   @id @default(uuid())
+  merchantId    String
+  merchant      Merchant @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  recipientId   String?
+  recipientCode String   @unique
+  bankCode      String
+  bankName      String
+  accountNumber String
+  accountName   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model PaystackTransfer {
+  id            String                 @id @default(uuid())
+  referenceId   String                 @unique
+  merchantId    String?
+  merchant      Merchant?              @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+  buyerId       String?
+  buyer         Buyer?                 @relation(fields: [buyerId], references: [id], onDelete: SetNull)
+  amount        Decimal
+  recipientCode String
+  status        PaystackTransferStatus @default(Pending)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+}
