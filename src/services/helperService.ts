@@ -1,6 +1,5 @@
 import crypto from 'crypto';
-import { buyerService } from './buyerService';
-import { merchantService } from './merchantService';
+import prisma from '../utils/prisma';
 
 export type NormalizedBankStatementTransaction = {
   // id: string;
@@ -298,10 +297,13 @@ export class HelperService {
    */
   async getDashboardStats(): Promise<DashboardStats> {
     try {
-      // Get total active buyers and merchants in parallel
       const [totalActiveBuyers, totalActiveMerchants] = await Promise.all([
-        buyerService.getTotalActiveBuyers(),
-        merchantService.getTotalActiveMerchants(),
+        prisma.user.count({
+          where: { userType: 'Buyer', isActive: true, isDeleted: false },
+        }),
+        prisma.user.count({
+          where: { userType: 'Merchant', isActive: true, isDeleted: false },
+        }),
       ]);
 
       // Calculate total active users

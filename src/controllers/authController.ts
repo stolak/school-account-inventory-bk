@@ -74,8 +74,7 @@ export const register = async (req: Request, res: Response) => {
       firstName,
       lastName,
       phoneNumber,
-      role = "Admin",
-      userType = "Admin",
+    
     }: UserRegistrationInput = req.body;
 
     if (!email || !password) {
@@ -90,8 +89,8 @@ export const register = async (req: Request, res: Response) => {
       firstName,
       lastName,
       phoneNumber,
-      role,
-      userType,
+     
+ 
     });
     res.status(201).json(user);
   } catch (error: any) {
@@ -99,38 +98,7 @@ export const register = async (req: Request, res: Response) => {
   }
 };
 
-export const registerBuyer = async (req: Request, res: Response) => {
-  try {
-    const {
-      email,
-      password,
-      firstName,
-      lastName,
-      phoneNumber,
-      role = "Buyer",
-      userType = "Buyer",
-    }: UserRegistrationInput = req.body;
 
-    if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required" });
-    }
-
-    const user = await authService.create({
-      email,
-      password,
-      firstName,
-      lastName,
-      phoneNumber,
-      role,
-      userType,
-    });
-    res.status(201).json(user);
-  } catch (error: any) {
-    res.status(400).json({ message: error.message });
-  }
-};
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password, userType } = req.body;
@@ -148,156 +116,7 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * @openapi
- * /api/v1/auth/register-merchant-user:
- *   post:
- *     summary: Create a merchant user with optional outlet assignment
- *     tags: [Auth]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required:
- *               - email
- *               - merchantId
- *             properties:
- *               email:
- *                 type: string
- *                 format: email
- *                 example: "staff@retailstore.com"
- *               password:
- *                 type: string
- *                 example: "securepassword"
- *                 description: "Optional - will default to '12345' if not provided"
- *               firstName:
- *                 type: string
- *                 example: "Jane"
- *               lastName:
- *                 type: string
- *                 example: "Smith"
- *               phoneNumber:
- *                 type: string
- *                 example: "+2348012345678"
- *               merchantId:
- *                 type: string
- *                 format: uuid
- *                 description: "ID of the merchant this user belongs to"
- *               outletId:
- *                 type: string
- *                 format: uuid
- *                 description: "Optional - ID of the outlet this user is assigned to"
- *               role:
- *                 type: string
- *                 enum: [Visitor, Admin, Merchant, Buyer, SuperAdmin, CustomerSupport]
- *                 default: Merchant
- *                 example: "Merchant"
- *     responses:
- *       201:
- *         description: Merchant user created successfully
- *         content:
- *           application/json:
- *             schema:
- *               type: object
- *               properties:
- *                 success:
- *                   type: boolean
- *                   example: true
- *                 message:
- *                   type: string
- *                   example: "Merchant user created successfully"
- *                 data:
- *                   type: object
- *                   properties:
- *                     user:
- *                       type: object
- *                       properties:
- *                         id:
- *                           type: string
- *                           format: uuid
- *                         email:
- *                           type: string
- *                         name:
- *                           type: string
- *                         userType:
- *                           type: string
- *                           example: "merchant"
- *                         isVerified:
- *                           type: boolean
- *                         isTermsAndConditionAccepted:
- *                           type: boolean
- *                         merchantId:
- *                           type: string
- *                           format: uuid
- *                         merchantName:
- *                           type: string
- *                         merchantCharge:
- *                           type: number
- *                         outletId:
- *                           type: string
- *                           format: uuid
- *                         outletName:
- *                           type: string
- *                     tokens:
- *                       type: object
- *                       properties:
- *                         accessToken:
- *                           type: string
- *                         refreshToken:
- *                           type: string
- *                         expiresIn:
- *                           type: number
- *       400:
- *         description: Bad request - validation error
- *       404:
- *         description: Merchant or outlet not found
- *       500:
- *         description: Internal server error
- */
-export const registerMerchantUser = async (req: Request, res: Response) => {
-  try {
-    const {
-      email,
-      password,
-      firstName,
-      lastName,
-      phoneNumber,
-      merchantId,
-      outletId,
-      role = "Merchant",
-    }: UserRegistrationInput = req.body;
 
-    if (!email || !merchantId) {
-      return res.status(400).json({
-        success: false,
-        message: "Email and merchantId are required",
-      });
-    }
-
-    const result = await authService.createMerchantUser({
-      email,
-      password,
-      firstName,
-      lastName,
-      phoneNumber,
-      merchantId,
-      outletId,
-      role,
-      userType: "Merchant",
-    });
-
-    res.status(201).json(result);
-  } catch (error: any) {
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
 
 /**
  * @openapi

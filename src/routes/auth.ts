@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, registerBuyer, registerMerchantUser, getUsersByMerchant, forgotPassword, resetPassword } from "../controllers/authController";
+import { register, login, getUsersByMerchant, forgotPassword, resetPassword } from "../controllers/authController";
 import { authenticateJWT } from "../middlewares/auth";
 const router = express.Router();
 /**
@@ -57,9 +57,6 @@ router.post("/register", register);
  */
 router.post("/login", login);
 
-router.post("/buyer/register", registerBuyer);
-
-router.post("/register-merchant-user", authenticateJWT, registerMerchantUser);
 
 router.get("/users", authenticateJWT, getUsersByMerchant);
 

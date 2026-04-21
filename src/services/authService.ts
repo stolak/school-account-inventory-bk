@@ -15,14 +15,8 @@ export interface AuthResponse {
       profileImageUrl?: string;
       name: string;
       userType: "buyer" | "merchant" | "admin";
-      isVerified: boolean;
-      isTermsAndConditionAccepted: boolean;
-      merchantId?: string;
-      merchantName?: string;
-      buyerId?: string;
-      merchantCharge?: number;
-      outletId?: string;
-      outletName?: string;
+     
+     
     };
     tokens: {
       accessToken: string;
@@ -39,19 +33,7 @@ export interface UserRegistrationInput {
   lastName?: string;
   phoneNumber?: string;
   profileImageUrl?: string;
-  merchantId?: string;
-  outletId?: string;
-  role?:
-    | "Visitor"
-    | "Admin"
-    | "Merchant"
-    | "Buyer"
-    | "SuperAdmin"
-    | "CustomerSupport";
-  userType?: "Admin" | "Merchant" | "Buyer";
-  isVerified?: boolean;
-  isPhoneVerified?: boolean;
-  isEmailVerified?: boolean;
+  
   isActive?: boolean;
 }
 
@@ -85,7 +67,7 @@ function buildTokens(user: any) {
 
 export class AuthService {
   async create(input: UserRegistrationInput): Promise<AuthResponse> {
-    const { email, password, outletId, merchantId, profileImageUrl } = input;
+    const { email, password, profileImageUrl } = input;
     // Check if user already exists by email
     let existingUser;
     existingUser = await prisma.user.findUnique({ where: { email } });
@@ -93,22 +75,7 @@ export class AuthService {
       throw new Error("User already exists with this email");
     }
 
-    // If outletId is provided, verify outlet exists and belongs to the merchant
-    if (outletId) {
-      const outlet = await prisma.outlet.findUnique({
-        where: { id: outletId },
-      });
-
-      if (!outlet) {
-        throw new Error("Outlet not found");
-      }
-
-      // If merchantId is provided, verify outlet belongs to that merchant
-      if (merchantId && outlet.merchantId !== merchantId) {
-        throw new Error("Outlet does not belong to the specified merchant");
-      }
-    }
-
+    
     // Hash password
     const validatedPassoword = password || "12345"; // auto-generated password
     const hashedPassword: string = await bcrypt.hash(validatedPassoword, 10);
@@ -122,21 +89,7 @@ export class AuthService {
         lastName: true,
         profileImageUrl: true,
         userType: true,
-        isVerified: true,
-        merchantId: true,
-        outletId: true,
-        merchant: {
-          select: {
-            isAgreedToTerms: true,
-            businessName: true,
-          },
-        },
-        outlet: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
+        
       },
     });
 
@@ -154,12 +107,7 @@ export class AuthService {
           profileImageUrl: user.profileImageUrl ?? undefined,
           name,
           userType: mapUserType(user.userType as any),
-          isVerified: user.isVerified ?? false,
-          isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms || false,
-          merchantId: user?.merchantId ?? undefined,
-          merchantName: user?.merchant?.businessName ?? undefined,
-          outletId: user?.outletId ?? undefined,
-          outletName: user?.outlet?.name ?? undefined,
+          
         },
         tokens,
       },
@@ -187,30 +135,10 @@ export class AuthService {
         firstName: true,
         lastName: true,
         userType: true,
+       
         isVerified: true,
         profileImageUrl: true,
-        merchantId: true,
-        outletId: true,
-        merchant: {
-          select: {
-            isAgreedToTerms: true,
-            businessName: true,
-            id: true,
-            liftpayId: true,
-            merchantCharge: true,
-          },
-        },
-        outlet: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        buyer: {
-          select: {
-            id: true,
-          },
-        },
+        
       },
     });
     if (!user) {
@@ -229,13 +157,8 @@ export class AuthService {
       email: user.email,
       name,
       profileImageUrl: user.profileImageUrl ?? undefined,
-      merchantId: user.merchantId,
-      outletId: user.outletId,
-      userType: mapUserType(user.userType as any),
-      isVerified: user.isVerified ?? false,
-      isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms ?? false,
-      buyerId: user.buyer?.id ?? undefined,
-      merchantCharge: user.merchant?.merchantCharge,
+
+     
     });
 
     return {
@@ -248,16 +171,7 @@ export class AuthService {
           name,
           profileImageUrl: user.profileImageUrl ?? undefined,
           userType: mapUserType(user.userType as any),
-          isVerified: user.isVerified ?? false,
-          isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms ?? false,
-          merchantId: user?.merchantId ?? undefined,
-          merchantName: user?.merchant?.businessName ?? undefined,
-          buyerId: user.buyer?.id ?? undefined,
-          merchantCharge: user?.merchant?.merchantCharge
-            ? Number(user.merchant.merchantCharge)
-            : 0,
-          outletId: user?.outletId ?? undefined,
-          outletName: user?.outlet?.name ?? undefined,
+       
         },
         tokens,
       },
@@ -267,130 +181,7 @@ export class AuthService {
   /**
    * Create a merchant user with optional outlet assignment
    */
-  async createMerchantUser(
-    input: UserRegistrationInput
-  ): Promise<AuthResponse> {
-    const { email, password, phoneNumber, outletId, merchantId } = input;
 
-    // Validate required fields for merchant user
-    if (!merchantId) {
-      throw new Error("merchantId is required for merchant users");
-    }
-
-    // Verify merchant exists
-    const merchant = await prisma.merchant.findUnique({
-      where: { id: merchantId },
-    });
-
-    if (!merchant) {
-      throw new Error("Merchant not found");
-    }
-
-    // Check if user already exists by email or phoneNumber
-    let existingUser;
-    existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      throw new Error("User already exists with this email");
-    }
-
-    // If outletId is provided, verify outlet exists and belongs to the merchant
-    if (outletId) {
-      const outlet = await prisma.outlet.findUnique({
-        where: { id: outletId },
-      });
-
-      if (!outlet) {
-        throw new Error("Outlet not found");
-      }
-
-      if (outlet.merchantId !== merchantId) {
-        throw new Error("Outlet does not belong to the specified merchant");
-      }
-    }
-
-    // Hash password
-    const validatedPassword = password || "12345"; // auto-generated password
-    const hashedPassword: string = await bcrypt.hash(validatedPassword, 10);
-
-    // Create merchant user
-    const user = await prisma.user.create({
-      data: {
-        ...input,
-        password: hashedPassword,
-        userType: "Merchant",
-        role: input.role || "Merchant",
-      },
-      select: {
-        id: true,
-        email: true,
-        firstName: true,
-        lastName: true,
-        phoneNumber: true,
-        userType: true,
-        role: true,
-        isVerified: true,
-        profileImageUrl: true,
-        merchantId: true,
-        outletId: true,
-        merchant: {
-          select: {
-            id: true,
-            liftpayId: true,
-            businessName: true,
-            businessEmail: true,
-            isAgreedToTerms: true,
-            merchantCharge: true,
-          },
-        },
-        outlet: {
-          select: {
-            id: true,
-            name: true,
-            address: true,
-          },
-        },
-      },
-    });
-
-    const name =
-      [user.firstName, user.lastName].filter(Boolean).join(" ") || "";
-    const tokens = buildTokens({
-      id: user.id,
-      email: user.email,
-      name,
-      profileImageUrl: user.profileImageUrl ?? undefined,
-      merchantId: user.merchantId,
-      outletId: user.outletId,
-      userType: "merchant",
-      isVerified: user.isVerified ?? false,
-      isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms ?? false,
-      merchantCharge: user.merchant?.merchantCharge,
-    });
-
-    return {
-      success: true,
-      message: "Merchant user created successfully",
-      data: {
-        user: {
-          id: user.id,
-          profileImageUrl: user.profileImageUrl ?? undefined,
-          email: user.email,
-          name,
-          userType: "merchant",
-          isVerified: user.isVerified ?? false,
-          isTermsAndConditionAccepted: user.merchant?.isAgreedToTerms || false,
-          merchantId: user.merchantId ?? undefined,
-          merchantName: user.merchant?.businessName ?? undefined,
-          merchantCharge: user.merchant?.merchantCharge
-            ? Number(user.merchant.merchantCharge)
-            : 0,
-          outletId: user.outletId ?? undefined,
-          outletName: user.outlet?.name ?? undefined,
-        },
-        tokens,
-      },
-    };
-  }
 
   async getUserById(userId: string) {
     const user = await prisma.user.findUnique({

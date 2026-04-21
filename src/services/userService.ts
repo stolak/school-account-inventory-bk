@@ -1,4 +1,4 @@
-import { merchantSelect } from "./merchantService";
+
 import prisma from "../utils/prisma";
 
 export class UserService {
@@ -10,10 +10,7 @@ export class UserService {
         email: true,
         createdAt: true,
         updatedAt: true,
-        merchant: {
-          select: merchantSelect,
-        },
-        buyer: true,
+        
       },
     });
 
@@ -49,13 +46,7 @@ export class UserService {
       const skip = (page - 1) * limit;
 
       // Verify merchant exists
-      const merchant = await prisma.merchant.findUnique({
-        where: { id: merchantId },
-      });
-
-      if (!merchant) {
-        throw new Error("Merchant not found");
-      }
+      
 
       const where: any = { merchantId };
       if (filters?.userType) where.userType = filters.userType;
@@ -75,17 +66,7 @@ export class UserService {
             phoneNumber: true,
             userType: true,
             role: true,
-            outletId: true,
-            outlet: {
-              select: {
-                id: true,
-                name: true,
-              },
-            },
-            isActive: true,
-            isVerified: true,
-            isEmailVerified: true,
-            isPhoneVerified: true,
+            
             createdAt: true,
             updatedAt: true,
           },

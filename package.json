@@ -2,7 +2,7 @@
   "name": "api-with-pgql",
   "version": "1.0.0",
   "scripts": {
-    "dev": "npx kill-port 5000 && nodemon --exec ts-node src/server.ts",
+    "dev": "npx kill-port 5000 && nodemon --exec \"ts-node --files\" src/server.ts",
     "build": "node build.js",
     "build:tsc": "tsc",
     "start": "node dist/server.js",

@@ -1,27 +1,13 @@
-import { JwtPayload } from "jsonwebtoken";
-
-interface CustomJwtPayload extends JwtPayload {
-  id: string;
-  email: string;
-  userType: "Admin" | "Merchant" | "Buyer";
-  role:
-    | "Visitor"
-    | "Admin"
-    | "Merchant"
-    | "Buyer"
-    | "SuperAdmin"
-    | "CustomerSupport";
-  merchantId?: string;
-  isActive: boolean;
-  isVerified: boolean;
-  isEmailVerified: boolean;
-  isPhoneVerified: boolean;
-}
-
-declare global {
-  namespace Express {
-    interface Request {
-      user?: CustomJwtPayload;
-    }
+/**
+ * Express merges `Request` from `express-serve-static-core`.
+ * Augmenting that module ensures `req.user` is typed everywhere (incl. ts-node).
+ */
+declare module "express-serve-static-core" {
+  interface Request {
+    /** Set by `authenticateJWT` after verifying the bearer token. */
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    user?: any;
   }
 }
+
+export {};
