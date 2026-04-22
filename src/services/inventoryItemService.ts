@@ -39,6 +39,59 @@ function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
 export class InventoryItemService {
   private prisma = prisma;
 
+  private async assertLookupsExist(input: {
+    categoryId?: string | null;
+    subCategoryId?: string | null;
+    brandId?: string | null;
+    uomId?: string | null;
+  }) {
+    const checks: Array<Promise<any>> = [];
+
+    if (input.categoryId) {
+      checks.push(
+        this.prisma.category.findUnique({ where: { id: input.categoryId } }).then((row) => {
+          if (!row) throw new Error("Invalid categoryId");
+        })
+      );
+    }
+    if (input.subCategoryId) {
+      checks.push(
+        this.prisma.subCategory.findUnique({ where: { id: input.subCategoryId } }).then((row) => {
+          if (!row) throw new Error("Invalid subCategoryId");
+        })
+      );
+    }
+    if (input.brandId) {
+      checks.push(
+        this.prisma.brand.findUnique({ where: { id: input.brandId } }).then((row) => {
+          if (!row) throw new Error("Invalid brandId");
+        })
+      );
+    }
+    if (input.uomId) {
+      checks.push(
+        this.prisma.uom.findUnique({ where: { id: input.uomId } }).then((row) => {
+          if (!row) throw new Error("Invalid uomId");
+        })
+      );
+    }
+
+    await Promise.all(checks);
+  }
+
+  private async assertBarcodeUnique(barcode: string, excludeId?: string) {
+    const existing = await this.prisma.inventoryItem.findFirst({
+      where: {
+        barcode,
+        ...(excludeId ? { NOT: { id: excludeId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new Error("Barcode already exists");
+    }
+  }
+
   async createInventoryItem(input: {
     sku?: string | null;
     name: string;
@@ -50,9 +103,20 @@ export class InventoryItemService {
     costPrice: string | number;
     sellingPrice: string | number;
     lowStockThreshold?: number;
-    createdById?: string | null;
+    createdById: string;
   }): Promise<InventoryItemData> {
     try {
+      await this.assertLookupsExist({
+        categoryId: input.categoryId,
+        subCategoryId: input.subCategoryId,
+        brandId: input.brandId,
+        uomId: input.uomId,
+      });
+
+      if (input.barcode) {
+        await this.assertBarcodeUnique(input.barcode);
+      }
+
       return await this.prisma.inventoryItem.create({
         data: {
           sku: input.sku ?? null,
@@ -65,7 +129,7 @@ export class InventoryItemService {
           costPrice: input.costPrice as any,
           sellingPrice: input.sellingPrice as any,
           lowStockThreshold: input.lowStockThreshold ?? 0,
-          createdById: input.createdById ?? null,
+          createdById: input.createdById,
         },
       });
     } catch (e) {
@@ -147,6 +211,17 @@ export class InventoryItemService {
     }
   ): Promise<InventoryItemData> {
     try {
+      await this.assertLookupsExist({
+        categoryId: input.categoryId,
+        subCategoryId: input.subCategoryId,
+        brandId: input.brandId,
+        uomId: input.uomId,
+      });
+
+      if (input.barcode) {
+        await this.assertBarcodeUnique(input.barcode, id);
+      }
+
       return await this.prisma.inventoryItem.update({
         where: { id },
         data: {

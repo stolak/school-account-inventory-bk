@@ -19,7 +19,7 @@ function parseIntOrUndefined(v: unknown): number | undefined {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [name]
+ *             required: [name, categoryId]
  *             properties:
  *               name:
  *                 type: string
@@ -30,8 +30,7 @@ function parseIntOrUndefined(v: unknown): number | undefined {
  *                 example: "Exercise books and notebooks"
  *               categoryId:
  *                 type: string
- *                 nullable: true
- *                 description: Optional parent category ID
+ *                 description: Parent category ID
  *     responses:
  *       201:
  *         description: Sub-category created
@@ -95,17 +94,17 @@ export const subCategoryController = {
         });
       }
 
-      if (categoryId !== undefined && categoryId !== null && typeof categoryId !== "string") {
+      if (!categoryId || typeof categoryId !== "string" || !categoryId.trim()) {
         return res.status(400).json({
           success: false,
-          message: "categoryId must be a string or null",
+          message: "categoryId is required",
         });
       }
 
       const subCategory = await subCategoryService.createSubCategory({
         name: name.trim(),
         description: description === undefined ? null : description,
-        categoryId: categoryId === undefined ? null : categoryId,
+        categoryId: categoryId.trim(),
       });
 
       return res.status(201).json({
@@ -283,6 +282,12 @@ export const subCategoryController = {
           message: "categoryId must be a string or null",
         });
       }
+      if (categoryId === null) {
+        return res.status(400).json({
+          success: false,
+          message: "categoryId cannot be null",
+        });
+      }
 
       const existing = await subCategoryService.getSubCategoryById(id);
       if (!existing) {
@@ -295,7 +300,7 @@ export const subCategoryController = {
       const updated = await subCategoryService.updateSubCategory(id, {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(description !== undefined ? { description } : {}),
-        ...(categoryId !== undefined ? { categoryId } : {}),
+        ...(categoryId !== undefined ? { categoryId: categoryId.trim() } : {}),
       });
 
       return res.json({

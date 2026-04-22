@@ -29,17 +29,27 @@ function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
 export class SubCategoryService {
   private prisma = prisma;
 
+  private async assertCategoryExists(categoryId: string) {
+    const category = await this.prisma.category.findUnique({
+      where: { id: categoryId },
+      select: { id: true },
+    });
+    if (!category) throw new Error("Invalid categoryId");
+  }
+
   async createSubCategory(input: {
     name: string;
     description?: string | null;
-    categoryId?: string | null;
+    categoryId: string;
   }): Promise<SubCategoryData> {
     try {
+      await this.assertCategoryExists(input.categoryId);
+
       return await this.prisma.subCategory.create({
         data: {
           name: input.name,
           description: input.description ?? null,
-          categoryId: input.categoryId ?? null,
+          categoryId: input.categoryId,
         },
       });
     } catch (e) {
@@ -79,7 +89,7 @@ export class SubCategoryService {
         },
       }),
     ]);
-    console.log(rows);
+
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
@@ -100,9 +110,13 @@ export class SubCategoryService {
 
   async updateSubCategory(
     id: string,
-    input: { name?: string; description?: string | null; categoryId?: string | null }
+    input: { name?: string; description?: string | null; categoryId?: string }
   ): Promise<SubCategoryData> {
     try {
+      if (input.categoryId !== undefined) {
+        await this.assertCategoryExists(input.categoryId);
+      }
+
       return await this.prisma.subCategory.update({
         where: { id },
         data: {

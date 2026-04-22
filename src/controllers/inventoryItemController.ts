@@ -162,6 +162,10 @@ export const inventoryItemController = {
       if (!isStringOrNullOrUndefined(barcode)) {
         return res.status(400).json({ success: false, message: "barcode must be a string or null" });
       }
+      const normalizedBarcode = barcode === null || barcode === undefined ? null : barcode.trim();
+      if (normalizedBarcode !== null && normalizedBarcode.length === 0) {
+        return res.status(400).json({ success: false, message: "barcode cannot be empty" });
+      }
       if (!isStringOrNullOrUndefined(categoryId)) {
         return res.status(400).json({ success: false, message: "categoryId must be a string or null" });
       }
@@ -179,7 +183,10 @@ export const inventoryItemController = {
         return res.status(400).json({ success: false, message: "lowStockThreshold must be a number >= 0" });
       }
 
-      const createdById = (req as any).user?.id ?? null;
+      const createdById = (req as any).user?.id;
+      if (!createdById) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
 
       const created = await inventoryItemService.createInventoryItem({
         sku: sku === undefined ? null : sku,
@@ -188,7 +195,7 @@ export const inventoryItemController = {
         subCategoryId: subCategoryId === undefined ? null : subCategoryId,
         brandId: brandId === undefined ? null : brandId,
         uomId: uomId === undefined ? null : uomId,
-        barcode: barcode === undefined ? null : barcode,
+        barcode: normalizedBarcode,
         costPrice,
         sellingPrice,
         lowStockThreshold,
@@ -383,6 +390,10 @@ export const inventoryItemController = {
       if (barcode !== undefined && !isStringOrNullOrUndefined(barcode)) {
         return res.status(400).json({ success: false, message: "barcode must be a string or null" });
       }
+      const normalizedBarcode = barcode === undefined ? undefined : barcode === null ? null : barcode.trim();
+      if (normalizedBarcode !== undefined && normalizedBarcode !== null && normalizedBarcode.length === 0) {
+        return res.status(400).json({ success: false, message: "barcode cannot be empty" });
+      }
       if (categoryId !== undefined && !isStringOrNullOrUndefined(categoryId)) {
         return res.status(400).json({ success: false, message: "categoryId must be a string or null" });
       }
@@ -415,7 +426,7 @@ export const inventoryItemController = {
         ...(subCategoryId !== undefined ? { subCategoryId } : {}),
         ...(brandId !== undefined ? { brandId } : {}),
         ...(uomId !== undefined ? { uomId } : {}),
-        ...(barcode !== undefined ? { barcode } : {}),
+        ...(normalizedBarcode !== undefined ? { barcode: normalizedBarcode } : {}),
         ...(costPrice !== undefined ? { costPrice } : {}),
         ...(sellingPrice !== undefined ? { sellingPrice } : {}),
         ...(lowStockThreshold !== undefined ? { lowStockThreshold } : {}),
