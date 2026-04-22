@@ -1,0 +1,447 @@
+import { Request, Response } from "express";
+import { inventoryItemService } from "../services/inventoryItemService";
+
+function parseIntOrUndefined(v: unknown): number | undefined {
+  if (typeof v !== "string") return undefined;
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function isStringOrNullOrUndefined(v: unknown): v is string | null | undefined {
+  return v === undefined || v === null || typeof v === "string";
+}
+
+function isNumberOrString(v: unknown): v is number | string {
+  return typeof v === "number" || typeof v === "string";
+}
+
+/**
+ * @openapi
+ * /api/v1/inventory-items:
+ *   post:
+ *     summary: Create an inventory item
+ *     tags: [InventoryItems]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, costPrice, sellingPrice]
+ *             properties:
+ *               sku:
+ *                 type: string
+ *                 nullable: true
+ *               name:
+ *                 type: string
+ *                 example: "A4 Exercise Book"
+ *               categoryId:
+ *                 type: string
+ *                 nullable: true
+ *               subCategoryId:
+ *                 type: string
+ *                 nullable: true
+ *               brandId:
+ *                 type: string
+ *                 nullable: true
+ *               uomId:
+ *                 type: string
+ *                 nullable: true
+ *               barcode:
+ *                 type: string
+ *                 nullable: true
+ *               costPrice:
+ *                 oneOf:
+ *                   - type: string
+ *                   - type: number
+ *                 example: "120.00"
+ *               sellingPrice:
+ *                 oneOf:
+ *                   - type: string
+ *                   - type: number
+ *                 example: "150.00"
+ *               lowStockThreshold:
+ *                 type: integer
+ *                 example: 10
+ *     responses:
+ *       201:
+ *         description: Inventory item created
+ *       400:
+ *         description: Validation error
+ *       409:
+ *         description: Duplicate SKU or barcode
+ *       500:
+ *         description: Server error
+ *   get:
+ *     summary: List inventory items
+ *     tags: [InventoryItems]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Optional search query (matches name, sku, or barcode)
+ *       - in: query
+ *         name: categoryId
+ *         schema:
+ *           type: string
+ *         description: Filter by category ID
+ *       - in: query
+ *         name: subCategoryId
+ *         schema:
+ *           type: string
+ *         description: Filter by sub-category ID
+ *       - in: query
+ *         name: brandId
+ *         schema:
+ *           type: string
+ *         description: Filter by brand ID
+ *       - in: query
+ *         name: uomId
+ *         schema:
+ *           type: string
+ *         description: Filter by uom ID
+ *       - in: query
+ *         name: createdById
+ *         schema:
+ *           type: string
+ *         description: Filter by creator user ID
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *     responses:
+ *       200:
+ *         description: Inventory items list
+ *       500:
+ *         description: Server error
+ */
+export const inventoryItemController = {
+  createInventoryItem: async (req: Request, res: Response) => {
+    try {
+      const {
+        sku,
+        name,
+        categoryId,
+        subCategoryId,
+        brandId,
+        uomId,
+        barcode,
+        costPrice,
+        sellingPrice,
+        lowStockThreshold,
+      } = req.body ?? {};
+
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ success: false, message: "name is required" });
+      }
+
+      if (!isNumberOrString(costPrice)) {
+        return res.status(400).json({ success: false, message: "costPrice is required (string or number)" });
+      }
+      if (!isNumberOrString(sellingPrice)) {
+        return res.status(400).json({ success: false, message: "sellingPrice is required (string or number)" });
+      }
+
+      if (!isStringOrNullOrUndefined(sku)) {
+        return res.status(400).json({ success: false, message: "sku must be a string or null" });
+      }
+      if (!isStringOrNullOrUndefined(barcode)) {
+        return res.status(400).json({ success: false, message: "barcode must be a string or null" });
+      }
+      if (!isStringOrNullOrUndefined(categoryId)) {
+        return res.status(400).json({ success: false, message: "categoryId must be a string or null" });
+      }
+      if (!isStringOrNullOrUndefined(subCategoryId)) {
+        return res.status(400).json({ success: false, message: "subCategoryId must be a string or null" });
+      }
+      if (!isStringOrNullOrUndefined(brandId)) {
+        return res.status(400).json({ success: false, message: "brandId must be a string or null" });
+      }
+      if (!isStringOrNullOrUndefined(uomId)) {
+        return res.status(400).json({ success: false, message: "uomId must be a string or null" });
+      }
+
+      if (lowStockThreshold !== undefined && (typeof lowStockThreshold !== "number" || lowStockThreshold < 0)) {
+        return res.status(400).json({ success: false, message: "lowStockThreshold must be a number >= 0" });
+      }
+
+      const createdById = (req as any).user?.id ?? null;
+
+      const created = await inventoryItemService.createInventoryItem({
+        sku: sku === undefined ? null : sku,
+        name: name.trim(),
+        categoryId: categoryId === undefined ? null : categoryId,
+        subCategoryId: subCategoryId === undefined ? null : subCategoryId,
+        brandId: brandId === undefined ? null : brandId,
+        uomId: uomId === undefined ? null : uomId,
+        barcode: barcode === undefined ? null : barcode,
+        costPrice,
+        sellingPrice,
+        lowStockThreshold,
+        createdById,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Inventory item created successfully",
+        data: created,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to create inventory item";
+      const status = message.includes("already exists") ? 409 : 500;
+      return res.status(status).json({ success: false, message });
+    }
+  },
+
+  listInventoryItems: async (req: Request, res: Response) => {
+    try {
+      const q = typeof req.query.q === "string" ? req.query.q : undefined;
+      const categoryId = typeof req.query.categoryId === "string" ? req.query.categoryId : undefined;
+      const subCategoryId = typeof req.query.subCategoryId === "string" ? req.query.subCategoryId : undefined;
+      const brandId = typeof req.query.brandId === "string" ? req.query.brandId : undefined;
+      const uomId = typeof req.query.uomId === "string" ? req.query.uomId : undefined;
+      const createdById = typeof req.query.createdById === "string" ? req.query.createdById : undefined;
+      const page = parseIntOrUndefined(req.query.page);
+      const limit = parseIntOrUndefined(req.query.limit);
+
+      const result = await inventoryItemService.listInventoryItems({
+        q,
+        categoryId,
+        subCategoryId,
+        brandId,
+        uomId,
+        createdById,
+        page,
+        limit,
+      });
+
+      return res.json({
+        success: true,
+        message: "Inventory items retrieved successfully",
+        data: result,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve inventory items",
+        error: error?.message,
+      });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/inventory-items/{id}:
+   *   get:
+   *     summary: Get an inventory item by ID
+   *     tags: [InventoryItems]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Inventory item details
+   *       404:
+   *         description: Inventory item not found
+   *       500:
+   *         description: Server error
+   *   put:
+   *     summary: Update an inventory item
+   *     tags: [InventoryItems]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               sku:
+   *                 type: string
+   *                 nullable: true
+   *               name:
+   *                 type: string
+   *               categoryId:
+   *                 type: string
+   *                 nullable: true
+   *               subCategoryId:
+   *                 type: string
+   *                 nullable: true
+   *               brandId:
+   *                 type: string
+   *                 nullable: true
+   *               uomId:
+   *                 type: string
+   *                 nullable: true
+   *               barcode:
+   *                 type: string
+   *                 nullable: true
+   *               costPrice:
+   *                 oneOf:
+   *                   - type: string
+   *                   - type: number
+   *               sellingPrice:
+   *                 oneOf:
+   *                   - type: string
+   *                   - type: number
+   *               lowStockThreshold:
+   *                 type: integer
+   *     responses:
+   *       200:
+   *         description: Inventory item updated
+   *       400:
+   *         description: Validation error
+   *       404:
+   *         description: Inventory item not found
+   *       409:
+   *         description: Duplicate SKU or barcode
+   *       500:
+   *         description: Server error
+   *   delete:
+   *     summary: Delete an inventory item
+   *     tags: [InventoryItems]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Inventory item deleted
+   *       404:
+   *         description: Inventory item not found
+   *       500:
+   *         description: Server error
+   */
+  getInventoryItemById: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ success: false, message: "id is required" });
+
+      const item = await inventoryItemService.getInventoryItemById(id);
+      if (!item) return res.status(404).json({ success: false, message: "Inventory item not found" });
+
+      return res.json({ success: true, message: "Inventory item retrieved successfully", data: item });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: "Failed to retrieve inventory item", error: error?.message });
+    }
+  },
+
+  updateInventoryItem: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const {
+        sku,
+        name,
+        categoryId,
+        subCategoryId,
+        brandId,
+        uomId,
+        barcode,
+        costPrice,
+        sellingPrice,
+        lowStockThreshold,
+      } = req.body ?? {};
+
+      if (!id) return res.status(400).json({ success: false, message: "id is required" });
+
+      if (name !== undefined && (typeof name !== "string" || !name.trim())) {
+        return res.status(400).json({ success: false, message: "name must be a non-empty string" });
+      }
+      if (sku !== undefined && !isStringOrNullOrUndefined(sku)) {
+        return res.status(400).json({ success: false, message: "sku must be a string or null" });
+      }
+      if (barcode !== undefined && !isStringOrNullOrUndefined(barcode)) {
+        return res.status(400).json({ success: false, message: "barcode must be a string or null" });
+      }
+      if (categoryId !== undefined && !isStringOrNullOrUndefined(categoryId)) {
+        return res.status(400).json({ success: false, message: "categoryId must be a string or null" });
+      }
+      if (subCategoryId !== undefined && !isStringOrNullOrUndefined(subCategoryId)) {
+        return res.status(400).json({ success: false, message: "subCategoryId must be a string or null" });
+      }
+      if (brandId !== undefined && !isStringOrNullOrUndefined(brandId)) {
+        return res.status(400).json({ success: false, message: "brandId must be a string or null" });
+      }
+      if (uomId !== undefined && !isStringOrNullOrUndefined(uomId)) {
+        return res.status(400).json({ success: false, message: "uomId must be a string or null" });
+      }
+      if (costPrice !== undefined && !isNumberOrString(costPrice)) {
+        return res.status(400).json({ success: false, message: "costPrice must be a string or number" });
+      }
+      if (sellingPrice !== undefined && !isNumberOrString(sellingPrice)) {
+        return res.status(400).json({ success: false, message: "sellingPrice must be a string or number" });
+      }
+      if (lowStockThreshold !== undefined && (typeof lowStockThreshold !== "number" || lowStockThreshold < 0)) {
+        return res.status(400).json({ success: false, message: "lowStockThreshold must be a number >= 0" });
+      }
+
+      const existing = await inventoryItemService.getInventoryItemById(id);
+      if (!existing) return res.status(404).json({ success: false, message: "Inventory item not found" });
+
+      const updated = await inventoryItemService.updateInventoryItem(id, {
+        ...(sku !== undefined ? { sku } : {}),
+        ...(name !== undefined ? { name: name.trim() } : {}),
+        ...(categoryId !== undefined ? { categoryId } : {}),
+        ...(subCategoryId !== undefined ? { subCategoryId } : {}),
+        ...(brandId !== undefined ? { brandId } : {}),
+        ...(uomId !== undefined ? { uomId } : {}),
+        ...(barcode !== undefined ? { barcode } : {}),
+        ...(costPrice !== undefined ? { costPrice } : {}),
+        ...(sellingPrice !== undefined ? { sellingPrice } : {}),
+        ...(lowStockThreshold !== undefined ? { lowStockThreshold } : {}),
+      });
+
+      return res.json({ success: true, message: "Inventory item updated successfully", data: updated });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to update inventory item";
+      const status = message.includes("already exists") ? 409 : 500;
+      return res.status(status).json({ success: false, message });
+    }
+  },
+
+  deleteInventoryItem: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ success: false, message: "id is required" });
+
+      const existing = await inventoryItemService.getInventoryItemById(id);
+      if (!existing) return res.status(404).json({ success: false, message: "Inventory item not found" });
+
+      const deleted = await inventoryItemService.deleteInventoryItem(id);
+      return res.json({ success: true, message: "Inventory item deleted successfully", data: deleted });
+    } catch (error: any) {
+      return res.status(500).json({ success: false, message: "Failed to delete inventory item", error: error?.message });
+    }
+  },
+};
+
