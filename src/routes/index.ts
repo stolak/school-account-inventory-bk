@@ -11,6 +11,7 @@ import subCategoryRouter from "./subCategory";
 import brandRouter from "./brand";
 import uomRouter from "./uom";
 import inventoryItemRouter from "./inventoryItem";
+import supplierRouter from "./supplier";
 
 const router = Router();
 
@@ -21,6 +22,7 @@ router.use("/sub-categories", subCategoryRouter);
 router.use("/brands", brandRouter);
 router.use("/uoms", uomRouter);
 router.use("/inventory-items", inventoryItemRouter);
+router.use("/suppliers", supplierRouter);
 
 router.use("/upload", uploadRouter);
 

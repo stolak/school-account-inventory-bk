@@ -126,6 +126,99 @@ function isNumberOrString(v: unknown): v is number | string {
  *     responses:
  *       200:
  *         description: Inventory items list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     inventoryItems:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           sku:
+ *                             type: string
+ *                             nullable: true
+ *                           name:
+ *                             type: string
+ *                           barcode:
+ *                             type: string
+ *                             nullable: true
+ *                           costPrice:
+ *                             type: string
+ *                           sellingPrice:
+ *                             type: string
+ *                           lowStockThreshold:
+ *                             type: integer
+ *                           currentStock:
+ *                             type: string
+ *                             description: Available quantity (sum(qtyIn-qtyOut))
+ *                           categoryId:
+ *                             type: string
+ *                             nullable: true
+ *                           subCategoryId:
+ *                             type: string
+ *                             nullable: true
+ *                           brandId:
+ *                             type: string
+ *                             nullable: true
+ *                           uomId:
+ *                             type: string
+ *                             nullable: true
+ *                           category:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               name:
+ *                                 type: string
+ *                           subCategory:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               name:
+ *                                 type: string
+ *                           brand:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               name:
+ *                                 type: string
+ *                           uom:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               name:
+ *                                 type: string
+ *                           createdBy:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               firstName:
+ *                                 type: string
+ *                                 nullable: true
+ *                               lastName:
+ *                                 type: string
+ *                                 nullable: true
+ *                     pagination:
+ *                       type: object
+ *                       properties:
+ *                         page:
+ *                           type: integer
+ *                         limit:
+ *                           type: integer
+ *                         total:
+ *                           type: integer
+ *                         totalPages:
+ *                           type: integer
  *       500:
  *         description: Server error
  */
@@ -162,10 +255,9 @@ export const inventoryItemController = {
       if (!isStringOrNullOrUndefined(barcode)) {
         return res.status(400).json({ success: false, message: "barcode must be a string or null" });
       }
-      const normalizedBarcode = barcode === null || barcode === undefined ? null : barcode.trim();
-      if (normalizedBarcode !== null && normalizedBarcode.length === 0) {
-        return res.status(400).json({ success: false, message: "barcode cannot be empty" });
-      }
+      const normalizedBarcode = barcode === null || barcode === undefined||barcode.trim() === "" ? null : barcode.trim();
+      
+    
       if (!isStringOrNullOrUndefined(categoryId)) {
         return res.status(400).json({ success: false, message: "categoryId must be a string or null" });
       }
@@ -189,7 +281,7 @@ export const inventoryItemController = {
       }
 
       const created = await inventoryItemService.createInventoryItem({
-        sku: sku === undefined ? null : sku,
+        sku: sku === undefined || sku === null || sku.trim() === "" ? null : sku.trim(),
         name: name.trim(),
         categoryId: categoryId === undefined ? null : categoryId,
         subCategoryId: subCategoryId === undefined ? null : subCategoryId,
@@ -267,6 +359,55 @@ export const inventoryItemController = {
    *     responses:
    *       200:
    *         description: Inventory item details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     sku:
+   *                       type: string
+   *                       nullable: true
+   *                     name:
+   *                       type: string
+   *                     barcode:
+   *                       type: string
+   *                       nullable: true
+   *                     costPrice:
+   *                       type: string
+   *                     sellingPrice:
+   *                       type: string
+   *                     lowStockThreshold:
+   *                       type: integer
+   *                     createdById:
+   *                       type: string
+   *                       nullable: true
+   *                     categoryId:
+   *                       type: string
+   *                       nullable: true
+   *                     subCategoryId:
+   *                       type: string
+   *                       nullable: true
+   *                     brandId:
+   *                       type: string
+   *                       nullable: true
+   *                     uomId:
+   *                       type: string
+   *                       nullable: true
+   *                     createdAt:
+   *                       type: string
+   *                       format: date-time
+   *                     updatedAt:
+   *                       type: string
+   *                       format: date-time
    *       404:
    *         description: Inventory item not found
    *       500:

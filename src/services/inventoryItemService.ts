@@ -1,4 +1,5 @@
 import prisma from "../utils/prisma";
+import { Prisma } from "@prisma/client";
 
 export interface InventoryItemData {
   id: string;
@@ -15,6 +16,7 @@ export interface InventoryItemData {
   createdById: string | null;
   createdAt: Date;
   updatedAt: Date;
+  currentStock?: string;
 }
 
 export interface ListInventoryItemsParams {
@@ -133,6 +135,7 @@ export class InventoryItemService {
         },
       });
     } catch (e) {
+      console.error(e);
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
         throw new Error("SKU or barcode already exists");
       }
@@ -170,6 +173,7 @@ export class InventoryItemService {
       this.prisma.inventoryItem.findMany({
         where: finalWhere,
         orderBy: { name: "asc" },
+        include: {category: {select: {name: true}}, subCategory: {select: {name: true}}, brand: {select: {name: true}}, uom: {select: {name: true}}, createdBy: {select: {firstName: true, lastName: true}}},
         skip,
         take: limit,
       }),
@@ -177,9 +181,25 @@ export class InventoryItemService {
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
+    const itemIds = rows.map((r) => r.id);
+    const stockAgg = itemIds.length
+      ? await this.prisma.inventoryTransaction.groupBy({
+          by: ["itemId"],
+          where: { itemId: { in: itemIds }, status: "completed" },
+          _sum: { qtyIn: true, qtyOut: true },
+        })
+      : [];
+
+    const stockByItemId = new Map<string, string>();
+    for (const r of stockAgg) {
+      const qtyIn = r._sum.qtyIn ?? new Prisma.Decimal(0);
+      const qtyOut = r._sum.qtyOut ?? new Prisma.Decimal(0);
+      stockByItemId.set(r.itemId, qtyIn.minus(qtyOut).toString());
+    }
+
     // Keep behavior predictable if MySQL collation differs.
     const q = params.q?.toLowerCase();
-    const inventoryItems = q
+    const filteredRows = q
       ? rows.filter((it) => {
           const name = it.name.toLowerCase();
           const sku = (it.sku ?? "").toLowerCase();
@@ -187,6 +207,11 @@ export class InventoryItemService {
           return name.includes(q) || sku.includes(q) || barcode.includes(q);
         })
       : rows;
+
+    const inventoryItems = filteredRows.map((it) => ({
+      ...it,
+      currentStock: stockByItemId.get(it.id) ?? "0",
+    }));
 
     return { inventoryItems, pagination: { page, limit, total, totalPages } };
   }
