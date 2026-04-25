@@ -1,5 +1,6 @@
 import prisma from "../utils/prisma";
 import { Prisma } from "@prisma/client";
+import { Status } from "@prisma/client";
 
 export interface InventoryItemData {
   id: string;
@@ -17,6 +18,7 @@ export interface InventoryItemData {
   createdAt: Date;
   updatedAt: Date;
   currentStock?: string;
+  status?: Status;
 }
 
 export interface ListInventoryItemsParams {
@@ -26,6 +28,7 @@ export interface ListInventoryItemsParams {
   brandId?: string;
   uomId?: string;
   createdById?: string;
+  status?: Status | "All";
   page?: number;
   limit?: number;
 }
@@ -158,6 +161,13 @@ export class InventoryItemService {
     if (params.uomId) where.uomId = params.uomId;
     if (params.createdById) where.createdById = params.createdById;
 
+    // Default behavior: only Active unless explicitly overridden.
+    if (params.status === undefined) {
+      where.status = Status.Active;
+    } else if (params.status !== "All") {
+      where.status = params.status;
+    }
+
     if (params.q) {
       where.OR = [
         { name: { contains: params.q } },
@@ -233,6 +243,7 @@ export class InventoryItemService {
       costPrice?: string | number;
       sellingPrice?: string | number;
       lowStockThreshold?: number;
+      status?: Status;
     }
   ): Promise<InventoryItemData> {
     try {
@@ -260,6 +271,7 @@ export class InventoryItemService {
           ...(input.costPrice !== undefined ? { costPrice: input.costPrice as any } : {}),
           ...(input.sellingPrice !== undefined ? { sellingPrice: input.sellingPrice as any } : {}),
           ...(input.lowStockThreshold !== undefined ? { lowStockThreshold: input.lowStockThreshold } : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
           updatedAt: new Date(),
         },
       });

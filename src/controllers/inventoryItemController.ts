@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { inventoryItemService } from "../services/inventoryItemService";
+import { Status } from "@prisma/client";
 
 function parseIntOrUndefined(v: unknown): number | undefined {
   if (typeof v !== "string") return undefined;
@@ -110,6 +111,12 @@ function isNumberOrString(v: unknown): v is number | string {
  *         schema:
  *           type: string
  *         description: Filter by creator user ID
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Active, Inactive, All]
+ *         description: Defaults to Active only. Use All to include Active and Inactive.
  *       - in: query
  *         name: page
  *         schema:
@@ -252,6 +259,7 @@ export const inventoryItemController = {
       if (!isStringOrNullOrUndefined(sku)) {
         return res.status(400).json({ success: false, message: "sku must be a string or null" });
       }
+      console.log("barcode", barcode);
       if (!isStringOrNullOrUndefined(barcode)) {
         return res.status(400).json({ success: false, message: "barcode must be a string or null" });
       }
@@ -314,6 +322,24 @@ export const inventoryItemController = {
       const brandId = typeof req.query.brandId === "string" ? req.query.brandId : undefined;
       const uomId = typeof req.query.uomId === "string" ? req.query.uomId : undefined;
       const createdById = typeof req.query.createdById === "string" ? req.query.createdById : undefined;
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === undefined
+          ? undefined
+          : statusRaw === "All"
+            ? "All"
+            : statusRaw === "Active"
+              ? Status.Active
+              : statusRaw === "Inactive"
+                ? Status.Inactive
+                : undefined;
+
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, or All",
+        });
+      }
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
@@ -324,6 +350,7 @@ export const inventoryItemController = {
         brandId,
         uomId,
         createdById,
+        status,
         page,
         limit,
       });
@@ -460,6 +487,9 @@ export const inventoryItemController = {
    *                   - type: number
    *               lowStockThreshold:
    *                 type: integer
+   *               status:
+   *                 type: string
+   *                 enum: [Active, Inactive]
    *     responses:
    *       200:
    *         description: Inventory item updated
@@ -518,6 +548,7 @@ export const inventoryItemController = {
         costPrice,
         sellingPrice,
         lowStockThreshold,
+        status,
       } = req.body ?? {};
 
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
@@ -525,16 +556,9 @@ export const inventoryItemController = {
       if (name !== undefined && (typeof name !== "string" || !name.trim())) {
         return res.status(400).json({ success: false, message: "name must be a non-empty string" });
       }
-      if (sku !== undefined && !isStringOrNullOrUndefined(sku)) {
-        return res.status(400).json({ success: false, message: "sku must be a string or null" });
-      }
-      if (barcode !== undefined && !isStringOrNullOrUndefined(barcode)) {
-        return res.status(400).json({ success: false, message: "barcode must be a string or null" });
-      }
+      
       const normalizedBarcode = barcode === undefined ? undefined : barcode === null ? null : barcode.trim();
-      if (normalizedBarcode !== undefined && normalizedBarcode !== null && normalizedBarcode.length === 0) {
-        return res.status(400).json({ success: false, message: "barcode cannot be empty" });
-      }
+     
       if (categoryId !== undefined && !isStringOrNullOrUndefined(categoryId)) {
         return res.status(400).json({ success: false, message: "categoryId must be a string or null" });
       }
@@ -557,20 +581,25 @@ export const inventoryItemController = {
         return res.status(400).json({ success: false, message: "lowStockThreshold must be a number >= 0" });
       }
 
+      if (status !== undefined && status !== Status.Active && status !== Status.Inactive) {
+        return res.status(400).json({ success: false, message: "status must be Active or Inactive" });
+      }
+
       const existing = await inventoryItemService.getInventoryItemById(id);
       if (!existing) return res.status(404).json({ success: false, message: "Inventory item not found" });
 
       const updated = await inventoryItemService.updateInventoryItem(id, {
-        ...(sku !== undefined ? { sku } : {}),
+        ...(sku !== undefined ? { sku: sku === undefined || sku === null || sku.trim() === "" ? null : sku.trim() } : {}),
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(categoryId !== undefined ? { categoryId } : {}),
         ...(subCategoryId !== undefined ? { subCategoryId } : {}),
         ...(brandId !== undefined ? { brandId } : {}),
         ...(uomId !== undefined ? { uomId } : {}),
-        ...(normalizedBarcode !== undefined ? { barcode: normalizedBarcode } : {}),
+        ...(normalizedBarcode !== undefined ? { barcode: normalizedBarcode === null || normalizedBarcode === undefined || normalizedBarcode.trim() === "" ? null : normalizedBarcode.trim() } : {}),
         ...(costPrice !== undefined ? { costPrice } : {}),
         ...(sellingPrice !== undefined ? { sellingPrice } : {}),
         ...(lowStockThreshold !== undefined ? { lowStockThreshold } : {}),
+        ...(status !== undefined ? { status } : {}),
       });
 
       return res.json({ success: true, message: "Inventory item updated successfully", data: updated });
