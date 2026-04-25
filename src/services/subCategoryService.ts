@@ -1,5 +1,6 @@
 import prisma from "../utils/prisma";
 import { CategoryData } from "./categoryService";
+import { Status } from "@prisma/client";
 
 export interface SubCategoryData {
   id: string;
@@ -7,6 +8,7 @@ export interface SubCategoryData {
   name: string;
   description: string | null;
   categoryId: string | null;
+  status: Status;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -14,6 +16,7 @@ export interface SubCategoryData {
 export interface ListSubCategoriesParams {
   q?: string;
   categoryId?: string;
+  status?: Status | "All";
   page?: number;
   limit?: number;
 }
@@ -41,6 +44,7 @@ export class SubCategoryService {
     name: string;
     description?: string | null;
     categoryId: string;
+    status?: Status;
   }): Promise<SubCategoryData> {
     try {
       await this.assertCategoryExists(input.categoryId);
@@ -50,6 +54,7 @@ export class SubCategoryService {
           name: input.name,
           description: input.description ?? null,
           categoryId: input.categoryId,
+          ...(input.status !== undefined ? { status: input.status } : {}),
         },
       });
     } catch (e) {
@@ -72,6 +77,14 @@ export class SubCategoryService {
     if (params.categoryId) {
       where.categoryId = params.categoryId;
     }
+
+    // Default behavior: only Active unless explicitly overridden.
+    if (params.status === undefined) {
+      where.status = Status.Active;
+    } else if (params.status !== "All") {
+      where.status = params.status;
+    }
+
     if (params.q) {
       where.name = { contains: params.q };
     }
@@ -110,7 +123,7 @@ export class SubCategoryService {
 
   async updateSubCategory(
     id: string,
-    input: { name?: string; description?: string | null; categoryId?: string }
+    input: { name?: string; description?: string | null; categoryId?: string; status?: Status }
   ): Promise<SubCategoryData> {
     try {
       if (input.categoryId !== undefined) {
@@ -123,6 +136,7 @@ export class SubCategoryService {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.description !== undefined ? { description: input.description } : {}),
           ...(input.categoryId !== undefined ? { categoryId: input.categoryId } : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
           updatedAt: new Date(),
         },
       });

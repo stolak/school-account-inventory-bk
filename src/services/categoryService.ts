@@ -1,15 +1,18 @@
 import prisma from "../utils/prisma";
+import { Status } from "@prisma/client";
 
 export interface CategoryData {
   id: string;
   name: string;
   description: string | null;
+  status: Status;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface ListCategoriesParams {
   q?: string;
+  status?: Status | "All";
   page?: number;
   limit?: number;
 }
@@ -25,12 +28,17 @@ function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
 export class CategoryService {
   private prisma = prisma;
 
-  async createCategory(input: { name: string; description?: string | null }): Promise<CategoryData> {
+  async createCategory(input: {
+    name: string;
+    description?: string | null;
+    status?: Status;
+  }): Promise<CategoryData> {
     try {
       const created = await this.prisma.category.create({
         data: {
           name: input.name,
           description: input.description ?? null,
+          ...(input.status !== undefined ? { status: input.status } : {}),
         },
       });
 
@@ -51,18 +59,25 @@ export class CategoryService {
     const limit = clampInt(params.limit ?? 20, 1, 100);
     const skip = (page - 1) * limit;
 
-    const where = params.q
-      ? {
-          name: {
-            contains: params.q,
-          },
-        }
-      : undefined;
+    const where: any = {};
+
+    // Default behavior: only Active unless explicitly overridden.
+    if (params.status === undefined) {
+      where.status = Status.Active;
+    } else if (params.status !== "All") {
+      where.status = params.status;
+    }
+
+    if (params.q) {
+      where.name = { contains: params.q };
+    }
+
+    const finalWhere = Object.keys(where).length ? where : undefined;
 
     const [total, rows] = await Promise.all([
-      this.prisma.category.count({ where }),
+      this.prisma.category.count({ where: finalWhere }),
       this.prisma.category.findMany({
-        where,
+        where: finalWhere,
         orderBy: { name: "asc" },
         skip,
         take: limit,
@@ -88,7 +103,7 @@ export class CategoryService {
 
   async updateCategory(
     id: string,
-    input: { name?: string; description?: string | null }
+    input: { name?: string; description?: string | null; status?: Status }
   ): Promise<CategoryData> {
     try {
       return await this.prisma.category.update({
@@ -96,6 +111,7 @@ export class CategoryService {
         data: {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.description !== undefined ? { description: input.description } : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
           updatedAt: new Date(),
         },
       });

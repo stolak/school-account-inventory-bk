@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { brandService } from "../services/brandService";
+import { Status } from "@prisma/client";
 
 function parseIntOrUndefined(v: unknown): number | undefined {
   if (typeof v !== "string") return undefined;
@@ -24,6 +25,10 @@ function parseIntOrUndefined(v: unknown): number | undefined {
  *               name:
  *                 type: string
  *                 example: "HP"
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive]
+ *                 description: Optional status (defaults to Active)
  *     responses:
  *       201:
  *         description: Brand created
@@ -42,6 +47,12 @@ function parseIntOrUndefined(v: unknown): number | undefined {
  *         schema:
  *           type: string
  *         description: Optional search query (matches brand name)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Active, Inactive, All]
+ *         description: Defaults to Active only. Use All to include Active and Inactive.
  *       - in: query
  *         name: page
  *         schema:
@@ -66,7 +77,7 @@ function parseIntOrUndefined(v: unknown): number | undefined {
 export const brandController = {
   createBrand: async (req: Request, res: Response) => {
     try {
-      const { name } = req.body ?? {};
+      const { name, status } = req.body ?? {};
 
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({
@@ -75,7 +86,17 @@ export const brandController = {
         });
       }
 
-      const brand = await brandService.createBrand({ name: name.trim() });
+      if (status !== undefined && status !== Status.Active && status !== Status.Inactive) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active or Inactive",
+        });
+      }
+
+      const brand = await brandService.createBrand({
+        name: name.trim(),
+        ...(status !== undefined ? { status } : {}),
+      });
 
       return res.status(201).json({
         success: true,
@@ -92,10 +113,28 @@ export const brandController = {
   listBrands: async (req: Request, res: Response) => {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === undefined
+          ? undefined
+          : statusRaw === "All"
+            ? "All"
+            : statusRaw === "Active"
+              ? Status.Active
+              : statusRaw === "Inactive"
+                ? Status.Inactive
+                : undefined;
+
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, or All",
+        });
+      }
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
-      const result = await brandService.listBrands({ q, page, limit });
+      const result = await brandService.listBrands({ q, status, page, limit });
 
       return res.json({
         success: true,
@@ -216,7 +255,7 @@ export const brandController = {
   updateBrand: async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { name } = req.body ?? {};
+      const { name, status } = req.body ?? {};
 
       if (!id) {
         return res.status(400).json({
@@ -232,6 +271,13 @@ export const brandController = {
         });
       }
 
+      if (status !== undefined && status !== Status.Active && status !== Status.Inactive) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active or Inactive",
+        });
+      }
+
       const existing = await brandService.getBrandById(id);
       if (!existing) {
         return res.status(404).json({
@@ -242,6 +288,7 @@ export const brandController = {
 
       const updated = await brandService.updateBrand(id, {
         ...(name !== undefined ? { name: name.trim() } : {}),
+        ...(status !== undefined ? { status } : {}),
       });
 
       return res.json({

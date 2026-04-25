@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { subCategoryService } from "../services/subCategoryService";
+import { Status } from "@prisma/client";
 
 function parseIntOrUndefined(v: unknown): number | undefined {
   if (typeof v !== "string") return undefined;
@@ -31,6 +32,10 @@ function parseIntOrUndefined(v: unknown): number | undefined {
  *               categoryId:
  *                 type: string
  *                 description: Parent category ID
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive]
+ *                 description: Optional status (defaults to Active)
  *     responses:
  *       201:
  *         description: Sub-category created
@@ -55,6 +60,12 @@ function parseIntOrUndefined(v: unknown): number | undefined {
  *           type: string
  *         description: Optional filter by category ID
  *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Active, Inactive, All]
+ *         description: Defaults to Active only. Use All to include Active and Inactive.
+ *       - in: query
  *         name: page
  *         schema:
  *           type: integer
@@ -78,7 +89,7 @@ function parseIntOrUndefined(v: unknown): number | undefined {
 export const subCategoryController = {
   createSubCategory: async (req: Request, res: Response) => {
     try {
-      const { name, description, categoryId } = req.body ?? {};
+      const { name, description, categoryId, status } = req.body ?? {};
 
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({
@@ -101,10 +112,18 @@ export const subCategoryController = {
         });
       }
 
+      if (status !== undefined && status !== Status.Active && status !== Status.Inactive) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active or Inactive",
+        });
+      }
+
       const subCategory = await subCategoryService.createSubCategory({
         name: name.trim(),
         description: description === undefined ? null : description,
         categoryId: categoryId.trim(),
+        ...(status !== undefined ? { status } : {}),
       });
 
       return res.status(201).json({
@@ -123,10 +142,28 @@ export const subCategoryController = {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
       const categoryId = typeof req.query.categoryId === "string" ? req.query.categoryId : undefined;
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === undefined
+          ? undefined
+          : statusRaw === "All"
+            ? "All"
+            : statusRaw === "Active"
+              ? Status.Active
+              : statusRaw === "Inactive"
+                ? Status.Inactive
+                : undefined;
+
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, or All",
+        });
+      }
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
-      const result = await subCategoryService.listSubCategories({ q, categoryId, page, limit });
+      const result = await subCategoryService.listSubCategories({ q, categoryId, status, page, limit });
 
       return res.json({
         success: true,
@@ -253,7 +290,7 @@ export const subCategoryController = {
   updateSubCategory: async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { name, description, categoryId } = req.body ?? {};
+      const { name, description, categoryId, status } = req.body ?? {};
 
       if (!id) {
         return res.status(400).json({
@@ -289,6 +326,13 @@ export const subCategoryController = {
         });
       }
 
+      if (status !== undefined && status !== Status.Active && status !== Status.Inactive) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active or Inactive",
+        });
+      }
+
       const existing = await subCategoryService.getSubCategoryById(id);
       if (!existing) {
         return res.status(404).json({
@@ -301,6 +345,7 @@ export const subCategoryController = {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(categoryId !== undefined ? { categoryId: categoryId.trim() } : {}),
+        ...(status !== undefined ? { status } : {}),
       });
 
       return res.json({

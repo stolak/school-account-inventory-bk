@@ -1,15 +1,18 @@
 import prisma from "../utils/prisma";
+import { Status } from "@prisma/client";
 
 export interface UomData {
   id: string;
   name: string;
   symbol: string;
+  status: Status;
   createdAt: Date;
   updatedAt: Date;
 }
 
 export interface ListUomsParams {
   q?: string;
+  status?: Status | "All";
   page?: number;
   limit?: number;
 }
@@ -25,10 +28,14 @@ function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
 export class UomService {
   private prisma = prisma;
 
-  async createUom(input: { name: string; symbol: string }): Promise<UomData> {
+  async createUom(input: { name: string; symbol: string; status?: Status }): Promise<UomData> {
     try {
       return await this.prisma.uom.create({
-        data: { name: input.name, symbol: input.symbol },
+        data: {
+          name: input.name,
+          symbol: input.symbol,
+          ...(input.status !== undefined ? { status: input.status } : {}),
+        },
       });
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
@@ -46,19 +53,25 @@ export class UomService {
     const limit = clampInt(params.limit ?? 20, 1, 100);
     const skip = (page - 1) * limit;
 
-    const where = params.q
-      ? {
-          OR: [
-            { name: { contains: params.q } },
-            { symbol: { contains: params.q } },
-          ],
-        }
-      : undefined;
+    const where: any = {};
+
+    // Default behavior: only Active unless explicitly overridden.
+    if (params.status === undefined) {
+      where.status = Status.Active;
+    } else if (params.status !== "All") {
+      where.status = params.status;
+    }
+
+    if (params.q) {
+      where.OR = [{ name: { contains: params.q } }, { symbol: { contains: params.q } }];
+    }
+
+    const finalWhere = Object.keys(where).length ? where : undefined;
 
     const [total, rows] = await Promise.all([
-      this.prisma.uom.count({ where }),
+      this.prisma.uom.count({ where: finalWhere }),
       this.prisma.uom.findMany({
-        where,
+        where: finalWhere,
         orderBy: { name: "asc" },
         skip,
         take: limit,
@@ -83,13 +96,14 @@ export class UomService {
     return await this.prisma.uom.findUnique({ where: { id } });
   }
 
-  async updateUom(id: string, input: { name?: string; symbol?: string }): Promise<UomData> {
+  async updateUom(id: string, input: { name?: string; symbol?: string; status?: Status }): Promise<UomData> {
     try {
       return await this.prisma.uom.update({
         where: { id },
         data: {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.symbol !== undefined ? { symbol: input.symbol } : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
           updatedAt: new Date(),
         },
       });

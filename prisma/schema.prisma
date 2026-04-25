@@ -45,6 +45,12 @@ enum DocumentStatus {
   Rejected
 }
 
+enum Status {
+  Active
+  Inactive
+  Archived
+}
+
 model User {
   id              String   @id @default(uuid()) @db.Char(36)
   password        String
@@ -125,12 +131,12 @@ enum RecordStatus {
 }
 
 enum StudentStatus {
-  active
-  inactive
-  graduated
-  transferred
-  suspended
-  archived
+  Active
+  Inactive
+  Graduated
+  Transferred
+  Suspended
+  Archived
 }
 
 enum Gender {
@@ -165,7 +171,7 @@ model Category {
   description String?
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @map("updated_at")
-
+status      Status   @default(Active)
   subCategories  SubCategory[]
   inventoryItems InventoryItem[]
 
@@ -228,7 +234,7 @@ model RolePrivilege {
   id          String   @id @default(uuid()) @db.Char(36)
   roleCode    String   @map("role_code") @db.VarChar(50)
   description String
-  status      String   @default("active")
+  status      Status   @default(Active)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @map("updated_at")
 
@@ -244,6 +250,7 @@ model SubCategory {
   name        String
   description String?
   categoryId  String?  @map("category_id") @db.Char(36)
+  status      Status   @default(Active)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @map("updated_at")
 
@@ -258,6 +265,7 @@ model SubCategory {
 model Brand {
   id        String   @id @default(uuid()) @db.Char(36)
   name      String   @unique
+  status    Status   @default(Active)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @map("updated_at")
 
@@ -270,6 +278,7 @@ model Uom {
   id        String   @id @default(uuid()) @db.Char(36)
   name      String   @unique
   symbol    String   @unique
+  status    Status   @default(Active)
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @default(now()) @map("updated_at")
 
@@ -299,7 +308,7 @@ model InventoryItem {
   brand       Brand?       @relation(fields: [brandId], references: [id], onDelete: Restrict)
   uom         Uom?         @relation(fields: [uomId], references: [id], onDelete: Restrict)
   createdBy   User?        @relation("InventoryItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-
+  status      Status   @default(Active)
   inventoryTransactions       InventoryTransaction[]
   classInventoryDistributions ClassInventoryDistribution[]
   classInventoryEntitlements  ClassInventoryEntitlement[]
@@ -325,6 +334,7 @@ model Supplier {
   country     String?
   website     String?
   notes       String?
+  status      Status   @default(Active)
   createdById String?  @map("created_by") @db.Char(36)
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @default(now()) @map("updated_at")
@@ -360,7 +370,7 @@ model SupplierTransaction {
 model SchoolClass {
   id          String       @id @default(uuid()) @db.Char(36)
   name        String       @unique
-  status      RecordStatus @default(active)
+  status      Status @default(Active)
   createdById String       @map("created_by") @db.Char(36)
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @default(now()) @map("updated_at")
@@ -391,7 +401,7 @@ model Student {
   guardianEmail   String?       @map("guardian_email")
   guardianContact String?       @map("guardian_contact")
   address         String?
-  status          StudentStatus @default(active)
+  status          StudentStatus @default(Active)
   createdById     String        @map("created_by") @db.Char(36)
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @default(now()) @map("updated_at")
@@ -412,7 +422,7 @@ model AcademicSessionTerm {
   name      String       @db.VarChar(100)
   startDate DateTime     @map("start_date") @db.Date
   endDate   DateTime     @map("end_date") @db.Date
-  status    RecordStatus @default(active)
+  status    Status       @default(Active)
   createdAt DateTime     @default(now()) @map("created_at")
 
   classInventoryDistributions ClassInventoryDistribution[]
@@ -430,7 +440,7 @@ model ClassTeacher {
   email        String           @unique
   name         String
   role         ClassTeacherRole @default(class_teacher)
-  status       RecordStatus     @default(active)
+  status       Status     @default(Active)
   assignedAt   DateTime         @default(now()) @map("assigned_at")
   unassignedAt DateTime?        @map("unassigned_at")
   createdById  String           @map("created_by") @db.Char(36)

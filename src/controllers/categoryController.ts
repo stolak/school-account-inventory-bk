@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { categoryService } from "../services/categoryService";
+import { Status } from "@prisma/client";
 
 function parseIntOrUndefined(v: unknown): number | undefined {
   if (typeof v !== "string") return undefined;
@@ -28,6 +29,10 @@ function parseIntOrUndefined(v: unknown): number | undefined {
  *                 type: string
  *                 nullable: true
  *                 example: "Books, pens, paper, and related items"
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive]
+ *                 description: Optional status (defaults to Active)
  *     responses:
  *       201:
  *         description: Category created
@@ -50,6 +55,9 @@ function parseIntOrUndefined(v: unknown): number | undefined {
  *                     description:
  *                       type: string
  *                       nullable: true
+ *                     status:
+ *                       type: string
+ *                       enum: [Active, Inactive]
  *                     createdAt:
  *                       type: string
  *                       format: date-time
@@ -71,6 +79,12 @@ function parseIntOrUndefined(v: unknown): number | undefined {
  *         schema:
  *           type: string
  *         description: Optional search query (matches category name)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Active, Inactive, All]
+ *         description: Defaults to Active only. Use All to include Active and Inactive.
  *       - in: query
  *         name: page
  *         schema:
@@ -113,6 +127,9 @@ function parseIntOrUndefined(v: unknown): number | undefined {
  *                           description:
  *                             type: string
  *                             nullable: true
+ *                           status:
+ *                             type: string
+ *                             enum: [Active, Inactive]
  *                           createdAt:
  *                             type: string
  *                             format: date-time
@@ -136,7 +153,7 @@ function parseIntOrUndefined(v: unknown): number | undefined {
 export const categoryController = {
   createCategory: async (req: Request, res: Response) => {
     try {
-      const { name, description } = req.body ?? {};
+      const { name, description, status } = req.body ?? {};
 
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({
@@ -152,9 +169,17 @@ export const categoryController = {
         });
       }
 
+      if (status !== undefined && status !== Status.Active && status !== Status.Inactive) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active or Inactive",
+        });
+      }
+
       const category = await categoryService.createCategory({
         name: name.trim(),
         description: description === undefined ? null : description,
+        ...(status !== undefined ? { status } : {}),
       });
 
       return res.status(201).json({
@@ -176,10 +201,28 @@ export const categoryController = {
   listCategories: async (req: Request, res: Response) => {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === undefined
+          ? undefined
+          : statusRaw === "All"
+            ? "All"
+            : statusRaw === "Active"
+              ? Status.Active
+              : statusRaw === "Inactive"
+                ? Status.Inactive
+                : undefined;
+
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, or All",
+        });
+      }
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
-      const result = await categoryService.listCategories({ q, page, limit });
+      const result = await categoryService.listCategories({ q, status, page, limit });
 
       return res.json({
         success: true,
@@ -303,7 +346,7 @@ export const categoryController = {
   updateCategory: async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { name, description } = req.body ?? {};
+      const { name, description, status } = req.body ?? {};
 
       if (!id) {
         return res.status(400).json({
@@ -326,6 +369,13 @@ export const categoryController = {
         });
       }
 
+      if (status !== undefined && status !== Status.Active && status !== Status.Inactive) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active or Inactive",
+        });
+      }
+
       const existing = await categoryService.getCategoryById(id);
       if (!existing) {
         return res.status(404).json({
@@ -337,6 +387,7 @@ export const categoryController = {
       const updated = await categoryService.updateCategory(id, {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(description !== undefined ? { description } : {}),
+        ...(status !== undefined ? { status } : {}),
       });
 
       return res.json({
