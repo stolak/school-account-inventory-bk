@@ -9,7 +9,7 @@ function parseIntOrUndefined(v: unknown): number | undefined {
 }
 
 function isStringOrNullOrUndefined(v: unknown): v is string | null | undefined {
-  return v === undefined || v === null || typeof v === "string"||v==="";
+  return v === undefined || v === null || typeof v === "string" || v === "";
 }
 
 function isNumberOrString(v: unknown): v is number | string {
@@ -177,10 +177,13 @@ export const purchaseController = {
    */
   createBulkPurchases: async (req: Request, res: Response) => {
     try {
-      const { supplierId, referenceNo, notes, transactionDate, amountPaid, status, items } = req.body ?? {};
+      const { supplierId, referenceNo, notes, transactionDate, amountPaid, status, items } =
+        req.body ?? {};
 
       if (!isStringOrNullOrUndefined(supplierId)) {
-        return res.status(400).json({ success: false, message: "supplierId must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "supplierId must be a string or null" });
       }
       const normalizedSupplierId =
         supplierId === undefined || supplierId === null
@@ -190,13 +193,17 @@ export const purchaseController = {
             : null;
 
       if (!isStringOrNullOrUndefined(referenceNo)) {
-        return res.status(400).json({ success: false, message: "referenceNo must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "referenceNo must be a string or null" });
       }
       if (!isStringOrNullOrUndefined(notes)) {
         return res.status(400).json({ success: false, message: "notes must be a string or null" });
       }
       if (transactionDate !== undefined && typeof transactionDate !== "string") {
-        return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "transactionDate must be an ISO date string" });
       }
       const parsedDate =
         transactionDate === undefined
@@ -210,12 +217,16 @@ export const purchaseController = {
       }
 
       if (amountPaid !== undefined && !isNumberOrString(amountPaid)) {
-        return res.status(400).json({ success: false, message: "amountPaid must be a string or number" });
+        return res
+          .status(400)
+          .json({ success: false, message: "amountPaid must be a string or number" });
       }
       if (amountPaid !== undefined) {
         const amountPaidNum = typeof amountPaid === "string" ? Number(amountPaid) : amountPaid;
-        if (!Number.isFinite(amountPaidNum) || amountPaidNum <= 0) {
-          return res.status(400).json({ success: false, message: "amountPaid must be greater than 0" });
+        if (!Number.isFinite(amountPaidNum) || amountPaidNum < 0) {
+          return res
+            .status(400)
+            .json({ success: false, message: "amountPaid must be greater than 0" });
         }
       }
 
@@ -230,31 +241,55 @@ export const purchaseController = {
       }
 
       if (!Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ success: false, message: "items is required and must be a non-empty array" });
+        return res
+          .status(400)
+          .json({ success: false, message: "items is required and must be a non-empty array" });
       }
 
-      const normalizedItems: Array<{ itemId: string; qtyIn: string | number; inCost: string | number }> = [];
+      const normalizedItems: Array<{
+        itemId: string;
+        qtyIn: string | number;
+        inCost: string | number;
+      }> = [];
       for (const [idx, it] of items.entries()) {
         if (!it || typeof it !== "object") {
-          return res.status(400).json({ success: false, message: `items[${idx}] must be an object` });
+          return res
+            .status(400)
+            .json({ success: false, message: `items[${idx}] must be an object` });
         }
         const { itemId, qtyIn, inCost } = it;
         if (!itemId || typeof itemId !== "string" || !itemId.trim()) {
-          return res.status(400).json({ success: false, message: `items[${idx}].itemId is required` });
+          return res
+            .status(400)
+            .json({ success: false, message: `items[${idx}].itemId is required` });
         }
         if (!isNumberOrString(qtyIn)) {
-          return res.status(400).json({ success: false, message: `items[${idx}].qtyIn is required (string or number)` });
+          return res
+            .status(400)
+            .json({
+              success: false,
+              message: `items[${idx}].qtyIn is required (string or number)`,
+            });
         }
         const qtyInNum = typeof qtyIn === "string" ? Number(qtyIn) : qtyIn;
         if (!Number.isFinite(qtyInNum) || qtyInNum <= 0) {
-          return res.status(400).json({ success: false, message: `items[${idx}].qtyIn must be greater than 0` });
+          return res
+            .status(400)
+            .json({ success: false, message: `items[${idx}].qtyIn must be greater than 0` });
         }
         if (!isNumberOrString(inCost)) {
-          return res.status(400).json({ success: false, message: `items[${idx}].inCost is required (string or number)` });
+          return res
+            .status(400)
+            .json({
+              success: false,
+              message: `items[${idx}].inCost is required (string or number)`,
+            });
         }
         const inCostNum = typeof inCost === "string" ? Number(inCost) : inCost;
-        if (!Number.isFinite(inCostNum) || inCostNum <= 0) {
-          return res.status(400).json({ success: false, message: `items[${idx}].inCost must be greater than 0` });
+        if (!Number.isFinite(inCostNum) || inCostNum < 0) {
+          return res
+            .status(400)
+            .json({ success: false, message: `items[${idx}].inCost must be greater than 0` });
         }
 
         normalizedItems.push({ itemId: itemId.trim(), qtyIn, inCost });
@@ -274,7 +309,9 @@ export const purchaseController = {
         items: normalizedItems,
       });
 
-      return res.status(201).json({ success: true, message: "Purchases created successfully", data: created });
+      return res
+        .status(201)
+        .json({ success: true, message: "Purchases created successfully", data: created });
     } catch (error: any) {
       const message = error?.message ?? "Failed to create purchases";
       const code = message.startsWith("Invalid ") ? 404 : 500;
@@ -284,14 +321,25 @@ export const purchaseController = {
 
   createPurchase: async (req: Request, res: Response) => {
     try {
-      const { itemId, supplierId, qtyIn, inCost, amountPaid, referenceNo, notes, transactionDate, status } =
-        req.body ?? {};
+      const {
+        itemId,
+        supplierId,
+        qtyIn,
+        inCost,
+        amountPaid,
+        referenceNo,
+        notes,
+        transactionDate,
+        status,
+      } = req.body ?? {};
 
       if (!itemId || typeof itemId !== "string" || !itemId.trim()) {
         return res.status(400).json({ success: false, message: "itemId is required" });
       }
       if (!isStringOrNullOrUndefined(supplierId)) {
-        return res.status(400).json({ success: false, message: "supplierId must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "supplierId must be a string or null" });
       }
       const normalizedSupplierId =
         supplierId === undefined || supplierId === null
@@ -301,7 +349,9 @@ export const purchaseController = {
             : null;
 
       if (!isNumberOrString(qtyIn)) {
-        return res.status(400).json({ success: false, message: "qtyIn is required (string or number)" });
+        return res
+          .status(400)
+          .json({ success: false, message: "qtyIn is required (string or number)" });
       }
       const qtyInNum = typeof qtyIn === "string" ? Number(qtyIn) : qtyIn;
       if (!Number.isFinite(qtyInNum) || qtyInNum <= 0) {
@@ -309,7 +359,9 @@ export const purchaseController = {
       }
 
       if (inCost !== undefined && !isNumberOrString(inCost)) {
-        return res.status(400).json({ success: false, message: "inCost must be a string or number" });
+        return res
+          .status(400)
+          .json({ success: false, message: "inCost must be a string or number" });
       }
       if (inCost !== undefined) {
         const inCostNum = typeof inCost === "string" ? Number(inCost) : inCost;
@@ -319,22 +371,30 @@ export const purchaseController = {
       }
 
       if (amountPaid !== undefined && !isNumberOrString(amountPaid)) {
-        return res.status(400).json({ success: false, message: "amountPaid must be a string or number" });
+        return res
+          .status(400)
+          .json({ success: false, message: "amountPaid must be a string or number" });
       }
       if (amountPaid !== undefined) {
         const amountPaidNum = typeof amountPaid === "string" ? Number(amountPaid) : amountPaid;
         if (!Number.isFinite(amountPaidNum) || amountPaidNum < 0) {
-          return res.status(400).json({ success: false, message: "amountPaid must be greater than 0" });
+          return res
+            .status(400)
+            .json({ success: false, message: "amountPaid must be greater than 0" });
         }
       }
       if (!isStringOrNullOrUndefined(referenceNo)) {
-        return res.status(400).json({ success: false, message: "referenceNo must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "referenceNo must be a string or null" });
       }
       if (!isStringOrNullOrUndefined(notes)) {
         return res.status(400).json({ success: false, message: "notes must be a string or null" });
       }
       if (transactionDate !== undefined && typeof transactionDate !== "string") {
-        return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "transactionDate must be an ISO date string" });
       }
       const parsedDate =
         transactionDate === undefined
@@ -364,15 +424,22 @@ export const purchaseController = {
         supplierId: normalizedSupplierId,
         qtyIn,
         ...(inCost === undefined || inCost.trim() === "" ? { inCost: undefined } : { inCost }),
-        ...(amountPaid === undefined || amountPaid.trim() === "" ? { amountPaid: undefined } : { amountPaid }),
-        referenceNo: referenceNo === undefined || referenceNo === null || referenceNo.trim() === "" ? null : referenceNo,
+        ...(amountPaid === undefined || amountPaid.trim() === ""
+          ? { amountPaid: undefined }
+          : { amountPaid }),
+        referenceNo:
+          referenceNo === undefined || referenceNo === null || referenceNo.trim() === ""
+            ? null
+            : referenceNo,
         notes: notes === undefined || notes === null || notes.trim() === "" ? null : notes,
         transactionDate: parsedDate ?? undefined,
         createdById,
         status,
       });
 
-      return res.status(201).json({ success: true, message: "Purchase created successfully", data: created });
+      return res
+        .status(201)
+        .json({ success: true, message: "Purchase created successfully", data: created });
     } catch (error: any) {
       const message = error?.message ?? "Failed to create purchase";
       const code = message.startsWith("Invalid ") ? 404 : 500;
@@ -384,7 +451,8 @@ export const purchaseController = {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
       const itemId = typeof req.query.itemId === "string" ? req.query.itemId : undefined;
-      const supplierId = typeof req.query.supplierId === "string" ? req.query.supplierId : undefined;
+      const supplierId =
+        typeof req.query.supplierId === "string" ? req.query.supplierId : undefined;
       const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
       const status =
         statusRaw === undefined
@@ -406,10 +474,19 @@ export const purchaseController = {
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
-      const result = await purchaseService.listPurchases({ q, itemId, supplierId, status, page, limit });
+      const result = await purchaseService.listPurchases({
+        q,
+        itemId,
+        supplierId,
+        status,
+        page,
+        limit,
+      });
       return res.json({ success: true, message: "Purchases retrieved successfully", data: result });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: "Failed to retrieve purchases", error: error?.message });
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to retrieve purchases", error: error?.message });
     }
   },
 
@@ -512,43 +589,72 @@ export const purchaseController = {
       const purchase = await purchaseService.getPurchaseById(id);
       if (!purchase) return res.status(404).json({ success: false, message: "Purchase not found" });
 
-      return res.json({ success: true, message: "Purchase retrieved successfully", data: purchase });
+      return res.json({
+        success: true,
+        message: "Purchase retrieved successfully",
+        data: purchase,
+      });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: "Failed to retrieve purchase", error: error?.message });
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to retrieve purchase", error: error?.message });
     }
   },
 
   updatePurchase: async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { itemId, supplierId, qtyIn, inCost, amountPaid, referenceNo, notes, transactionDate, status } =
-        req.body ?? {};
+      const {
+        itemId,
+        supplierId,
+        qtyIn,
+        inCost,
+        amountPaid,
+        referenceNo,
+        notes,
+        transactionDate,
+        status,
+      } = req.body ?? {};
 
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       if (itemId !== undefined && (typeof itemId !== "string" || !itemId.trim())) {
-        return res.status(400).json({ success: false, message: "itemId must be a non-empty string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "itemId must be a non-empty string" });
       }
       if (supplierId !== undefined && !isStringOrNullOrUndefined(supplierId)) {
-        return res.status(400).json({ success: false, message: "supplierId must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "supplierId must be a string or null" });
       }
       if (qtyIn !== undefined && !isNumberOrString(qtyIn)) {
-        return res.status(400).json({ success: false, message: "qtyIn must be a string or number" });
+        return res
+          .status(400)
+          .json({ success: false, message: "qtyIn must be a string or number" });
       }
       if (inCost !== undefined && !isNumberOrString(inCost)) {
-        return res.status(400).json({ success: false, message: "inCost must be a string or number" });
+        return res
+          .status(400)
+          .json({ success: false, message: "inCost must be a string or number" });
       }
       if (amountPaid !== undefined && !isNumberOrString(amountPaid)) {
-        return res.status(400).json({ success: false, message: "amountPaid must be a string or number" });
+        return res
+          .status(400)
+          .json({ success: false, message: "amountPaid must be a string or number" });
       }
       if (referenceNo !== undefined && !isStringOrNullOrUndefined(referenceNo)) {
-        return res.status(400).json({ success: false, message: "referenceNo must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "referenceNo must be a string or null" });
       }
       if (notes !== undefined && !isStringOrNullOrUndefined(notes)) {
         return res.status(400).json({ success: false, message: "notes must be a string or null" });
       }
       if (transactionDate !== undefined && typeof transactionDate !== "string") {
-        return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "transactionDate must be an ISO date string" });
       }
       if (
         status !== undefined &&
@@ -575,10 +681,7 @@ export const purchaseController = {
       return res.json({ success: true, message: "Purchase updated successfully", data: updated });
     } catch (error: any) {
       const message = error?.message ?? "Failed to update purchase";
-      const code =
-        message === "Purchase not found" || message.startsWith("Invalid ")
-          ? 404
-          : 500;
+      const code = message === "Purchase not found" || message.startsWith("Invalid ") ? 404 : 500;
       return res.status(code).json({ success: false, message });
     }
   },
@@ -597,4 +700,3 @@ export const purchaseController = {
     }
   },
 };
-
