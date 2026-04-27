@@ -84,6 +84,69 @@ status?: InventoryTransactionStatus;
     });
     }
 
+  async createBulkPurchases(input: {
+    supplierId?: string | null;
+    referenceNo?: string | null;
+    notes?: string | null;
+    transactionDate?: Date;
+    amountPaid?: string | number;
+    createdById: string;
+    items: Array<{
+      itemId: string;
+      qtyIn: string | number;
+      inCost: string | number;
+    }>;
+    status?: InventoryTransactionStatus;
+  }): Promise<PurchaseData[]> {
+    if (!input.items.length) {
+      throw new Error("items must not be empty");
+    }
+
+    const supplierId = input.supplierId ?? null;
+    if (supplierId) await this.assertSupplierExists(supplierId);
+
+    const itemIds = [...new Set(input.items.map((i) => i.itemId))];
+    const existingItems = await this.prisma.inventoryItem.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true },
+    });
+    const existingSet = new Set(existingItems.map((i) => i.id));
+    const missing = itemIds.filter((id) => !existingSet.has(id));
+    if (missing.length) {
+      throw new Error(`Invalid itemId(s): ${missing.join(", ")}`);
+    }
+
+    const txDate = input.transactionDate ?? new Date();
+    const status = input.status ?? InventoryTransactionStatus.completed;
+
+    const created = await this.prisma.$transaction(
+      input.items.map((it) =>
+        this.prisma.inventoryTransaction.create({
+          data: {
+            itemId: it.itemId,
+            supplierId,
+            transactionType: InventoryTransactionType.purchase,
+            qtyIn: it.qtyIn as any,
+            inCost: it.inCost as any,
+            ...(input.amountPaid !== undefined ? { amountPaid: input.amountPaid as any } : {}),
+            status,
+            referenceNo: input.referenceNo ?? null,
+            notes: input.notes ?? null,
+            transactionDate: txDate,
+            createdById: input.createdById,
+          },
+          include: {
+            item: { select: { name: true } },
+            supplier: { select: { name: true } },
+            createdBy: { select: { firstName: true, lastName: true } },
+          },
+        })
+      )
+    );
+
+    return created;
+  }
+
     async listPurchases(params: ListPurchasesParams = {}): Promise<{ purchases: PurchaseData[]; pagination: { page:
         number; limit: number; total: number; totalPages: number }; }> {
         const page = clampInt(params.page ?? 1, 1, 1_000_000);
