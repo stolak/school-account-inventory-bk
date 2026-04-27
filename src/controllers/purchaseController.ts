@@ -8,6 +8,48 @@ function parseIntOrUndefined(v: unknown): number | undefined {
   return Number.isFinite(n) ? n : undefined;
 }
 
+/** Query date for purchase list: `YYYY-MM-DD` is whole UTC day; full ISO strings pass through. */
+function parsePurchaseListQueryDate(
+  v: unknown
+): "missing" | "invalid" | Date {
+  if (v === undefined || v === null) return "missing";
+  if (typeof v !== "string") return "invalid";
+  const s = v.trim();
+  if (!s) return "missing";
+
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (dateOnly) {
+    const y = Number(dateOnly[1]);
+    const mo = Number(dateOnly[2]);
+    const d = Number(dateOnly[3]);
+    const start = Date.UTC(y, mo - 1, d, 0, 0, 0, 0);
+    return new Date(start);
+  }
+
+  const parsed = new Date(s);
+  return Number.isNaN(parsed.getTime()) ? "invalid" : parsed;
+}
+
+/** For inclusive end date: date-only → end of that UTC day; ISO with time unchanged. */
+function parsePurchaseListQueryDateEndInclusive(v: unknown): "missing" | "invalid" | Date {
+  if (v === undefined || v === null) return "missing";
+  if (typeof v !== "string") return "invalid";
+  const s = v.trim();
+  if (!s) return "missing";
+
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (dateOnly) {
+    const y = Number(dateOnly[1]);
+    const mo = Number(dateOnly[2]);
+    const d = Number(dateOnly[3]);
+    const end = Date.UTC(y, mo - 1, d, 23, 59, 59, 999);
+    return new Date(end);
+  }
+
+  const parsed = new Date(s);
+  return Number.isNaN(parsed.getTime()) ? "invalid" : parsed;
+}
+
 function isStringOrNullOrUndefined(v: unknown): v is string | null | undefined {
   return v === undefined || v === null || typeof v === "string" || v === "";
 }
@@ -94,6 +136,18 @@ function isNumberOrString(v: unknown): v is number | string {
  *         schema:
  *           type: string
  *           enum: [pending, cancelled, deleted, completed]
+ *       - in: query
+ *         name: transactionDateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Inclusive lower bound on transactionDate. Use YYYY-MM-DD (whole UTC day) or a full ISO-8601 datetime.
+ *       - in: query
+ *         name: transactionDateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Inclusive upper bound on transactionDate. Use YYYY-MM-DD (whole UTC day, end 23:59:59.999Z) or a full ISO-8601 datetime.
  *       - in: query
  *         name: page
  *         schema:
@@ -474,11 +528,39 @@ export const purchaseController = {
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
+      const fromRaw = parsePurchaseListQueryDate(req.query.transactionDateFrom);
+      const toRaw = parsePurchaseListQueryDateEndInclusive(req.query.transactionDateTo);
+
+      if (fromRaw === "invalid") {
+        return res
+          .status(400)
+          .json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+
+      if (
+        transactionDateFrom !== undefined &&
+        transactionDateTo !== undefined &&
+        transactionDateFrom.getTime() > transactionDateTo.getTime()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "transactionDateFrom must be before or equal to transactionDateTo",
+        });
+      }
+
       const result = await purchaseService.listPurchases({
         q,
         itemId,
         supplierId,
         status,
+        transactionDateFrom,
+        transactionDateTo,
         page,
         limit,
       });

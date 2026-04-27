@@ -26,6 +26,10 @@ export interface ListPurchasesParams {
   itemId?: string;
   supplierId?: string;
   status?: InventoryTransactionStatus;
+  /** Inclusive lower bound on transactionDate */
+  transactionDateFrom?: Date;
+  /** Inclusive upper bound on transactionDate */
+  transactionDateTo?: Date;
   page?: number;
   limit?: number;
 }
@@ -67,7 +71,6 @@ export class PurchaseService {
   }): Promise<PurchaseData> {
     await this.assertItemExists(input.itemId);
     if (input.supplierId) await this.assertSupplierExists(input.supplierId);
-    console.log(input);
     return await this.prisma.inventoryTransaction.create({
       data: {
         itemId: input.itemId,
@@ -167,6 +170,16 @@ export class PurchaseService {
       ...(params.itemId ? { itemId: params.itemId } : {}),
       ...(params.supplierId ? { supplierId: params.supplierId } : {}),
       ...(params.status ? { status: params.status } : {}),
+      ...(params.transactionDateFrom !== undefined || params.transactionDateTo !== undefined
+        ? {
+            transactionDate: {
+              ...(params.transactionDateFrom !== undefined
+                ? { gte: params.transactionDateFrom }
+                : {}),
+              ...(params.transactionDateTo !== undefined ? { lte: params.transactionDateTo } : {}),
+            },
+          }
+        : {}),
       ...(params.q
         ? {
             OR: [
