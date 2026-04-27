@@ -12,6 +12,7 @@ import brandRouter from "./brand";
 import uomRouter from "./uom";
 import inventoryItemRouter from "./inventoryItem";
 import supplierRouter from "./supplier";
+import purchaseRouter from "./purchase";
 
 const router = Router();
 
@@ -23,6 +24,7 @@ router.use("/brands", brandRouter);
 router.use("/uoms", uomRouter);
 router.use("/inventory-items", inventoryItemRouter);
 router.use("/suppliers", supplierRouter);
+router.use("/purchases", purchaseRouter);
 
 router.use("/upload", uploadRouter);
 

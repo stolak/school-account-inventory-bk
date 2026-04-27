@@ -147,9 +147,21 @@ enum Gender {
 
 enum InventoryTransactionType {
   purchase
-  sale
-  distribution
-  return
+  donation
+  student_purchase
+
+  student_collection
+  hostel_collection
+  departmental_collection
+  staff_collection
+
+  student_return
+  hostel_return
+  departmental_return
+  staff_return
+
+  sales
+  disposal
 }
 
 enum InventoryTransactionStatus {
@@ -166,12 +178,12 @@ enum ClassTeacherRole {
 }
 
 model Category {
-  id          String   @id @default(uuid()) @db.Char(36)
-  name        String   @unique
-  description String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @default(now()) @map("updated_at")
-status      Status   @default(Active)
+  id             String          @id @default(uuid()) @db.Char(36)
+  name           String          @unique
+  description    String?
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @default(now()) @map("updated_at")
+  status         Status          @default(Active)
   subCategories  SubCategory[]
   inventoryItems InventoryItem[]
 
@@ -303,12 +315,12 @@ model InventoryItem {
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @default(now()) @map("updated_at")
 
-  category    Category?    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  subCategory SubCategory? @relation(fields: [subCategoryId], references: [id], onDelete: Restrict)
-  brand       Brand?       @relation(fields: [brandId], references: [id], onDelete: Restrict)
-  uom         Uom?         @relation(fields: [uomId], references: [id], onDelete: Restrict)
-  createdBy   User?        @relation("InventoryItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  status      Status   @default(Active)
+  category                    Category?                    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  subCategory                 SubCategory?                 @relation(fields: [subCategoryId], references: [id], onDelete: Restrict)
+  brand                       Brand?                       @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  uom                         Uom?                         @relation(fields: [uomId], references: [id], onDelete: Restrict)
+  createdBy                   User?                        @relation("InventoryItemCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  status                      Status                       @default(Active)
   inventoryTransactions       InventoryTransaction[]
   classInventoryDistributions ClassInventoryDistribution[]
   classInventoryEntitlements  ClassInventoryEntitlement[]
@@ -368,12 +380,12 @@ model SupplierTransaction {
 }
 
 model SchoolClass {
-  id          String       @id @default(uuid()) @db.Char(36)
-  name        String       @unique
-  status      Status @default(Active)
-  createdById String       @map("created_by") @db.Char(36)
-  createdAt   DateTime     @default(now()) @map("created_at")
-  updatedAt   DateTime     @default(now()) @map("updated_at")
+  id          String   @id @default(uuid()) @db.Char(36)
+  name        String   @unique
+  status      Status   @default(Active)
+  createdById String   @map("created_by") @db.Char(36)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
 
   createdBy User @relation("SchoolClassCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
@@ -417,13 +429,13 @@ model Student {
 }
 
 model AcademicSessionTerm {
-  id        String       @id @default(uuid()) @db.Char(36)
-  session   String       @db.VarChar(50)
-  name      String       @db.VarChar(100)
-  startDate DateTime     @map("start_date") @db.Date
-  endDate   DateTime     @map("end_date") @db.Date
-  status    Status       @default(Active)
-  createdAt DateTime     @default(now()) @map("created_at")
+  id        String   @id @default(uuid()) @db.Char(36)
+  session   String   @db.VarChar(50)
+  name      String   @db.VarChar(100)
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+  status    Status   @default(Active)
+  createdAt DateTime @default(now()) @map("created_at")
 
   classInventoryDistributions ClassInventoryDistribution[]
   classInventoryEntitlements  ClassInventoryEntitlement[]
@@ -440,7 +452,7 @@ model ClassTeacher {
   email        String           @unique
   name         String
   role         ClassTeacherRole @default(class_teacher)
-  status       Status     @default(Active)
+  status       Status           @default(Active)
   assignedAt   DateTime         @default(now()) @map("assigned_at")
   unassignedAt DateTime?        @map("unassigned_at")
   createdById  String           @map("created_by") @db.Char(36)
@@ -505,22 +517,25 @@ model InventoryTransaction {
   status           InventoryTransactionStatus @default(pending)
   referenceNo      String?                    @map("reference_no")
   notes            String?
-  distributionId   String?                    @map("distribution_id") @db.Char(36)
-  transactionDate  DateTime                   @default(now()) @map("transaction_date")
-  createdById      String                     @map("created_by") @db.Char(36)
-  createdAt        DateTime                   @default(now()) @map("created_at")
-  updatedAt        DateTime                   @default(now()) @map("updated_at")
+  studentId        String?                    @map("student_id") @db.Char(36)
+  classId          String?                    @map("class_id") @db.Char(36)
+  termId           String?                    @map("term_id") @db.Char(36)
 
-  item         InventoryItem               @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  supplier     Supplier?                   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  receiver     User?                       @relation("InventoryTransactionReceiver", fields: [receiverId], references: [id], onDelete: SetNull)
-  distribution ClassInventoryDistribution? @relation(fields: [distributionId], references: [id], onDelete: SetNull)
-  createdBy    User                        @relation("InventoryTransactionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  transactionDate DateTime @default(now()) @map("transaction_date")
+  createdById     String   @map("created_by") @db.Char(36)
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @default(now()) @map("updated_at")
+
+  item                         InventoryItem               @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  supplier                     Supplier?                   @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  receiver                     User?                       @relation("InventoryTransactionReceiver", fields: [receiverId], references: [id], onDelete: SetNull)
+  createdBy                    User                        @relation("InventoryTransactionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  classInventoryDistribution   ClassInventoryDistribution? @relation(fields: [classInventoryDistributionId], references: [id])
+  classInventoryDistributionId String?                     @db.Char(36)
 
   @@index([itemId])
   @@index([supplierId])
   @@index([receiverId])
-  @@index([distributionId])
   @@index([createdById])
   @@map("inventory_transactions")
 }
