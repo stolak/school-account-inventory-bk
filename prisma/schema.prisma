@@ -454,12 +454,9 @@ model Student {
   @@map("students")
 }
 
-model AcademicSessionTerm {
+model Term {
   id        String   @id @default(uuid()) @db.Char(36)
-  session   String   @db.VarChar(50)
-  name      String   @db.VarChar(100)
-  startDate DateTime @map("start_date") @db.Date
-  endDate   DateTime @map("end_date") @db.Date
+  name      String
   status    Status   @default(Active)
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -467,8 +464,17 @@ model AcademicSessionTerm {
   classInventoryEntitlements  ClassInventoryEntitlement[]
   studentInventoryLogs        StudentInventoryLog[]
 
-  @@unique([session, name])
-  @@map("academic_session_terms")
+  @@unique([name])
+  @@map("terms")
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Char(36)
+  name      String   @unique
+  status    Status   @default(Active)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("sessions")
 }
 
 model ClassTeacher {
@@ -512,11 +518,11 @@ model ClassInventoryDistribution {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @default(now()) @map("updated_at")
 
-  class         SchoolClass?        @relation(fields: [classId], references: [id], onDelete: SetNull)
-  inventoryItem InventoryItem       @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
-  sessionTerm   AcademicSessionTerm @relation(fields: [sessionTermId], references: [id], onDelete: Restrict)
-  receivedBy    ClassTeacher?       @relation("DistributionReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
-  createdBy     User                @relation("ClassInventoryDistributionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  class         SchoolClass?  @relation(fields: [classId], references: [id], onDelete: SetNull)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  sessionTerm   Term          @relation(fields: [sessionTermId], references: [id], onDelete: Restrict)
+  receivedBy    ClassTeacher? @relation("DistributionReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("ClassInventoryDistributionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   inventoryTransactions InventoryTransaction[]
 
@@ -577,10 +583,10 @@ model ClassInventoryEntitlement {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @default(now()) @map("updated_at")
 
-  class         SchoolClass?        @relation(fields: [classId], references: [id], onDelete: SetNull)
-  inventoryItem InventoryItem       @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
-  sessionTerm   AcademicSessionTerm @relation(fields: [sessionTermId], references: [id], onDelete: Restrict)
-  createdBy     User                @relation("ClassInventoryEntitlementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  class         SchoolClass?  @relation(fields: [classId], references: [id], onDelete: SetNull)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  sessionTerm   Term          @relation(fields: [sessionTermId], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("ClassInventoryEntitlementCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@unique([classId, inventoryItemId, sessionTermId])
   @@index([classId])
@@ -605,12 +611,12 @@ model StudentInventoryLog {
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @default(now()) @map("updated_at")
 
-  student       Student             @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  class         SchoolClass?        @relation(fields: [classId], references: [id], onDelete: SetNull)
-  sessionTerm   AcademicSessionTerm @relation(fields: [sessionTermId], references: [id], onDelete: Restrict)
-  inventoryItem InventoryItem       @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
-  givenBy       ClassTeacher?       @relation("StudentLogGivenBy", fields: [givenById], references: [id], onDelete: Restrict)
-  createdBy     User                @relation("StudentInventoryLogCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  student       Student       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  class         SchoolClass?  @relation(fields: [classId], references: [id], onDelete: SetNull)
+  term          Term          @relation(fields: [sessionTermId], references: [id], onDelete: Restrict)
+  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
+  givenBy       ClassTeacher? @relation("StudentLogGivenBy", fields: [givenById], references: [id], onDelete: Restrict)
+  createdBy     User          @relation("StudentInventoryLogCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   @@index([studentId])
   @@index([classId])

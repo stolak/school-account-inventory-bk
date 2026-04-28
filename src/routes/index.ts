@@ -16,6 +16,9 @@ import purchaseRouter from "./purchase";
 import schoolClassRouter from "./schoolClass";
 import studentRouter from "./student";
 import subClassRouter from "./subClass";
+import termRouter from "./term";
+import sessionRouter from "./session";
+import activePeriodRouter from "./activePeriod";
 
 const router = Router();
 
@@ -31,6 +34,9 @@ router.use("/purchases", purchaseRouter);
 router.use("/school-classes", schoolClassRouter);
 router.use("/students", studentRouter);
 router.use("/sub-classes", subClassRouter);
+router.use("/terms", termRouter);
+router.use("/sessions", sessionRouter);
+router.use("/active-period", activePeriodRouter);
 
 router.use("/upload", uploadRouter);
 
