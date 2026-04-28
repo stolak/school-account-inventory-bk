@@ -21,6 +21,7 @@ const options: swaggerJSDoc.Options = {
       { name: 'Suppliers', description: 'Supplier management' },
       { name: 'Purchases', description: 'Purchase transactions' },
       { name: 'SchoolClasses', description: 'School class management' },
+      { name: 'Students', description: 'Student management' },
       { name: 'Uoms', description: 'Unit of measurement (UoM) management' },
       { name: 'Dashboard', description: 'Dashboard endpoints' },
       { name: 'Email', description: 'Email management' },

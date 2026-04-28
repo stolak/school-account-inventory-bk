@@ -14,6 +14,7 @@ import inventoryItemRouter from "./inventoryItem";
 import supplierRouter from "./supplier";
 import purchaseRouter from "./purchase";
 import schoolClassRouter from "./schoolClass";
+import studentRouter from "./student";
 
 const router = Router();
 
@@ -27,6 +28,7 @@ router.use("/inventory-items", inventoryItemRouter);
 router.use("/suppliers", supplierRouter);
 router.use("/purchases", purchaseRouter);
 router.use("/school-classes", schoolClassRouter);
+router.use("/students", studentRouter);
 
 router.use("/upload", uploadRouter);
 
