@@ -392,9 +392,35 @@ model SchoolClass {
   classInventoryEntitlements  ClassInventoryEntitlement[]
   studentInventoryLogs        StudentInventoryLog[]
   classTeachers               ClassTeacher[]
+  subClasses                  SubClass[]
 
   @@index([createdById])
   @@map("school_classes")
+}
+
+model SubClass {
+  id        String       @id @default(uuid()) @db.Char(36)
+  name      String
+  status    Status       @default(Active)
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @default(now()) @map("updated_at")
+  class     SchoolClass? @relation(fields: [classId], references: [id], onDelete: Cascade)
+  classId   String?      @map("class_id") @db.Char(36)
+  students  Student[]
+
+  @@unique([name, classId])
+  @@index([classId])
+  @@map("sub_classes")
+}
+
+model Hostel {
+  id        String   @id @default(uuid()) @db.Char(36)
+  name      String   @unique
+  status    Status   @default(Active)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("hostels")
 }
 
 model Student {
@@ -420,6 +446,8 @@ model Student {
   createdBy User         @relation("StudentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   studentInventoryLogs StudentInventoryLog[]
+  subClass             SubClass?             @relation(fields: [subClassId], references: [id])
+  subClassId           String?               @db.Char(36)
 
   @@index([classId])
   @@index([createdById])

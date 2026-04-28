@@ -15,6 +15,7 @@ import supplierRouter from "./supplier";
 import purchaseRouter from "./purchase";
 import schoolClassRouter from "./schoolClass";
 import studentRouter from "./student";
+import subClassRouter from "./subClass";
 
 const router = Router();
 
@@ -29,6 +30,7 @@ router.use("/suppliers", supplierRouter);
 router.use("/purchases", purchaseRouter);
 router.use("/school-classes", schoolClassRouter);
 router.use("/students", studentRouter);
+router.use("/sub-classes", subClassRouter);
 
 router.use("/upload", uploadRouter);
 

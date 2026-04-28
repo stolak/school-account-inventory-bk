@@ -73,6 +73,9 @@ function parseGender(v: unknown): Gender | undefined {
  *               classId:
  *                 type: string
  *                 nullable: true
+ *               subClassId:
+ *                 type: string
+ *                 nullable: true
  *               guardianName:
  *                 type: string
  *                 nullable: true
@@ -118,6 +121,11 @@ function parseGender(v: unknown): Gender | undefined {
  *           type: string
  *         description: Filter by school class id
  *       - in: query
+ *         name: subClassId
+ *         schema:
+ *           type: string
+ *         description: Filter by sub class id
+ *       - in: query
  *         name: status
  *         schema:
  *           type: string
@@ -157,6 +165,7 @@ export const studentController = {
         gender,
         dateOfBirth,
         classId,
+        subClassId,
         guardianName,
         guardianEmail,
         guardianContact,
@@ -203,6 +212,16 @@ export const studentController = {
         normalizedClassId = classId.trim() === "" ? null : classId.trim();
       }
 
+      let normalizedSubClassId: string | null | undefined = undefined;
+      if (subClassId !== undefined && subClassId !== null) {
+        if (typeof subClassId !== "string") {
+          return res
+            .status(400)
+            .json({ success: false, message: "subClassId must be a string or null" });
+        }
+        normalizedSubClassId = subClassId.trim() === "" ? null : subClassId.trim();
+      }
+
       const createdById = (req as any).user?.id;
       if (!createdById) return res.status(401).json({ success: false, message: "Unauthorized" });
 
@@ -233,6 +252,7 @@ export const studentController = {
             }
           : {}),
         ...(normalizedClassId !== undefined ? { classId: normalizedClassId } : {}),
+        ...(normalizedSubClassId !== undefined ? { subClassId: normalizedSubClassId } : {}),
         ...(guardianName !== undefined
           ? {
               guardianName:
@@ -285,7 +305,11 @@ export const studentController = {
     } catch (error: any) {
       const message = error?.message ?? "Failed to create student";
       const code =
-        message === "Invalid classId" ? 404 : message.includes("already exists") ? 409 : 500;
+        message === "Invalid classId" || message === "Invalid subClassId"
+          ? 404
+          : message.includes("already exists")
+            ? 409
+            : 500;
       return res.status(code).json({ success: false, message });
     }
   },
@@ -294,6 +318,8 @@ export const studentController = {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
       const classId = typeof req.query.classId === "string" ? req.query.classId : undefined;
+      const subClassId =
+        typeof req.query.subClassId === "string" ? req.query.subClassId : undefined;
       const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
 
       const status =
@@ -320,6 +346,7 @@ export const studentController = {
       const result = await studentService.listStudents({
         q,
         ...(classId !== undefined && classId.trim() !== "" ? { classId: classId.trim() } : {}),
+        ...(subClassId !== undefined && subClassId.trim() !== "" ? { subClassId: subClassId.trim() } : {}),
         status,
         page,
         limit,
@@ -399,6 +426,9 @@ export const studentController = {
    *                 type: string
    *                 format: date
    *               classId:
+   *                 type: string
+   *                 nullable: true
+   *               subClassId:
    *                 type: string
    *                 nullable: true
    *               guardianName:
@@ -490,6 +520,7 @@ export const studentController = {
         gender,
         dateOfBirth,
         classId,
+        subClassId,
         guardianName,
         guardianEmail,
         guardianContact,
@@ -547,6 +578,21 @@ export const studentController = {
           classId === null || classId === "" ? null : typeof classId === "string" ? classId.trim() || null : null;
       }
 
+      let normalizedSubClassId: string | null | undefined = undefined;
+      if (subClassId !== undefined) {
+        if (subClassId !== null && typeof subClassId !== "string") {
+          return res
+            .status(400)
+            .json({ success: false, message: "subClassId must be a string or null" });
+        }
+        normalizedSubClassId =
+          subClassId === null || subClassId === ""
+            ? null
+            : typeof subClassId === "string"
+              ? subClassId.trim() || null
+              : null;
+      }
+
       const createdById = (req as any).user?.id;
       if (!createdById) return res.status(401).json({ success: false, message: "Unauthorized" });
 
@@ -577,6 +623,7 @@ export const studentController = {
         ...(genderParsed !== undefined ? { gender: genderParsed } : {}),
         ...(dob !== undefined ? { dateOfBirth: dob } : {}),
         ...(normalizedClassId !== undefined ? { classId: normalizedClassId } : {}),
+        ...(normalizedSubClassId !== undefined ? { subClassId: normalizedSubClassId } : {}),
         ...(guardianName !== undefined
           ? {
               guardianName:
@@ -624,7 +671,7 @@ export const studentController = {
     } catch (error: any) {
       const message = error?.message ?? "Failed to update student";
       const statusCode =
-        message === "Invalid classId"
+        message === "Invalid classId" || message === "Invalid subClassId"
           ? 404
           : message.includes("Record to update not found")
             ? 404

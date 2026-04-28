@@ -11,6 +11,7 @@ export interface StudentData {
   gender: Gender;
   dateOfBirth: Date;
   classId: string | null;
+  subClassId?: string | null;
   guardianName: string | null;
   guardianEmail: string | null;
   guardianContact: string | null;
@@ -20,12 +21,14 @@ export interface StudentData {
   createdAt: Date;
   updatedAt: Date;
   class?: { id: string; name: string } | null;
+  subClass?: { id: string; name: string; classId: string | null } | null;
   createdBy?: { firstName: string | null; lastName: string | null } | null;
 }
 
 export interface ListStudentsParams {
   q?: string;
   classId?: string;
+  subClassId?: string;
   status?: StudentStatus | "All";
   page?: number;
   limit?: number;
@@ -50,6 +53,14 @@ export class StudentService {
     if (!cls) throw new Error("Invalid classId");
   }
 
+  private async assertSubClassExists(subClassId: string) {
+    const sub = await this.prisma.subClass.findUnique({
+      where: { id: subClassId },
+      select: { id: true },
+    });
+    if (!sub) throw new Error("Invalid subClassId");
+  }
+
   async createStudent(input: {
     admissionNumber: string;
     firstName: string;
@@ -59,6 +70,7 @@ export class StudentService {
     gender: Gender;
     dateOfBirth: Date;
     classId?: string | null;
+    subClassId?: string | null;
     guardianName?: string | null;
     guardianEmail?: string | null;
     guardianContact?: string | null;
@@ -67,6 +79,7 @@ export class StudentService {
     createdById: string;
   }): Promise<StudentData> {
     if (input.classId) await this.assertClassExists(input.classId);
+    if (input.subClassId) await this.assertSubClassExists(input.subClassId);
 
     try {
       return await this.prisma.student.create({
@@ -79,6 +92,7 @@ export class StudentService {
           gender: input.gender,
           dateOfBirth: input.dateOfBirth,
           classId: input.classId ?? null,
+          subClassId: input.subClassId ?? null,
           guardianName: input.guardianName ?? null,
           guardianEmail: input.guardianEmail ?? null,
           guardianContact: input.guardianContact ?? null,
@@ -88,6 +102,7 @@ export class StudentService {
         },
         include: {
           class: { select: { id: true, name: true } },
+          subClass: { select: { id: true, name: true, classId: true } },
           createdBy: { select: { firstName: true, lastName: true } },
         },
       });
@@ -119,6 +134,10 @@ export class StudentService {
       where.classId = params.classId;
     }
 
+    if (params.subClassId) {
+      where.subClassId = params.subClassId;
+    }
+
     if (params.q) {
       where.OR = [
         { admissionNumber: { contains: params.q } },
@@ -143,6 +162,7 @@ export class StudentService {
         take: limit,
         include: {
           class: { select: { id: true, name: true } },
+          subClass: { select: { id: true, name: true, classId: true } },
           createdBy: { select: { firstName: true, lastName: true } },
         },
       }),
@@ -177,6 +197,7 @@ export class StudentService {
       where: { id },
       include: {
         class: { select: { id: true, name: true } },
+        subClass: { select: { id: true, name: true, classId: true } },
         createdBy: { select: { firstName: true, lastName: true } },
       },
     });
@@ -193,6 +214,7 @@ export class StudentService {
       gender?: Gender;
       dateOfBirth?: Date;
       classId?: string | null;
+      subClassId?: string | null;
       guardianName?: string | null;
       guardianEmail?: string | null;
       guardianContact?: string | null;
@@ -201,6 +223,7 @@ export class StudentService {
     }
   ): Promise<StudentData> {
     if (input.classId) await this.assertClassExists(input.classId);
+    if (input.subClassId) await this.assertSubClassExists(input.subClassId);
 
     try {
       return await this.prisma.student.update({
@@ -214,6 +237,7 @@ export class StudentService {
           ...(input.gender !== undefined ? { gender: input.gender } : {}),
           ...(input.dateOfBirth !== undefined ? { dateOfBirth: input.dateOfBirth } : {}),
           ...(input.classId !== undefined ? { classId: input.classId } : {}),
+          ...(input.subClassId !== undefined ? { subClassId: input.subClassId } : {}),
           ...(input.guardianName !== undefined ? { guardianName: input.guardianName } : {}),
           ...(input.guardianEmail !== undefined ? { guardianEmail: input.guardianEmail } : {}),
           ...(input.guardianContact !== undefined ? { guardianContact: input.guardianContact } : {}),
@@ -223,6 +247,7 @@ export class StudentService {
         },
         include: {
           class: { select: { id: true, name: true } },
+          subClass: { select: { id: true, name: true, classId: true } },
           createdBy: { select: { firstName: true, lastName: true } },
         },
       });
@@ -243,6 +268,7 @@ export class StudentService {
         where: { id },
         include: {
           class: { select: { id: true, name: true } },
+          subClass: { select: { id: true, name: true, classId: true } },
           createdBy: { select: { firstName: true, lastName: true } },
         },
       });
