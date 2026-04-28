@@ -463,18 +463,33 @@ model Term {
   classInventoryDistributions ClassInventoryDistribution[]
   classInventoryEntitlements  ClassInventoryEntitlement[]
   studentInventoryLogs        StudentInventoryLog[]
+  activePeriods               ActivePeriod[]
 
   @@unique([name])
   @@map("terms")
 }
 
 model Session {
-  id        String   @id @default(uuid()) @db.Char(36)
-  name      String   @unique
-  status    Status   @default(Active)
-  createdAt DateTime @default(now()) @map("created_at")
+  id            String         @id @default(uuid()) @db.Char(36)
+  name          String         @unique
+  status        Status         @default(Active)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  activePeriods ActivePeriod[]
 
   @@map("sessions")
+}
+
+model ActivePeriod {
+  id        String   @id @default(uuid()) @db.Char(36)
+  startDate DateTime @map("start_date") @db.Date
+  endDate   DateTime @map("end_date") @db.Date
+  sessionId String   @map("session_id") @db.Char(36)
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  termId    String   @map("term_id") @db.Char(36)
+  term      Term     @relation(fields: [termId], references: [id], onDelete: Restrict)
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  @@map("active_period")
 }
 
 model ClassTeacher {
