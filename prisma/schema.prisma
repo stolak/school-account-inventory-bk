@@ -399,14 +399,15 @@ model SchoolClass {
 }
 
 model SubClass {
-  id        String       @id @default(uuid()) @db.Char(36)
-  name      String
-  status    Status       @default(Active)
-  createdAt DateTime     @default(now()) @map("created_at")
-  updatedAt DateTime     @default(now()) @map("updated_at")
-  class     SchoolClass? @relation(fields: [classId], references: [id], onDelete: Cascade)
-  classId   String?      @map("class_id") @db.Char(36)
-  students  Student[]
+  id                    String                 @id @default(uuid()) @db.Char(36)
+  name                  String
+  status                Status                 @default(Active)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @default(now()) @map("updated_at")
+  class                 SchoolClass?           @relation(fields: [classId], references: [id], onDelete: Cascade)
+  classId               String?                @map("class_id") @db.Char(36)
+  students              Student[]
+  inventoryTransactions InventoryTransaction[]
 
   @@unique([name, classId])
   @@index([classId])
@@ -464,17 +465,19 @@ model Term {
   classInventoryEntitlements  ClassInventoryEntitlement[]
   studentInventoryLogs        StudentInventoryLog[]
   activePeriods               ActivePeriod[]
+  inventoryTransactions       InventoryTransaction[]
 
   @@unique([name])
   @@map("terms")
 }
 
 model Session {
-  id            String         @id @default(uuid()) @db.Char(36)
-  name          String         @unique
-  status        Status         @default(Active)
-  createdAt     DateTime       @default(now()) @map("created_at")
-  activePeriods ActivePeriod[]
+  id                    String                 @id @default(uuid()) @db.Char(36)
+  name                  String                 @unique
+  status                Status                 @default(Active)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  activePeriods         ActivePeriod[]
+  inventoryTransactions InventoryTransaction[]
 
   @@map("sessions")
 }
@@ -566,12 +569,16 @@ model InventoryTransaction {
   notes            String?
   studentId        String?                    @map("student_id") @db.Char(36)
   classId          String?                    @map("class_id") @db.Char(36)
+  sessionId        String?                    @map("session_id") @db.Char(36)
+  session          Session?                   @relation(fields: [sessionId], references: [id], onDelete: SetNull)
   termId           String?                    @map("term_id") @db.Char(36)
-
-  transactionDate DateTime @default(now()) @map("transaction_date")
-  createdById     String   @map("created_by") @db.Char(36)
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @default(now()) @map("updated_at")
+  term             Term?                      @relation(fields: [termId], references: [id], onDelete: SetNull)
+  subclassId       String?                    @map("subclass_id") @db.Char(36)
+  subclass         SubClass?                  @relation(fields: [subclassId], references: [id], onDelete: SetNull)
+  transactionDate  DateTime                   @default(now()) @map("transaction_date")
+  createdById      String                     @map("created_by") @db.Char(36)
+  createdAt        DateTime                   @default(now()) @map("created_at")
+  updatedAt        DateTime                   @default(now()) @map("updated_at")
 
   item                         InventoryItem               @relation(fields: [itemId], references: [id], onDelete: Restrict)
   supplier                     Supplier?                   @relation(fields: [supplierId], references: [id], onDelete: SetNull)

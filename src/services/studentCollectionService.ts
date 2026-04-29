@@ -1,0 +1,313 @@
+import prisma from "../utils/prisma";
+import { activePeriodService } from "./activePeriodService";
+import { InventoryTransactionStatus, InventoryTransactionType, Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
+
+export interface StudentCollectionData {
+  id: string;
+  itemId: string;
+  transactionType: InventoryTransactionType;
+  qtyOut: any;
+  status: InventoryTransactionStatus;
+  referenceNo: string | null;
+  notes: string | null;
+  studentId: string | null;
+  classId: string | null;
+  termId: string | null;
+  sessionId: string | null;
+  subclassId: string | null;
+  transactionDate: Date;
+  createdById: string;
+  createdAt: Date;
+  updatedAt: Date;
+  item?: { name: string } | null;
+  createdBy?: { firstName: string | null; lastName: string | null } | null;
+}
+
+export interface ListStudentCollectionsParams {
+  q?: string;
+  itemId?: string;
+  studentId?: string;
+  status?: InventoryTransactionStatus;
+  /** Inclusive lower bound on transactionDate */
+  transactionDateFrom?: Date;
+  /** Inclusive upper bound on transactionDate */
+  transactionDateTo?: Date;
+  page?: number;
+  limit?: number;
+}
+
+function clampInt(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+function generateReferenceNo(): string {
+  // Human-ish, reasonably unique; no DB constraint exists so collisions are extremely unlikely.
+  const d = new Date();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `SC-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+export class StudentCollectionService {
+  private prisma = prisma;
+
+  private async assertItemExists(itemId: string) {
+    const item = await this.prisma.inventoryItem.findUnique({
+      where: { id: itemId },
+      select: { id: true },
+    });
+    if (!item) throw new Error("Invalid itemId");
+  }
+
+  private async getStudentClassAndSubClass(studentId: string): Promise<{
+    studentId: string;
+    classId: string | null;
+    subclassId: string | null;
+  }> {
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { id: true, classId: true, subClassId: true },
+    });
+    if (!student) throw new Error("Invalid studentId");
+    return { studentId: student.id, classId: student.classId ?? null, subclassId: student.subClassId ?? null };
+  }
+
+  private async getActivePeriodIdsOrNull(): Promise<{ sessionId: string | null; termId: string | null }> {
+    const ap = await activePeriodService.getActivePeriod();
+    if (!ap) return { sessionId: null, termId: null };
+    return { sessionId: ap.sessionId ?? null, termId: ap.termId ?? null };
+  }
+
+  async createStudentCollection(input: {
+    itemId: string;
+    qtyOut: string | number;
+    referenceNo?: string | null;
+    notes?: string | null;
+    studentId?: string | null;
+    transactionDate?: Date;
+    createdById: string;
+  }): Promise<StudentCollectionData> {
+    await this.assertItemExists(input.itemId);
+
+    const studentIdNormalized = input.studentId ?? null;
+    const studentDerived = studentIdNormalized ? await this.getStudentClassAndSubClass(studentIdNormalized) : null;
+    const active = await this.getActivePeriodIdsOrNull();
+
+    const finalReferenceNo =
+      input.referenceNo === undefined || input.referenceNo === null || input.referenceNo.trim() === ""
+        ? generateReferenceNo()
+        : input.referenceNo;
+
+    return await this.prisma.inventoryTransaction.create({
+      data: {
+        itemId: input.itemId,
+        transactionType: InventoryTransactionType.student_collection,
+        qtyOut: input.qtyOut as any,
+        status: InventoryTransactionStatus.completed,
+        referenceNo: finalReferenceNo,
+        notes: input.notes ?? null,
+        studentId: studentDerived?.studentId ?? null,
+        classId: studentDerived?.classId ?? null,
+        subclassId: studentDerived?.subclassId ?? null,
+        sessionId: active.sessionId,
+        termId: active.termId,
+        transactionDate: input.transactionDate ?? new Date(),
+        createdById: input.createdById,
+      },
+      include: {
+        item: { select: { name: true } },
+        createdBy: { select: { firstName: true, lastName: true } },
+      },
+    });
+  }
+
+  async createBulkStudentCollections(input: {
+    referenceNo?: string | null;
+    notes?: string | null;
+    transactionDate?: Date;
+    createdById: string;
+    studentId?: string | null;
+    items: Array<{ itemId: string; qtyOut: string | number }>;
+  }): Promise<StudentCollectionData[]> {
+    if (!input.items.length) throw new Error("items must not be empty");
+
+    const itemIds = [...new Set(input.items.map((i) => i.itemId))];
+    const existingItems = await this.prisma.inventoryItem.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true },
+    });
+    const existingSet = new Set(existingItems.map((i) => i.id));
+    const missing = itemIds.filter((id) => !existingSet.has(id));
+    if (missing.length) {
+      throw new Error(`Invalid itemId(s): ${missing.join(", ")}`);
+    }
+
+    const studentIdNormalized = input.studentId ?? null;
+    const studentDerived = studentIdNormalized ? await this.getStudentClassAndSubClass(studentIdNormalized) : null;
+    const active = await this.getActivePeriodIdsOrNull();
+
+    const finalReferenceNo =
+      input.referenceNo === undefined || input.referenceNo === null || input.referenceNo.trim() === ""
+        ? generateReferenceNo()
+        : input.referenceNo;
+
+    const txDate = input.transactionDate ?? new Date();
+
+    const created = await this.prisma.$transaction(
+      input.items.map((it) =>
+        this.prisma.inventoryTransaction.create({
+          data: {
+            itemId: it.itemId,
+            transactionType: InventoryTransactionType.student_collection,
+            qtyOut: it.qtyOut as any,
+            status: InventoryTransactionStatus.completed,
+            referenceNo: finalReferenceNo,
+            notes: input.notes ?? null,
+            studentId: studentDerived?.studentId ?? null,
+            classId: studentDerived?.classId ?? null,
+            subclassId: studentDerived?.subclassId ?? null,
+            sessionId: active.sessionId,
+            termId: active.termId,
+            transactionDate: txDate,
+            createdById: input.createdById,
+          },
+          include: {
+            item: { select: { name: true } },
+            createdBy: { select: { firstName: true, lastName: true } },
+          },
+        })
+      )
+    );
+
+    return created;
+  }
+
+  async listStudentCollections(params: ListStudentCollectionsParams = {}): Promise<{
+    studentCollections: StudentCollectionData[];
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }> {
+    const page = clampInt(params.page ?? 1, 1, 1_000_000);
+    const limit = clampInt(params.limit ?? 20, 1, 100);
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.InventoryTransactionWhereInput = {
+      transactionType: InventoryTransactionType.student_collection,
+      ...(params.itemId ? { itemId: params.itemId } : {}),
+      ...(params.studentId ? { studentId: params.studentId } : {}),
+      ...(params.status ? { status: params.status } : {}),
+      ...(params.transactionDateFrom !== undefined || params.transactionDateTo !== undefined
+        ? {
+            transactionDate: {
+              ...(params.transactionDateFrom !== undefined ? { gte: params.transactionDateFrom } : {}),
+              ...(params.transactionDateTo !== undefined ? { lte: params.transactionDateTo } : {}),
+            },
+          }
+        : {}),
+      ...(params.q
+        ? {
+            OR: [{ referenceNo: { contains: params.q } }, { notes: { contains: params.q } }],
+          }
+        : {}),
+    };
+
+    const [total, rows] = await Promise.all([
+      this.prisma.inventoryTransaction.count({ where }),
+      this.prisma.inventoryTransaction.findMany({
+        where,
+        orderBy: { transactionDate: "desc" },
+        skip,
+        take: limit,
+        include: {
+          item: { select: { name: true } },
+          createdBy: { select: { firstName: true, lastName: true } },
+        },
+      }),
+    ]);
+
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    return { studentCollections: rows, pagination: { page, limit, total, totalPages } };
+  }
+
+  async getStudentCollectionById(id: string): Promise<StudentCollectionData | null> {
+    return await this.prisma.inventoryTransaction.findFirst({
+      where: { id, transactionType: InventoryTransactionType.student_collection },
+      include: {
+        item: { select: { name: true } },
+        createdBy: { select: { firstName: true, lastName: true } },
+      },
+    });
+  }
+
+  async updateStudentCollection(
+    id: string,
+    input: {
+      itemId?: string;
+      qtyOut?: string | number;
+      referenceNo?: string | null;
+      notes?: string | null;
+      studentId?: string | null;
+      transactionDate?: Date;
+    }
+  ): Promise<StudentCollectionData> {
+    if (input.itemId !== undefined) await this.assertItemExists(input.itemId);
+
+    const existing = await this.getStudentCollectionById(id);
+    if (!existing) throw new Error("Student collection not found");
+
+    const studentDerived =
+      input.studentId !== undefined
+        ? input.studentId
+          ? await this.getStudentClassAndSubClass(input.studentId)
+          : null
+        : undefined;
+
+    // Keep session/term in sync with the current active period on any update.
+    const active = await this.getActivePeriodIdsOrNull();
+
+    return await this.prisma.inventoryTransaction.update({
+      where: { id },
+      data: {
+        ...(input.itemId !== undefined ? { itemId: input.itemId } : {}),
+        ...(input.qtyOut !== undefined ? { qtyOut: input.qtyOut as any } : {}),
+        ...(input.referenceNo !== undefined ? { referenceNo: input.referenceNo } : {}),
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
+        ...(studentDerived !== undefined
+          ? {
+              studentId: studentDerived?.studentId ?? null,
+              classId: studentDerived?.classId ?? null,
+              subclassId: studentDerived?.subclassId ?? null,
+            }
+          : {}),
+        sessionId: active.sessionId,
+        termId: active.termId,
+        ...(input.transactionDate !== undefined ? { transactionDate: input.transactionDate } : {}),
+        // locked fields
+        transactionType: InventoryTransactionType.student_collection,
+        status: InventoryTransactionStatus.completed,
+        updatedAt: new Date(),
+      },
+      include: {
+        item: { select: { name: true } },
+        createdBy: { select: { firstName: true, lastName: true } },
+      },
+    });
+  }
+
+  async deleteStudentCollection(id: string): Promise<StudentCollectionData> {
+    const existing = await this.getStudentCollectionById(id);
+    if (!existing) throw new Error("Student collection not found");
+
+    return await this.prisma.inventoryTransaction.delete({
+      where: { id },
+      include: {
+        item: { select: { name: true } },
+        createdBy: { select: { firstName: true, lastName: true } },
+      },
+    });
+  }
+}
+
+export const studentCollectionService = new StudentCollectionService();
+

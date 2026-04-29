@@ -1,0 +1,509 @@
+import { Request, Response } from "express";
+import { InventoryTransactionStatus } from "@prisma/client";
+import { studentCollectionService } from "../services/studentCollectionService";
+
+function parseIntOrUndefined(v: unknown): number | undefined {
+  if (typeof v !== "string") return undefined;
+  const n = Number.parseInt(v, 10);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+/** Query date for list: `YYYY-MM-DD` is whole UTC day; full ISO strings pass through. */
+function parseListQueryDate(v: unknown): "missing" | "invalid" | Date {
+  if (v === undefined || v === null) return "missing";
+  if (typeof v !== "string") return "invalid";
+  const s = v.trim();
+  if (!s) return "missing";
+
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (dateOnly) {
+    const y = Number(dateOnly[1]);
+    const mo = Number(dateOnly[2]);
+    const d = Number(dateOnly[3]);
+    const start = Date.UTC(y, mo - 1, d, 0, 0, 0, 0);
+    return new Date(start);
+  }
+
+  const parsed = new Date(s);
+  return Number.isNaN(parsed.getTime()) ? "invalid" : parsed;
+}
+
+/** For inclusive end date: date-only → end of that UTC day; ISO with time unchanged. */
+function parseListQueryDateEndInclusive(v: unknown): "missing" | "invalid" | Date {
+  if (v === undefined || v === null) return "missing";
+  if (typeof v !== "string") return "invalid";
+  const s = v.trim();
+  if (!s) return "missing";
+
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (dateOnly) {
+    const y = Number(dateOnly[1]);
+    const mo = Number(dateOnly[2]);
+    const d = Number(dateOnly[3]);
+    const end = Date.UTC(y, mo - 1, d, 23, 59, 59, 999);
+    return new Date(end);
+  }
+
+  const parsed = new Date(s);
+  return Number.isNaN(parsed.getTime()) ? "invalid" : parsed;
+}
+
+function isStringOrNullOrUndefined(v: unknown): v is string | null | undefined {
+  return v === undefined || v === null || typeof v === "string" || v === "";
+}
+
+function isNumberOrString(v: unknown): v is number | string {
+  return typeof v === "number" || typeof v === "string";
+}
+
+/**
+ * @openapi
+ * /api/v1/student-collections:
+ *   post:
+ *     summary: Create a student inventory collection transaction
+ *     tags: [StudentCollections]
+ *     security:
+ *       - bearerAuth: []
+ *     description: Creates an InventoryTransaction with transactionType=student_collection (locked). Status defaults to completed. classId/subclassId derived from studentId; sessionId/termId derived from active period; referenceNo auto-generated if missing.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [itemId, studentId, qtyOut]
+ *             properties:
+ *               itemId:
+ *                 type: string
+ *               studentId:
+ *                 type: string
+ *               qtyOut:
+ *                 oneOf: [{ type: string }, { type: number }]
+ *               referenceNo:
+ *                 type: string
+ *                 nullable: true
+ *               notes:
+ *                 type: string
+ *                 nullable: true
+ *               transactionDate:
+ *                 type: string
+ *                 format: date-time
+ *                 description: Optional. Defaults to today.
+ *     responses:
+ *       201:
+ *         description: Student collection created
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Referenced item/student not found
+ *       500:
+ *         description: Server error
+ *   get:
+ *     summary: List student collection transactions
+ *     tags: [StudentCollections]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *         description: Optional search in referenceNo/notes
+ *       - in: query
+ *         name: itemId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: studentId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, cancelled, deleted, completed]
+ *       - in: query
+ *         name: transactionDateFrom
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: transactionDateTo
+ *         schema:
+ *           type: string
+ *           format: date
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *     responses:
+ *       200:
+ *         description: Student collections list
+ *       500:
+ *         description: Server error
+ */
+export const studentCollectionController = {
+  /**
+   * @openapi
+   * /api/v1/student-collections/bulk:
+   *   post:
+   *     summary: Create multiple student collection transactions (bulk)
+   *     tags: [StudentCollections]
+   *     security:
+   *       - bearerAuth: []
+   *     description: Creates multiple InventoryTransaction rows with transactionType=student_collection (locked). Status defaults to completed. Shared studentId/referenceNo/notes/transactionDate; only items[].itemId and items[].qtyOut vary.
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [studentId, items]
+   *             properties:
+   *               studentId:
+   *                 type: string
+   *               referenceNo:
+   *                 type: string
+   *                 nullable: true
+   *               notes:
+   *                 type: string
+   *                 nullable: true
+   *               transactionDate:
+   *                 type: string
+   *                 format: date-time
+   *                 description: Optional. Defaults to today.
+   *               items:
+   *                 type: array
+   *                 minItems: 1
+   *                 items:
+   *                   type: object
+   *                   required: [itemId, qtyOut]
+   *                   properties:
+   *                     itemId:
+   *                       type: string
+   *                     qtyOut:
+   *                       oneOf: [{ type: string }, { type: number }]
+   *     responses:
+   *       201:
+   *         description: Student collections created
+   *       400:
+   *         description: Validation error
+   *       404:
+   *         description: Referenced item/student not found
+   *       500:
+   *         description: Server error
+   */
+  createBulkStudentCollections: async (req: Request, res: Response) => {
+    try {
+      const { studentId, referenceNo, notes, transactionDate, items } = req.body ?? {};
+
+      if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+      if (!isStringOrNullOrUndefined(referenceNo)) {
+        return res.status(400).json({ success: false, message: "referenceNo must be a string or null" });
+      }
+      if (!isStringOrNullOrUndefined(notes)) {
+        return res.status(400).json({ success: false, message: "notes must be a string or null" });
+      }
+      if (transactionDate !== undefined && typeof transactionDate !== "string") {
+        return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
+      }
+      const parsedDate =
+        transactionDate === undefined
+          ? undefined
+          : (() => {
+              const d = new Date(transactionDate);
+              return Number.isNaN(d.getTime()) ? null : d;
+            })();
+      if (parsedDate === null) {
+        return res.status(400).json({ success: false, message: "transactionDate is invalid" });
+      }
+
+      if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ success: false, message: "items is required and must be a non-empty array" });
+      }
+
+      const normalizedItems: Array<{ itemId: string; qtyOut: string | number }> = [];
+      for (const [idx, it] of items.entries()) {
+        if (!it || typeof it !== "object") {
+          return res.status(400).json({ success: false, message: `items[${idx}] must be an object` });
+        }
+        const { itemId, qtyOut } = it as any;
+        if (!itemId || typeof itemId !== "string" || !itemId.trim()) {
+          return res.status(400).json({ success: false, message: `items[${idx}].itemId is required` });
+        }
+        if (!isNumberOrString(qtyOut)) {
+          return res.status(400).json({
+            success: false,
+            message: `items[${idx}].qtyOut is required (string or number)`,
+          });
+        }
+        const qtyOutNum = typeof qtyOut === "string" ? Number(qtyOut) : qtyOut;
+        if (!Number.isFinite(qtyOutNum) || qtyOutNum <= 0) {
+          return res.status(400).json({ success: false, message: `items[${idx}].qtyOut must be greater than 0` });
+        }
+        normalizedItems.push({ itemId: itemId.trim(), qtyOut });
+      }
+
+      const createdById = (req as any).user?.id;
+      if (!createdById) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const created = await studentCollectionService.createBulkStudentCollections({
+        studentId: studentId.trim(),
+        referenceNo: referenceNo === undefined ? null : referenceNo,
+        notes: notes === undefined ? null : notes,
+        transactionDate: parsedDate ?? undefined,
+        createdById,
+        items: normalizedItems,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Student collections created successfully",
+        data: created,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to create student collections";
+      const code = message.startsWith("Invalid ") ? 404 : 500;
+      return res.status(code).json({ success: false, message });
+    }
+  },
+
+  createStudentCollection: async (req: Request, res: Response) => {
+    try {
+      const { itemId, studentId, qtyOut, referenceNo, notes, transactionDate } = req.body ?? {};
+
+      if (!itemId || typeof itemId !== "string" || !itemId.trim()) {
+        return res.status(400).json({ success: false, message: "itemId is required" });
+      }
+      if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+      if (!isNumberOrString(qtyOut)) {
+        return res.status(400).json({ success: false, message: "qtyOut is required (string or number)" });
+      }
+      const qtyOutNum = typeof qtyOut === "string" ? Number(qtyOut) : qtyOut;
+      if (!Number.isFinite(qtyOutNum) || qtyOutNum <= 0) {
+        return res.status(400).json({ success: false, message: "qtyOut must be greater than 0" });
+      }
+      if (!isStringOrNullOrUndefined(referenceNo)) {
+        return res.status(400).json({ success: false, message: "referenceNo must be a string or null" });
+      }
+      if (!isStringOrNullOrUndefined(notes)) {
+        return res.status(400).json({ success: false, message: "notes must be a string or null" });
+      }
+      if (transactionDate !== undefined && typeof transactionDate !== "string") {
+        return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
+      }
+      const parsedDate =
+        transactionDate === undefined
+          ? undefined
+          : (() => {
+              const d = new Date(transactionDate);
+              return Number.isNaN(d.getTime()) ? null : d;
+            })();
+      if (parsedDate === null) {
+        return res.status(400).json({ success: false, message: "transactionDate is invalid" });
+      }
+
+      const createdById = (req as any).user?.id;
+      if (!createdById) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const created = await studentCollectionService.createStudentCollection({
+        itemId: itemId.trim(),
+        studentId: studentId.trim(),
+        qtyOut,
+        referenceNo:
+          referenceNo === undefined || referenceNo === null || referenceNo.trim() === "" ? null : referenceNo,
+        notes: notes === undefined || notes === null || notes.trim() === "" ? null : notes,
+        transactionDate: parsedDate ?? undefined,
+        createdById,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Student collection created successfully",
+        data: created,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to create student collection";
+      const code = message.startsWith("Invalid ") ? 404 : 500;
+      return res.status(code).json({ success: false, message });
+    }
+  },
+
+  listStudentCollections: async (req: Request, res: Response) => {
+    try {
+      const q = typeof req.query.q === "string" ? req.query.q : undefined;
+      const itemId = typeof req.query.itemId === "string" ? req.query.itemId : undefined;
+      const studentId = typeof req.query.studentId === "string" ? req.query.studentId : undefined;
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === undefined
+          ? undefined
+          : statusRaw === "pending"
+            ? InventoryTransactionStatus.pending
+            : statusRaw === "cancelled"
+              ? InventoryTransactionStatus.cancelled
+              : statusRaw === "deleted"
+                ? InventoryTransactionStatus.deleted
+                : statusRaw === "completed"
+                  ? InventoryTransactionStatus.completed
+                  : undefined;
+
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({ success: false, message: "Invalid status" });
+      }
+
+      const page = parseIntOrUndefined(req.query.page);
+      const limit = parseIntOrUndefined(req.query.limit);
+
+      const fromRaw = parseListQueryDate(req.query.transactionDateFrom);
+      const toRaw = parseListQueryDateEndInclusive(req.query.transactionDateTo);
+
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+
+      if (
+        transactionDateFrom !== undefined &&
+        transactionDateTo !== undefined &&
+        transactionDateFrom.getTime() > transactionDateTo.getTime()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "transactionDateFrom must be before or equal to transactionDateTo",
+        });
+      }
+
+      const result = await studentCollectionService.listStudentCollections({
+        q,
+        itemId,
+        studentId,
+        status,
+        transactionDateFrom,
+        transactionDateTo,
+        page,
+        limit,
+      });
+
+      return res.json({
+        success: true,
+        message: "Student collections retrieved successfully",
+        data: result,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve student collections",
+        error: error?.message,
+      });
+    }
+  },
+
+  getStudentCollectionById: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ success: false, message: "id is required" });
+
+      const row = await studentCollectionService.getStudentCollectionById(id);
+      if (!row) return res.status(404).json({ success: false, message: "Student collection not found" });
+
+      return res.json({
+        success: true,
+        message: "Student collection retrieved successfully",
+        data: row,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve student collection",
+        error: error?.message,
+      });
+    }
+  },
+
+  updateStudentCollection: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { itemId, studentId, qtyOut, referenceNo, notes, transactionDate } = req.body ?? {};
+
+      if (!id) return res.status(400).json({ success: false, message: "id is required" });
+
+      if (itemId !== undefined && (typeof itemId !== "string" || !itemId.trim())) {
+        return res.status(400).json({ success: false, message: "itemId must be a non-empty string" });
+      }
+      if (studentId !== undefined && (typeof studentId !== "string" || !studentId.trim())) {
+        return res.status(400).json({ success: false, message: "studentId must be a non-empty string" });
+      }
+      if (qtyOut !== undefined && !isNumberOrString(qtyOut)) {
+        return res.status(400).json({ success: false, message: "qtyOut must be a string or number" });
+      }
+      if (qtyOut !== undefined) {
+        const qtyOutNum = typeof qtyOut === "string" ? Number(qtyOut) : qtyOut;
+        if (!Number.isFinite(qtyOutNum) || qtyOutNum <= 0) {
+          return res.status(400).json({ success: false, message: "qtyOut must be greater than 0" });
+        }
+      }
+      if (referenceNo !== undefined && !isStringOrNullOrUndefined(referenceNo)) {
+        return res.status(400).json({ success: false, message: "referenceNo must be a string or null" });
+      }
+      if (notes !== undefined && !isStringOrNullOrUndefined(notes)) {
+        return res.status(400).json({ success: false, message: "notes must be a string or null" });
+      }
+      if (transactionDate !== undefined && typeof transactionDate !== "string") {
+        return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
+      }
+
+      const updated = await studentCollectionService.updateStudentCollection(id, {
+        ...(itemId !== undefined ? { itemId: itemId.trim() } : {}),
+        ...(studentId !== undefined ? { studentId: studentId.trim() } : {}),
+        ...(qtyOut !== undefined ? { qtyOut } : {}),
+        ...(referenceNo !== undefined ? { referenceNo } : {}),
+        ...(notes !== undefined ? { notes } : {}),
+        ...(transactionDate !== undefined ? { transactionDate: new Date(transactionDate) } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Student collection updated successfully",
+        data: updated,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to update student collection";
+      const code = message === "Student collection not found" || message.startsWith("Invalid ") ? 404 : 500;
+      return res.status(code).json({ success: false, message });
+    }
+  },
+
+  deleteStudentCollection: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id) return res.status(400).json({ success: false, message: "id is required" });
+
+      const deleted = await studentCollectionService.deleteStudentCollection(id);
+      return res.json({ success: true, message: "Student collection deleted successfully", data: deleted });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to delete student collection";
+      const code = message === "Student collection not found" ? 404 : 500;
+      return res.status(code).json({ success: false, message });
+    }
+  },
+};
+
