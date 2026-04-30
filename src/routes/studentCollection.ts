@@ -7,6 +7,8 @@ const router = Router();
 router.use(authenticateJWT);
 
 router.post("/bulk", studentCollectionController.createBulkStudentCollections);
+router.put("/bulk", studentCollectionController.updateBulkStudentCollections);
+router.delete("/bulk", studentCollectionController.deleteBulkStudentCollections);
 router.post("/", studentCollectionController.createStudentCollection);
 router.get("/", studentCollectionController.listStudentCollections);
 router.get("/:id", studentCollectionController.getStudentCollectionById);

@@ -155,6 +155,196 @@ export const studentCollectionController = {
   /**
    * @openapi
    * /api/v1/student-collections/bulk:
+   *   put:
+   *     summary: Update multiple student collection transactions (bulk)
+   *     tags: [StudentCollections]
+   *     security:
+   *       - bearerAuth: []
+   *     description: Updates allowed fields only. transactionType stays student_collection. status stays completed. Each updated row refreshes sessionId/termId from active period.
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [updates]
+   *             properties:
+   *               updates:
+   *                 type: array
+   *                 minItems: 1
+   *                 items:
+   *                   type: object
+   *                   required: [id]
+   *                   properties:
+   *                     id:
+   *                       type: string
+   *                     itemId:
+   *                       type: string
+   *                     studentId:
+   *                       type: string
+   *                     qtyOut:
+   *                       oneOf: [{ type: string }, { type: number }]
+   *                     referenceNo:
+   *                       type: string
+   *                       nullable: true
+   *                     notes:
+   *                       type: string
+   *                       nullable: true
+   *                     transactionDate:
+   *                       type: string
+   *                       format: date-time
+   *     responses:
+   *       200:
+   *         description: Student collections updated
+   *       400:
+   *         description: Validation error
+   *       404:
+   *         description: Student collection/item/student not found
+   *       500:
+   *         description: Server error
+   *   delete:
+   *     summary: Delete multiple student collection transactions (bulk)
+   *     tags: [StudentCollections]
+   *     security:
+   *       - bearerAuth: []
+   *     description: Deletes multiple InventoryTransaction rows (transactionType must be student_collection).
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [ids]
+   *             properties:
+   *               ids:
+   *                 type: array
+   *                 minItems: 1
+   *                 items:
+   *                   type: string
+   *     responses:
+   *       200:
+   *         description: Student collections deleted
+   *       400:
+   *         description: Validation error
+   *       404:
+   *         description: Student collection not found
+   *       500:
+   *         description: Server error
+   */
+  updateBulkStudentCollections: async (req: Request, res: Response) => {
+    try {
+      const { updates } = req.body ?? {};
+
+      if (!Array.isArray(updates) || updates.length === 0) {
+        return res.status(400).json({ success: false, message: "updates is required and must be a non-empty array" });
+      }
+
+      const normalizedUpdates: Array<{
+        id: string;
+        itemId?: string;
+        studentId?: string;
+        qtyOut?: string | number;
+        referenceNo?: string | null;
+        notes?: string | null;
+        transactionDate?: Date;
+      }> = [];
+
+      for (const [idx, u] of updates.entries()) {
+        if (!u || typeof u !== "object") {
+          return res.status(400).json({ success: false, message: `updates[${idx}] must be an object` });
+        }
+        const { id, itemId, studentId, qtyOut, referenceNo, notes, transactionDate } = u as any;
+        if (!id || typeof id !== "string" || !id.trim()) {
+          return res.status(400).json({ success: false, message: `updates[${idx}].id is required` });
+        }
+        if (itemId !== undefined && (typeof itemId !== "string" || !itemId.trim())) {
+          return res.status(400).json({ success: false, message: `updates[${idx}].itemId must be a non-empty string` });
+        }
+        if (studentId !== undefined && (typeof studentId !== "string" || !studentId.trim())) {
+          return res.status(400).json({ success: false, message: `updates[${idx}].studentId must be a non-empty string` });
+        }
+        if (qtyOut !== undefined && !isNumberOrString(qtyOut)) {
+          return res.status(400).json({ success: false, message: `updates[${idx}].qtyOut must be a string or number` });
+        }
+        if (qtyOut !== undefined) {
+          const qtyOutNum = typeof qtyOut === "string" ? Number(qtyOut) : qtyOut;
+          if (!Number.isFinite(qtyOutNum) || qtyOutNum <= 0) {
+            return res.status(400).json({ success: false, message: `updates[${idx}].qtyOut must be greater than 0` });
+          }
+        }
+        if (referenceNo !== undefined && !isStringOrNullOrUndefined(referenceNo)) {
+          return res.status(400).json({ success: false, message: `updates[${idx}].referenceNo must be a string or null` });
+        }
+        if (notes !== undefined && !isStringOrNullOrUndefined(notes)) {
+          return res.status(400).json({ success: false, message: `updates[${idx}].notes must be a string or null` });
+        }
+        if (transactionDate !== undefined && typeof transactionDate !== "string") {
+          return res.status(400).json({ success: false, message: `updates[${idx}].transactionDate must be an ISO date string` });
+        }
+        const parsedDate =
+          transactionDate === undefined
+            ? undefined
+            : (() => {
+                const d = new Date(transactionDate);
+                return Number.isNaN(d.getTime()) ? null : d;
+              })();
+        if (parsedDate === null) {
+          return res.status(400).json({ success: false, message: `updates[${idx}].transactionDate is invalid` });
+        }
+
+        normalizedUpdates.push({
+          id: id.trim(),
+          ...(itemId !== undefined ? { itemId: itemId.trim() } : {}),
+          ...(studentId !== undefined ? { studentId: studentId.trim() } : {}),
+          ...(qtyOut !== undefined ? { qtyOut } : {}),
+          ...(referenceNo !== undefined ? { referenceNo } : {}),
+          ...(notes !== undefined ? { notes } : {}),
+          ...(parsedDate !== undefined ? { transactionDate: parsedDate } : {}),
+        });
+      }
+
+      const createdById = (req as any).user?.id;
+      if (!createdById) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const updated = await studentCollectionService.updateBulkStudentCollections({ updates: normalizedUpdates });
+      return res.json({ success: true, message: "Student collections updated successfully", data: updated });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to update student collections";
+      const code =
+        message.startsWith("Invalid ") || message.startsWith("Student collection not found") ? 404 : 500;
+      return res.status(code).json({ success: false, message });
+    }
+  },
+
+  deleteBulkStudentCollections: async (req: Request, res: Response) => {
+    try {
+      const { ids } = req.body ?? {};
+
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ success: false, message: "ids is required and must be a non-empty array" });
+      }
+      for (const [idx, id] of ids.entries()) {
+        if (!id || typeof id !== "string" || !id.trim()) {
+          return res.status(400).json({ success: false, message: `ids[${idx}] must be a non-empty string` });
+        }
+      }
+
+      const createdById = (req as any).user?.id;
+      if (!createdById) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const deleted = await studentCollectionService.deleteBulkStudentCollections({
+        ids: ids.map((s: string) => s.trim()),
+      });
+      return res.json({ success: true, message: "Student collections deleted successfully", data: deleted });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to delete student collections";
+      const code = message.startsWith("Student collection not found") ? 404 : 500;
+      return res.status(code).json({ success: false, message });
+    }
+  },
+  /**
+   * @openapi
+   * /api/v1/student-collections/bulk:
    *   post:
    *     summary: Create multiple student collection transactions (bulk)
    *     tags: [StudentCollections]
@@ -417,6 +607,89 @@ export const studentCollectionController = {
     }
   },
 
+  /**
+   * @openapi
+   * /api/v1/student-collections/{id}:
+   *   get:
+   *     summary: Get a student collection transaction by ID
+   *     tags: [StudentCollections]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Student collection details
+   *       404:
+   *         description: Student collection not found
+   *       500:
+   *         description: Server error
+   *   put:
+   *     summary: Update a student collection transaction
+   *     tags: [StudentCollections]
+   *     security:
+   *       - bearerAuth: []
+   *     description: Updates allowed fields only. transactionType stays student_collection. status stays completed. sessionId/termId refresh from active period.
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               itemId:
+   *                 type: string
+   *               studentId:
+   *                 type: string
+   *               qtyOut:
+   *                 oneOf: [{ type: string }, { type: number }]
+   *               referenceNo:
+   *                 type: string
+   *                 nullable: true
+   *               notes:
+   *                 type: string
+   *                 nullable: true
+   *               transactionDate:
+   *                 type: string
+   *                 format: date-time
+   *     responses:
+   *       200:
+   *         description: Student collection updated
+   *       400:
+   *         description: Validation error
+   *       404:
+   *         description: Student collection/item/student not found
+   *       500:
+   *         description: Server error
+   *   delete:
+   *     summary: Delete a student collection transaction
+   *     tags: [StudentCollections]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Student collection deleted
+   *       404:
+   *         description: Student collection not found
+   *       500:
+   *         description: Server error
+   */
   getStudentCollectionById: async (req: Request, res: Response) => {
     try {
       const { id } = req.params;

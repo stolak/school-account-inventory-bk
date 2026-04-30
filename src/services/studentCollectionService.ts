@@ -295,6 +295,82 @@ export class StudentCollectionService {
     });
   }
 
+  async updateBulkStudentCollections(input: {
+    updates: Array<{
+      id: string;
+      itemId?: string;
+      qtyOut?: string | number;
+      referenceNo?: string | null;
+      notes?: string | null;
+      studentId?: string | null;
+      transactionDate?: Date;
+    }>;
+  }): Promise<StudentCollectionData[]> {
+    if (!input.updates.length) throw new Error("updates must not be empty");
+
+    const ids = [...new Set(input.updates.map((u) => u.id))];
+    const existing = await this.prisma.inventoryTransaction.findMany({
+      where: { id: { in: ids }, transactionType: InventoryTransactionType.student_collection },
+      select: { id: true },
+    });
+    const existingSet = new Set(existing.map((r) => r.id));
+    const missing = ids.filter((id) => !existingSet.has(id));
+    if (missing.length) throw new Error(`Student collection not found: ${missing.join(", ")}`);
+
+    const itemIds = [...new Set(input.updates.map((u) => u.itemId).filter((v): v is string => !!v))];
+    if (itemIds.length) {
+      const found = await this.prisma.inventoryItem.findMany({
+        where: { id: { in: itemIds } },
+        select: { id: true },
+      });
+      const foundSet = new Set(found.map((r) => r.id));
+      const missingItemIds = itemIds.filter((id) => !foundSet.has(id));
+      if (missingItemIds.length) throw new Error(`Invalid itemId(s): ${missingItemIds.join(", ")}`);
+    }
+
+    const active = await this.getActivePeriodIdsOrNull();
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const out: StudentCollectionData[] = [];
+      for (const u of input.updates) {
+        const studentDerived =
+          u.studentId !== undefined ? (u.studentId ? await this.getStudentClassAndSubClass(u.studentId) : null) : undefined;
+
+        const row = await tx.inventoryTransaction.update({
+          where: { id: u.id },
+          data: {
+            ...(u.itemId !== undefined ? { itemId: u.itemId } : {}),
+            ...(u.qtyOut !== undefined ? { qtyOut: u.qtyOut as any } : {}),
+            ...(u.referenceNo !== undefined ? { referenceNo: u.referenceNo } : {}),
+            ...(u.notes !== undefined ? { notes: u.notes } : {}),
+            ...(studentDerived !== undefined
+              ? {
+                  studentId: studentDerived?.studentId ?? null,
+                  classId: studentDerived?.classId ?? null,
+                  subclassId: studentDerived?.subclassId ?? null,
+                }
+              : {}),
+            sessionId: active.sessionId,
+            termId: active.termId,
+            ...(u.transactionDate !== undefined ? { transactionDate: u.transactionDate } : {}),
+            // locked fields
+            transactionType: InventoryTransactionType.student_collection,
+            status: InventoryTransactionStatus.completed,
+            updatedAt: new Date(),
+          },
+          include: {
+            item: { select: { name: true } },
+            createdBy: { select: { firstName: true, lastName: true } },
+          },
+        });
+        out.push(row);
+      }
+      return out;
+    });
+
+    return updated;
+  }
+
   async deleteStudentCollection(id: string): Promise<StudentCollectionData> {
     const existing = await this.getStudentCollectionById(id);
     if (!existing) throw new Error("Student collection not found");
@@ -306,6 +382,28 @@ export class StudentCollectionService {
         createdBy: { select: { firstName: true, lastName: true } },
       },
     });
+  }
+
+  async deleteBulkStudentCollections(input: { ids: string[] }): Promise<StudentCollectionData[]> {
+    if (!input.ids.length) throw new Error("ids must not be empty");
+    const ids = [...new Set(input.ids)];
+
+    const existing = await this.prisma.inventoryTransaction.findMany({
+      where: { id: { in: ids }, transactionType: InventoryTransactionType.student_collection },
+      include: {
+        item: { select: { name: true } },
+        createdBy: { select: { firstName: true, lastName: true } },
+      },
+    });
+    const existingSet = new Set(existing.map((r) => r.id));
+    const missing = ids.filter((id) => !existingSet.has(id));
+    if (missing.length) throw new Error(`Student collection not found: ${missing.join(", ")}`);
+
+    await this.prisma.$transaction(
+      ids.map((id) => this.prisma.inventoryTransaction.delete({ where: { id } }))
+    );
+
+    return existing;
   }
 }
 

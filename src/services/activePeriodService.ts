@@ -44,7 +44,7 @@ export class ActivePeriodService {
         end_date: Date;
         session_id: string;
         term_id: string;
-        updated_at: Date;
+        updated_at: Date | null;
         session_name: string | null;
         term_name: string | null;
       }>
@@ -55,13 +55,18 @@ export class ActivePeriodService {
         ap.end_date,
         ap.session_id,
         ap.term_id,
-        ap.updated_at,
+        CASE
+          WHEN ap.updated_at IS NULL OR ap.updated_at = '0000-00-00 00:00:00' THEN NULL
+          ELSE ap.updated_at
+        END AS updated_at,
         s.name AS session_name,
         t.name AS term_name
       FROM active_period ap
       LEFT JOIN sessions s ON s.id = ap.session_id
       LEFT JOIN terms t ON t.id = ap.term_id
-      ORDER BY ap.updated_at DESC
+      ORDER BY
+        CASE WHEN ap.updated_at IS NULL OR ap.updated_at = '0000-00-00 00:00:00' THEN 1 ELSE 0 END ASC,
+        ap.updated_at DESC
       LIMIT 1
     `);
 
@@ -73,7 +78,7 @@ export class ActivePeriodService {
       endDate: r.end_date,
       sessionId: r.session_id,
       termId: r.term_id,
-      updatedAt: r.updated_at,
+      updatedAt: r.updated_at ?? new Date(0),
       session: r.session_name ? { id: r.session_id, name: r.session_name } : null,
       term: r.term_name ? { id: r.term_id, name: r.term_name } : null,
     };
@@ -101,7 +106,9 @@ export class ActivePeriodService {
         const existing = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
           SELECT ap.id
           FROM active_period ap
-          ORDER BY ap.updated_at DESC
+          ORDER BY
+            CASE WHEN ap.updated_at IS NULL OR ap.updated_at = '0000-00-00 00:00:00' THEN 1 ELSE 0 END ASC,
+            ap.updated_at DESC
           LIMIT 1
         `);
 
@@ -137,7 +144,7 @@ export class ActivePeriodService {
             end_date: Date;
             session_id: string;
             term_id: string;
-            updated_at: Date;
+            updated_at: Date | null;
             session_name: string | null;
             term_name: string | null;
           }>
@@ -148,7 +155,10 @@ export class ActivePeriodService {
             ap.end_date,
             ap.session_id,
             ap.term_id,
-            ap.updated_at,
+            CASE
+              WHEN ap.updated_at IS NULL OR ap.updated_at = '0000-00-00 00:00:00' THEN NULL
+              ELSE ap.updated_at
+            END AS updated_at,
             s.name AS session_name,
             t.name AS term_name
           FROM active_period ap
@@ -166,7 +176,7 @@ export class ActivePeriodService {
           endDate: r.end_date,
           sessionId: r.session_id,
           termId: r.term_id,
-          updatedAt: r.updated_at,
+          updatedAt: r.updated_at ?? new Date(0),
           session: r.session_name ? { id: r.session_id, name: r.session_name } : null,
           term: r.term_name ? { id: r.term_id, name: r.term_name } : null,
         };
