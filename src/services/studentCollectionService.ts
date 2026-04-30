@@ -21,6 +21,12 @@ export interface StudentCollectionData {
   createdAt: Date;
   updatedAt: Date;
   item?: { name: string } | null;
+  student?: {
+    id: string;
+    admissionNumber: string;
+    firstName: string;
+    lastName: string;
+  } | null;
   createdBy?: { firstName: string | null; lastName: string | null } | null;
 }
 
@@ -28,6 +34,10 @@ export interface ListStudentCollectionsParams {
   q?: string;
   itemId?: string;
   studentId?: string;
+  classId?: string;
+  subclassId?: string;
+  sessionId?: string;
+  termId?: string;
   status?: InventoryTransactionStatus;
   /** Inclusive lower bound on transactionDate */
   transactionDateFrom?: Date;
@@ -71,10 +81,17 @@ export class StudentCollectionService {
       select: { id: true, classId: true, subClassId: true },
     });
     if (!student) throw new Error("Invalid studentId");
-    return { studentId: student.id, classId: student.classId ?? null, subclassId: student.subClassId ?? null };
+    return {
+      studentId: student.id,
+      classId: student.classId ?? null,
+      subclassId: student.subClassId ?? null,
+    };
   }
 
-  private async getActivePeriodIdsOrNull(): Promise<{ sessionId: string | null; termId: string | null }> {
+  private async getActivePeriodIdsOrNull(): Promise<{
+    sessionId: string | null;
+    termId: string | null;
+  }> {
     const ap = await activePeriodService.getActivePeriod();
     if (!ap) return { sessionId: null, termId: null };
     return { sessionId: ap.sessionId ?? null, termId: ap.termId ?? null };
@@ -92,11 +109,15 @@ export class StudentCollectionService {
     await this.assertItemExists(input.itemId);
 
     const studentIdNormalized = input.studentId ?? null;
-    const studentDerived = studentIdNormalized ? await this.getStudentClassAndSubClass(studentIdNormalized) : null;
+    const studentDerived = studentIdNormalized
+      ? await this.getStudentClassAndSubClass(studentIdNormalized)
+      : null;
     const active = await this.getActivePeriodIdsOrNull();
 
     const finalReferenceNo =
-      input.referenceNo === undefined || input.referenceNo === null || input.referenceNo.trim() === ""
+      input.referenceNo === undefined ||
+      input.referenceNo === null ||
+      input.referenceNo.trim() === ""
         ? generateReferenceNo()
         : input.referenceNo;
 
@@ -145,11 +166,15 @@ export class StudentCollectionService {
     }
 
     const studentIdNormalized = input.studentId ?? null;
-    const studentDerived = studentIdNormalized ? await this.getStudentClassAndSubClass(studentIdNormalized) : null;
+    const studentDerived = studentIdNormalized
+      ? await this.getStudentClassAndSubClass(studentIdNormalized)
+      : null;
     const active = await this.getActivePeriodIdsOrNull();
 
     const finalReferenceNo =
-      input.referenceNo === undefined || input.referenceNo === null || input.referenceNo.trim() === ""
+      input.referenceNo === undefined ||
+      input.referenceNo === null ||
+      input.referenceNo.trim() === ""
         ? generateReferenceNo()
         : input.referenceNo;
 
@@ -196,11 +221,17 @@ export class StudentCollectionService {
       transactionType: InventoryTransactionType.student_collection,
       ...(params.itemId ? { itemId: params.itemId } : {}),
       ...(params.studentId ? { studentId: params.studentId } : {}),
+      ...(params.classId ? { classId: params.classId } : {}),
+      ...(params.subclassId ? { subclassId: params.subclassId } : {}),
+      ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+      ...(params.termId ? { termId: params.termId } : {}),
       ...(params.status ? { status: params.status } : {}),
       ...(params.transactionDateFrom !== undefined || params.transactionDateTo !== undefined
         ? {
             transactionDate: {
-              ...(params.transactionDateFrom !== undefined ? { gte: params.transactionDateFrom } : {}),
+              ...(params.transactionDateFrom !== undefined
+                ? { gte: params.transactionDateFrom }
+                : {}),
               ...(params.transactionDateTo !== undefined ? { lte: params.transactionDateTo } : {}),
             },
           }
@@ -221,6 +252,14 @@ export class StudentCollectionService {
         take: limit,
         include: {
           item: { select: { name: true } },
+          student: {
+            select: {
+              id: true,
+              admissionNumber: true,
+              firstName: true,
+              lastName: true,
+            },
+          },
           createdBy: { select: { firstName: true, lastName: true } },
         },
       }),
@@ -317,7 +356,9 @@ export class StudentCollectionService {
     const missing = ids.filter((id) => !existingSet.has(id));
     if (missing.length) throw new Error(`Student collection not found: ${missing.join(", ")}`);
 
-    const itemIds = [...new Set(input.updates.map((u) => u.itemId).filter((v): v is string => !!v))];
+    const itemIds = [
+      ...new Set(input.updates.map((u) => u.itemId).filter((v): v is string => !!v)),
+    ];
     if (itemIds.length) {
       const found = await this.prisma.inventoryItem.findMany({
         where: { id: { in: itemIds } },
@@ -334,7 +375,11 @@ export class StudentCollectionService {
       const out: StudentCollectionData[] = [];
       for (const u of input.updates) {
         const studentDerived =
-          u.studentId !== undefined ? (u.studentId ? await this.getStudentClassAndSubClass(u.studentId) : null) : undefined;
+          u.studentId !== undefined
+            ? u.studentId
+              ? await this.getStudentClassAndSubClass(u.studentId)
+              : null
+            : undefined;
 
         const row = await tx.inventoryTransaction.update({
           where: { id: u.id },
@@ -408,4 +453,3 @@ export class StudentCollectionService {
 }
 
 export const studentCollectionService = new StudentCollectionService();
-

@@ -118,6 +118,26 @@ function isNumberOrString(v: unknown): v is number | string {
  *         schema:
  *           type: string
  *       - in: query
+ *         name: classId
+ *         schema:
+ *           type: string
+ *         description: Optional filter by class ID
+ *       - in: query
+ *         name: subclassId
+ *         schema:
+ *           type: string
+ *         description: Optional filter by subclass ID
+ *       - in: query
+ *         name: sessionId
+ *         schema:
+ *           type: string
+ *         description: Optional filter by session ID
+ *       - in: query
+ *         name: termId
+ *         schema:
+ *           type: string
+ *         description: Optional filter by term ID
+ *       - in: query
  *         name: status
  *         schema:
  *           type: string
@@ -537,6 +557,10 @@ export const studentCollectionController = {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
       const itemId = typeof req.query.itemId === "string" ? req.query.itemId : undefined;
       const studentId = typeof req.query.studentId === "string" ? req.query.studentId : undefined;
+      const classId = typeof req.query.classId === "string" ? req.query.classId : undefined;
+      const subclassId = typeof req.query.subclassId === "string" ? req.query.subclassId : undefined;
+      const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+      const termId = typeof req.query.termId === "string" ? req.query.termId : undefined;
       const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
       const status =
         statusRaw === undefined
@@ -586,6 +610,10 @@ export const studentCollectionController = {
         q,
         itemId,
         studentId,
+        classId,
+        subclassId,
+        sessionId,
+        termId,
         status,
         transactionDateFrom,
         transactionDateTo,
