@@ -242,7 +242,7 @@ export class StudentCollectionService {
           }
         : {}),
     };
-
+    console.log("where", where);
     const [total, rows] = await Promise.all([
       this.prisma.inventoryTransaction.count({ where }),
       this.prisma.inventoryTransaction.findMany({
@@ -264,7 +264,7 @@ export class StudentCollectionService {
         },
       }),
     ]);
-
+    console.log("rows", rows);
     const totalPages = Math.max(1, Math.ceil(total / limit));
     return { studentCollections: rows, pagination: { page, limit, total, totalPages } };
   }

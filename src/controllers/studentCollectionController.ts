@@ -256,7 +256,9 @@ export const studentCollectionController = {
       const { updates } = req.body ?? {};
 
       if (!Array.isArray(updates) || updates.length === 0) {
-        return res.status(400).json({ success: false, message: "updates is required and must be a non-empty array" });
+        return res
+          .status(400)
+          .json({ success: false, message: "updates is required and must be a non-empty array" });
       }
 
       const normalizedUpdates: Array<{
@@ -271,35 +273,62 @@ export const studentCollectionController = {
 
       for (const [idx, u] of updates.entries()) {
         if (!u || typeof u !== "object") {
-          return res.status(400).json({ success: false, message: `updates[${idx}] must be an object` });
+          return res
+            .status(400)
+            .json({ success: false, message: `updates[${idx}] must be an object` });
         }
         const { id, itemId, studentId, qtyOut, referenceNo, notes, transactionDate } = u as any;
         if (!id || typeof id !== "string" || !id.trim()) {
-          return res.status(400).json({ success: false, message: `updates[${idx}].id is required` });
+          return res
+            .status(400)
+            .json({ success: false, message: `updates[${idx}].id is required` });
         }
         if (itemId !== undefined && (typeof itemId !== "string" || !itemId.trim())) {
-          return res.status(400).json({ success: false, message: `updates[${idx}].itemId must be a non-empty string` });
+          return res
+            .status(400)
+            .json({ success: false, message: `updates[${idx}].itemId must be a non-empty string` });
         }
         if (studentId !== undefined && (typeof studentId !== "string" || !studentId.trim())) {
-          return res.status(400).json({ success: false, message: `updates[${idx}].studentId must be a non-empty string` });
+          return res
+            .status(400)
+            .json({
+              success: false,
+              message: `updates[${idx}].studentId must be a non-empty string`,
+            });
         }
         if (qtyOut !== undefined && !isNumberOrString(qtyOut)) {
-          return res.status(400).json({ success: false, message: `updates[${idx}].qtyOut must be a string or number` });
+          return res
+            .status(400)
+            .json({ success: false, message: `updates[${idx}].qtyOut must be a string or number` });
         }
         if (qtyOut !== undefined) {
           const qtyOutNum = typeof qtyOut === "string" ? Number(qtyOut) : qtyOut;
           if (!Number.isFinite(qtyOutNum) || qtyOutNum <= 0) {
-            return res.status(400).json({ success: false, message: `updates[${idx}].qtyOut must be greater than 0` });
+            return res
+              .status(400)
+              .json({ success: false, message: `updates[${idx}].qtyOut must be greater than 0` });
           }
         }
         if (referenceNo !== undefined && !isStringOrNullOrUndefined(referenceNo)) {
-          return res.status(400).json({ success: false, message: `updates[${idx}].referenceNo must be a string or null` });
+          return res
+            .status(400)
+            .json({
+              success: false,
+              message: `updates[${idx}].referenceNo must be a string or null`,
+            });
         }
         if (notes !== undefined && !isStringOrNullOrUndefined(notes)) {
-          return res.status(400).json({ success: false, message: `updates[${idx}].notes must be a string or null` });
+          return res
+            .status(400)
+            .json({ success: false, message: `updates[${idx}].notes must be a string or null` });
         }
         if (transactionDate !== undefined && typeof transactionDate !== "string") {
-          return res.status(400).json({ success: false, message: `updates[${idx}].transactionDate must be an ISO date string` });
+          return res
+            .status(400)
+            .json({
+              success: false,
+              message: `updates[${idx}].transactionDate must be an ISO date string`,
+            });
         }
         const parsedDate =
           transactionDate === undefined
@@ -309,7 +338,9 @@ export const studentCollectionController = {
                 return Number.isNaN(d.getTime()) ? null : d;
               })();
         if (parsedDate === null) {
-          return res.status(400).json({ success: false, message: `updates[${idx}].transactionDate is invalid` });
+          return res
+            .status(400)
+            .json({ success: false, message: `updates[${idx}].transactionDate is invalid` });
         }
 
         normalizedUpdates.push({
@@ -326,12 +357,20 @@ export const studentCollectionController = {
       const createdById = (req as any).user?.id;
       if (!createdById) return res.status(401).json({ success: false, message: "Unauthorized" });
 
-      const updated = await studentCollectionService.updateBulkStudentCollections({ updates: normalizedUpdates });
-      return res.json({ success: true, message: "Student collections updated successfully", data: updated });
+      const updated = await studentCollectionService.updateBulkStudentCollections({
+        updates: normalizedUpdates,
+      });
+      return res.json({
+        success: true,
+        message: "Student collections updated successfully",
+        data: updated,
+      });
     } catch (error: any) {
       const message = error?.message ?? "Failed to update student collections";
       const code =
-        message.startsWith("Invalid ") || message.startsWith("Student collection not found") ? 404 : 500;
+        message.startsWith("Invalid ") || message.startsWith("Student collection not found")
+          ? 404
+          : 500;
       return res.status(code).json({ success: false, message });
     }
   },
@@ -341,11 +380,15 @@ export const studentCollectionController = {
       const { ids } = req.body ?? {};
 
       if (!Array.isArray(ids) || ids.length === 0) {
-        return res.status(400).json({ success: false, message: "ids is required and must be a non-empty array" });
+        return res
+          .status(400)
+          .json({ success: false, message: "ids is required and must be a non-empty array" });
       }
       for (const [idx, id] of ids.entries()) {
         if (!id || typeof id !== "string" || !id.trim()) {
-          return res.status(400).json({ success: false, message: `ids[${idx}] must be a non-empty string` });
+          return res
+            .status(400)
+            .json({ success: false, message: `ids[${idx}] must be a non-empty string` });
         }
       }
 
@@ -355,7 +398,11 @@ export const studentCollectionController = {
       const deleted = await studentCollectionService.deleteBulkStudentCollections({
         ids: ids.map((s: string) => s.trim()),
       });
-      return res.json({ success: true, message: "Student collections deleted successfully", data: deleted });
+      return res.json({
+        success: true,
+        message: "Student collections deleted successfully",
+        data: deleted,
+      });
     } catch (error: any) {
       const message = error?.message ?? "Failed to delete student collections";
       const code = message.startsWith("Student collection not found") ? 404 : 500;
@@ -420,13 +467,17 @@ export const studentCollectionController = {
         return res.status(400).json({ success: false, message: "studentId is required" });
       }
       if (!isStringOrNullOrUndefined(referenceNo)) {
-        return res.status(400).json({ success: false, message: "referenceNo must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "referenceNo must be a string or null" });
       }
       if (!isStringOrNullOrUndefined(notes)) {
         return res.status(400).json({ success: false, message: "notes must be a string or null" });
       }
       if (transactionDate !== undefined && typeof transactionDate !== "string") {
-        return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "transactionDate must be an ISO date string" });
       }
       const parsedDate =
         transactionDate === undefined
@@ -440,17 +491,23 @@ export const studentCollectionController = {
       }
 
       if (!Array.isArray(items) || items.length === 0) {
-        return res.status(400).json({ success: false, message: "items is required and must be a non-empty array" });
+        return res
+          .status(400)
+          .json({ success: false, message: "items is required and must be a non-empty array" });
       }
 
       const normalizedItems: Array<{ itemId: string; qtyOut: string | number }> = [];
       for (const [idx, it] of items.entries()) {
         if (!it || typeof it !== "object") {
-          return res.status(400).json({ success: false, message: `items[${idx}] must be an object` });
+          return res
+            .status(400)
+            .json({ success: false, message: `items[${idx}] must be an object` });
         }
         const { itemId, qtyOut } = it as any;
         if (!itemId || typeof itemId !== "string" || !itemId.trim()) {
-          return res.status(400).json({ success: false, message: `items[${idx}].itemId is required` });
+          return res
+            .status(400)
+            .json({ success: false, message: `items[${idx}].itemId is required` });
         }
         if (!isNumberOrString(qtyOut)) {
           return res.status(400).json({
@@ -460,7 +517,9 @@ export const studentCollectionController = {
         }
         const qtyOutNum = typeof qtyOut === "string" ? Number(qtyOut) : qtyOut;
         if (!Number.isFinite(qtyOutNum) || qtyOutNum <= 0) {
-          return res.status(400).json({ success: false, message: `items[${idx}].qtyOut must be greater than 0` });
+          return res
+            .status(400)
+            .json({ success: false, message: `items[${idx}].qtyOut must be greater than 0` });
         }
         normalizedItems.push({ itemId: itemId.trim(), qtyOut });
       }
@@ -500,20 +559,26 @@ export const studentCollectionController = {
         return res.status(400).json({ success: false, message: "studentId is required" });
       }
       if (!isNumberOrString(qtyOut)) {
-        return res.status(400).json({ success: false, message: "qtyOut is required (string or number)" });
+        return res
+          .status(400)
+          .json({ success: false, message: "qtyOut is required (string or number)" });
       }
       const qtyOutNum = typeof qtyOut === "string" ? Number(qtyOut) : qtyOut;
       if (!Number.isFinite(qtyOutNum) || qtyOutNum <= 0) {
         return res.status(400).json({ success: false, message: "qtyOut must be greater than 0" });
       }
       if (!isStringOrNullOrUndefined(referenceNo)) {
-        return res.status(400).json({ success: false, message: "referenceNo must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "referenceNo must be a string or null" });
       }
       if (!isStringOrNullOrUndefined(notes)) {
         return res.status(400).json({ success: false, message: "notes must be a string or null" });
       }
       if (transactionDate !== undefined && typeof transactionDate !== "string") {
-        return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "transactionDate must be an ISO date string" });
       }
       const parsedDate =
         transactionDate === undefined
@@ -534,7 +599,9 @@ export const studentCollectionController = {
         studentId: studentId.trim(),
         qtyOut,
         referenceNo:
-          referenceNo === undefined || referenceNo === null || referenceNo.trim() === "" ? null : referenceNo,
+          referenceNo === undefined || referenceNo === null || referenceNo.trim() === ""
+            ? null
+            : referenceNo,
         notes: notes === undefined || notes === null || notes.trim() === "" ? null : notes,
         transactionDate: parsedDate ?? undefined,
         createdById,
@@ -554,11 +621,13 @@ export const studentCollectionController = {
 
   listStudentCollections: async (req: Request, res: Response) => {
     try {
+      console.log(req.query);
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
       const itemId = typeof req.query.itemId === "string" ? req.query.itemId : undefined;
       const studentId = typeof req.query.studentId === "string" ? req.query.studentId : undefined;
       const classId = typeof req.query.classId === "string" ? req.query.classId : undefined;
-      const subclassId = typeof req.query.subclassId === "string" ? req.query.subclassId : undefined;
+      const subclassId =
+        typeof req.query.subclassId === "string" ? req.query.subclassId : undefined;
       const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
       const termId = typeof req.query.termId === "string" ? req.query.termId : undefined;
       const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
@@ -724,7 +793,8 @@ export const studentCollectionController = {
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const row = await studentCollectionService.getStudentCollectionById(id);
-      if (!row) return res.status(404).json({ success: false, message: "Student collection not found" });
+      if (!row)
+        return res.status(404).json({ success: false, message: "Student collection not found" });
 
       return res.json({
         success: true,
@@ -748,13 +818,19 @@ export const studentCollectionController = {
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       if (itemId !== undefined && (typeof itemId !== "string" || !itemId.trim())) {
-        return res.status(400).json({ success: false, message: "itemId must be a non-empty string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "itemId must be a non-empty string" });
       }
       if (studentId !== undefined && (typeof studentId !== "string" || !studentId.trim())) {
-        return res.status(400).json({ success: false, message: "studentId must be a non-empty string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "studentId must be a non-empty string" });
       }
       if (qtyOut !== undefined && !isNumberOrString(qtyOut)) {
-        return res.status(400).json({ success: false, message: "qtyOut must be a string or number" });
+        return res
+          .status(400)
+          .json({ success: false, message: "qtyOut must be a string or number" });
       }
       if (qtyOut !== undefined) {
         const qtyOutNum = typeof qtyOut === "string" ? Number(qtyOut) : qtyOut;
@@ -763,13 +839,17 @@ export const studentCollectionController = {
         }
       }
       if (referenceNo !== undefined && !isStringOrNullOrUndefined(referenceNo)) {
-        return res.status(400).json({ success: false, message: "referenceNo must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "referenceNo must be a string or null" });
       }
       if (notes !== undefined && !isStringOrNullOrUndefined(notes)) {
         return res.status(400).json({ success: false, message: "notes must be a string or null" });
       }
       if (transactionDate !== undefined && typeof transactionDate !== "string") {
-        return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "transactionDate must be an ISO date string" });
       }
 
       const updated = await studentCollectionService.updateStudentCollection(id, {
@@ -788,7 +868,8 @@ export const studentCollectionController = {
       });
     } catch (error: any) {
       const message = error?.message ?? "Failed to update student collection";
-      const code = message === "Student collection not found" || message.startsWith("Invalid ") ? 404 : 500;
+      const code =
+        message === "Student collection not found" || message.startsWith("Invalid ") ? 404 : 500;
       return res.status(code).json({ success: false, message });
     }
   },
@@ -799,7 +880,11 @@ export const studentCollectionController = {
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const deleted = await studentCollectionService.deleteStudentCollection(id);
-      return res.json({ success: true, message: "Student collection deleted successfully", data: deleted });
+      return res.json({
+        success: true,
+        message: "Student collection deleted successfully",
+        data: deleted,
+      });
     } catch (error: any) {
       const message = error?.message ?? "Failed to delete student collection";
       const code = message === "Student collection not found" ? 404 : 500;
@@ -807,4 +892,3 @@ export const studentCollectionController = {
     }
   },
 };
-
