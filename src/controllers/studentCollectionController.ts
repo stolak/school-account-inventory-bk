@@ -409,6 +409,138 @@ export const studentCollectionController = {
       return res.status(code).json({ success: false, message });
     }
   },
+
+  /**
+   * @openapi
+   * /api/v1/student-collections/summary:
+   *   get:
+   *     summary: Summary of student-collected items (grouped by item)
+   *     tags: [StudentCollections]
+   *     security:
+   *       - bearerAuth: []
+   *     description: Returns sum(qtyOut) grouped by itemId for transactions with transactionType=student_collection. Accepts the same filters as the list endpoint.
+   *     parameters:
+   *       - in: query
+   *         name: q
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: itemId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: studentId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: classId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: subclassId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: sessionId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: termId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: status
+   *         schema:
+   *           type: string
+   *           enum: [pending, cancelled, deleted, completed]
+   *       - in: query
+   *         name: transactionDateFrom
+   *         schema:
+   *           type: string
+   *           format: date
+   *       - in: query
+   *         name: transactionDateTo
+   *         schema:
+   *           type: string
+   *           format: date
+   *     responses:
+   *       200:
+ *         description: Summary rows (sorted by category, subCategory, brand, item name)
+   *       400:
+   *         description: Validation error
+   *       500:
+   *         description: Server error
+   */
+  getStudentCollectionSummary: async (req: Request, res: Response) => {
+    try {
+      const q = typeof req.query.q === "string" ? req.query.q : undefined;
+      const itemId = typeof req.query.itemId === "string" ? req.query.itemId : undefined;
+      const studentId = typeof req.query.studentId === "string" ? req.query.studentId : undefined;
+      const classId = typeof req.query.classId === "string" ? req.query.classId : undefined;
+      const subclassId = typeof req.query.subclassId === "string" ? req.query.subclassId : undefined;
+      const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+      const termId = typeof req.query.termId === "string" ? req.query.termId : undefined;
+
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === undefined
+          ? undefined
+          : statusRaw === "pending"
+            ? InventoryTransactionStatus.pending
+            : statusRaw === "cancelled"
+              ? InventoryTransactionStatus.cancelled
+              : statusRaw === "deleted"
+                ? InventoryTransactionStatus.deleted
+                : statusRaw === "completed"
+                  ? InventoryTransactionStatus.completed
+                  : undefined;
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({ success: false, message: "Invalid status" });
+      }
+
+      const fromRaw = parseListQueryDate(req.query.transactionDateFrom);
+      const toRaw = parseListQueryDateEndInclusive(req.query.transactionDateTo);
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+      if (
+        transactionDateFrom !== undefined &&
+        transactionDateTo !== undefined &&
+        transactionDateFrom.getTime() > transactionDateTo.getTime()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "transactionDateFrom must be before or equal to transactionDateTo",
+        });
+      }
+
+      const result = await studentCollectionService.summarizeStudentCollectionsByItem({
+        q,
+        itemId,
+        studentId,
+        classId,
+        subclassId,
+        sessionId,
+        termId,
+        status,
+        transactionDateFrom,
+        transactionDateTo,
+      });
+
+      return res.json({ success: true, message: "Student collection summary retrieved successfully", data: result });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve student collection summary",
+        error: error?.message,
+      });
+    }
+  },
   /**
    * @openapi
    * /api/v1/student-collections/bulk:

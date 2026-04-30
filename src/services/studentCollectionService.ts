@@ -63,6 +63,32 @@ function generateReferenceNo(): string {
 export class StudentCollectionService {
   private prisma = prisma;
 
+  private buildStudentCollectionWhere(params: ListStudentCollectionsParams): Prisma.InventoryTransactionWhereInput {
+    return {
+      transactionType: InventoryTransactionType.student_collection,
+      ...(params.itemId ? { itemId: params.itemId } : {}),
+      ...(params.studentId ? { studentId: params.studentId } : {}),
+      ...(params.classId ? { classId: params.classId } : {}),
+      ...(params.subclassId ? { subclassId: params.subclassId } : {}),
+      ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+      ...(params.termId ? { termId: params.termId } : {}),
+      ...(params.status ? { status: params.status } : {}),
+      ...(params.transactionDateFrom !== undefined || params.transactionDateTo !== undefined
+        ? {
+            transactionDate: {
+              ...(params.transactionDateFrom !== undefined ? { gte: params.transactionDateFrom } : {}),
+              ...(params.transactionDateTo !== undefined ? { lte: params.transactionDateTo } : {}),
+            },
+          }
+        : {}),
+      ...(params.q
+        ? {
+            OR: [{ referenceNo: { contains: params.q } }, { notes: { contains: params.q } }],
+          }
+        : {}),
+    };
+  }
+
   private async assertItemExists(itemId: string) {
     const item = await this.prisma.inventoryItem.findUnique({
       where: { id: itemId },
@@ -217,32 +243,7 @@ export class StudentCollectionService {
     const limit = clampInt(params.limit ?? 20, 1, 100);
     const skip = (page - 1) * limit;
 
-    const where: Prisma.InventoryTransactionWhereInput = {
-      transactionType: InventoryTransactionType.student_collection,
-      ...(params.itemId ? { itemId: params.itemId } : {}),
-      ...(params.studentId ? { studentId: params.studentId } : {}),
-      ...(params.classId ? { classId: params.classId } : {}),
-      ...(params.subclassId ? { subclassId: params.subclassId } : {}),
-      ...(params.sessionId ? { sessionId: params.sessionId } : {}),
-      ...(params.termId ? { termId: params.termId } : {}),
-      ...(params.status ? { status: params.status } : {}),
-      ...(params.transactionDateFrom !== undefined || params.transactionDateTo !== undefined
-        ? {
-            transactionDate: {
-              ...(params.transactionDateFrom !== undefined
-                ? { gte: params.transactionDateFrom }
-                : {}),
-              ...(params.transactionDateTo !== undefined ? { lte: params.transactionDateTo } : {}),
-            },
-          }
-        : {}),
-      ...(params.q
-        ? {
-            OR: [{ referenceNo: { contains: params.q } }, { notes: { contains: params.q } }],
-          }
-        : {}),
-    };
-    console.log("where", where);
+    const where = this.buildStudentCollectionWhere(params);
     const [total, rows] = await Promise.all([
       this.prisma.inventoryTransaction.count({ where }),
       this.prisma.inventoryTransaction.findMany({
@@ -264,9 +265,73 @@ export class StudentCollectionService {
         },
       }),
     ]);
-    console.log("rows", rows);
+
     const totalPages = Math.max(1, Math.ceil(total / limit));
     return { studentCollections: rows, pagination: { page, limit, total, totalPages } };
+  }
+
+  async summarizeStudentCollectionsByItem(params: ListStudentCollectionsParams = {}): Promise<{
+    summary: Array<{
+      itemId: string;
+      totalQtyOut: string;
+      item: {
+        id: string;
+        name: string;
+        category: { id: string; name: string } | null;
+        subCategory: { id: string; name: string } | null;
+        brand: { id: string; name: string } | null;
+      } | null;
+    }>;
+  }> {
+    const where = this.buildStudentCollectionWhere(params);
+
+    const grouped = await this.prisma.inventoryTransaction.groupBy({
+      by: ["itemId"],
+      where,
+      _sum: { qtyOut: true },
+    });
+
+    const itemIds = grouped.map((g) => g.itemId);
+    const items = itemIds.length
+      ? await this.prisma.inventoryItem.findMany({
+          where: { id: { in: itemIds } },
+          select: {
+            id: true,
+            name: true,
+            category: { select: { id: true, name: true } },
+            subCategory: { select: { id: true, name: true } },
+            brand: { select: { id: true, name: true } },
+          },
+        })
+      : [];
+    const itemById = new Map(items.map((i) => [i.id, i]));
+
+    const summary = grouped.map((g) => ({
+      itemId: g.itemId,
+      totalQtyOut: (g._sum.qtyOut ?? new Prisma.Decimal(0)).toString(),
+      item: itemById.get(g.itemId) ?? null,
+    }));
+
+    // Sort by Category -> SubCategory -> Brand -> Item name (nulls last).
+    summary.sort((a, b) => {
+      const ac = a.item?.category?.name ?? "\uFFFF";
+      const bc = b.item?.category?.name ?? "\uFFFF";
+      if (ac !== bc) return ac.localeCompare(bc);
+
+      const asc = a.item?.subCategory?.name ?? "\uFFFF";
+      const bsc = b.item?.subCategory?.name ?? "\uFFFF";
+      if (asc !== bsc) return asc.localeCompare(bsc);
+
+      const ab = a.item?.brand?.name ?? "\uFFFF";
+      const bb = b.item?.brand?.name ?? "\uFFFF";
+      if (ab !== bb) return ab.localeCompare(bb);
+
+      const an = a.item?.name ?? "\uFFFF";
+      const bn = b.item?.name ?? "\uFFFF";
+      return an.localeCompare(bn);
+    });
+
+    return { summary };
   }
 
   async getStudentCollectionById(id: string): Promise<StudentCollectionData | null> {

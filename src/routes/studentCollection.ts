@@ -10,6 +10,7 @@ router.post("/bulk", studentCollectionController.createBulkStudentCollections);
 router.put("/bulk", studentCollectionController.updateBulkStudentCollections);
 router.delete("/bulk", studentCollectionController.deleteBulkStudentCollections);
 router.post("/", studentCollectionController.createStudentCollection);
+router.get("/summary", studentCollectionController.getStudentCollectionSummary);
 router.get("/", studentCollectionController.listStudentCollections);
 router.get("/:id", studentCollectionController.getStudentCollectionById);
 router.put("/:id", studentCollectionController.updateStudentCollection);
