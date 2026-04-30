@@ -94,13 +94,12 @@ model User {
   createdSupplierTransactions        SupplierTransaction[]        @relation("SupplierTransactionCreatedBy")
   createdSchoolClasses               SchoolClass[]                @relation("SchoolClassCreatedBy")
   createdStudents                    Student[]                    @relation("StudentCreatedBy")
-  classTeacherAssignments            ClassTeacher[]               @relation("ClassTeacherTeacher")
-  createdClassTeachers               ClassTeacher[]               @relation("ClassTeacherCreatedBy")
+  createdStaff                       Staff[]                      @relation("StaffCreatedBy")
   createdClassInventoryDistributions ClassInventoryDistribution[] @relation("ClassInventoryDistributionCreatedBy")
   inventoryTransactionsReceived      InventoryTransaction[]       @relation("InventoryTransactionReceiver")
   createdInventoryTransactions       InventoryTransaction[]       @relation("InventoryTransactionCreatedBy")
   createdClassInventoryEntitlements  ClassInventoryEntitlement[]  @relation("ClassInventoryEntitlementCreatedBy")
-  createdStudentInventoryLogs        StudentInventoryLog[]        @relation("StudentInventoryLogCreatedBy")
+  staffProfile                       Staff?                       @relation("StaffUser")
 }
 
 model PasswordResetToken {
@@ -171,10 +170,15 @@ enum InventoryTransactionStatus {
   completed
 }
 
-enum ClassTeacherRole {
+enum StaffRole {
   class_teacher
   assistant_teacher
   subject_teacher
+  principal
+  vice_principal
+  teacher
+  admin
+  other
 }
 
 model Category {
@@ -324,7 +328,6 @@ model InventoryItem {
   inventoryTransactions       InventoryTransaction[]
   classInventoryDistributions ClassInventoryDistribution[]
   classInventoryEntitlements  ClassInventoryEntitlement[]
-  studentInventoryLogs        StudentInventoryLog[]
 
   @@index([categoryId])
   @@index([subCategoryId])
@@ -390,8 +393,6 @@ model SchoolClass {
   students                    Student[]
   classInventoryDistributions ClassInventoryDistribution[]
   classInventoryEntitlements  ClassInventoryEntitlement[]
-  studentInventoryLogs        StudentInventoryLog[]
-  classTeachers               ClassTeacher[]
   subClasses                  SubClass[]
 
   @@index([createdById])
@@ -446,7 +447,6 @@ model Student {
   class     SchoolClass? @relation(fields: [classId], references: [id], onDelete: SetNull)
   createdBy User         @relation("StudentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  studentInventoryLogs  StudentInventoryLog[]
   subClass              SubClass?              @relation(fields: [subClassId], references: [id])
   subClassId            String?                @db.Char(36)
   inventoryTransactions InventoryTransaction[]
@@ -464,7 +464,6 @@ model Term {
 
   classInventoryDistributions ClassInventoryDistribution[]
   classInventoryEntitlements  ClassInventoryEntitlement[]
-  studentInventoryLogs        StudentInventoryLog[]
   activePeriods               ActivePeriod[]
   inventoryTransactions       InventoryTransaction[]
 
@@ -496,31 +495,30 @@ model ActivePeriod {
   @@map("active_period")
 }
 
-model ClassTeacher {
-  id           String           @id @default(uuid()) @db.Char(36)
-  classId      String?          @map("class_id") @db.Char(36)
-  teacherId    String           @unique @map("teacher_id") @db.Char(36)
-  email        String           @unique
-  name         String
-  role         ClassTeacherRole @default(class_teacher)
-  status       Status           @default(Active)
-  assignedAt   DateTime         @default(now()) @map("assigned_at")
-  unassignedAt DateTime?        @map("unassigned_at")
-  createdById  String           @map("created_by") @db.Char(36)
-  createdAt    DateTime         @default(now()) @map("created_at")
-  updatedAt    DateTime         @default(now()) @map("updated_at")
+model Staff {
+  id String @id @default(uuid()) @db.Char(36)
 
-  class     SchoolClass? @relation(fields: [classId], references: [id], onDelete: SetNull)
-  teacher   User         @relation("ClassTeacherTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
-  createdBy User         @relation("ClassTeacherCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  StaffNumber     String    @unique @map("staff_number") @db.Char(36)
+  email           String    @unique
+  name            String
+  role            StaffRole @default(teacher)
+  status          Status    @default(Active)
+  profileImageUrl String?   @map("profile_image_url")
+  createdById     String    @map("created_by") @db.Char(36)
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @default(now()) @map("updated_at")
+
+  createdBy User @relation("StaffCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   receivedDistributions ClassInventoryDistribution[] @relation("DistributionReceivedBy")
-  givenStudentLogs      StudentInventoryLog[]        @relation("StudentLogGivenBy")
 
-  @@index([classId])
-  @@index([teacherId])
+  userId String? @unique @db.Char(36)
+  user   User?   @relation("StaffUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([StaffNumber])
   @@index([createdById])
-  @@map("class_teachers")
+  @@map("staffs")
 }
 
 model ClassInventoryDistribution {
@@ -540,7 +538,7 @@ model ClassInventoryDistribution {
   class         SchoolClass?  @relation(fields: [classId], references: [id], onDelete: SetNull)
   inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
   sessionTerm   Term          @relation(fields: [sessionTermId], references: [id], onDelete: Restrict)
-  receivedBy    ClassTeacher? @relation("DistributionReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
+  receivedBy    Staff?        @relation("DistributionReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict)
   createdBy     User          @relation("ClassInventoryDistributionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
   inventoryTransactions InventoryTransaction[]
@@ -618,35 +616,4 @@ model ClassInventoryEntitlement {
   @@index([sessionTermId])
   @@index([createdById])
   @@map("class_inventory_entitlements")
-}
-
-model StudentInventoryLog {
-  id              String    @id @default(uuid()) @db.Char(36)
-  studentId       String    @map("student_id") @db.Char(36)
-  classId         String?   @map("class_id") @db.Char(36)
-  sessionTermId   String    @map("session_term_id") @db.Char(36)
-  inventoryItemId String    @map("inventory_item_id") @db.Char(36)
-  qty             Int
-  eligible        Boolean   @default(true)
-  received        Boolean   @default(false)
-  receivedDate    DateTime? @map("received_date")
-  givenById       String?   @map("given_by") @db.Char(36)
-  createdById     String    @map("created_by") @db.Char(36)
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @default(now()) @map("updated_at")
-
-  student       Student       @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  class         SchoolClass?  @relation(fields: [classId], references: [id], onDelete: SetNull)
-  term          Term          @relation(fields: [sessionTermId], references: [id], onDelete: Restrict)
-  inventoryItem InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
-  givenBy       ClassTeacher? @relation("StudentLogGivenBy", fields: [givenById], references: [id], onDelete: Restrict)
-  createdBy     User          @relation("StudentInventoryLogCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-
-  @@index([studentId])
-  @@index([classId])
-  @@index([sessionTermId])
-  @@index([inventoryItemId])
-  @@index([givenById])
-  @@index([createdById])
-  @@map("student_inventory_log")
 }
