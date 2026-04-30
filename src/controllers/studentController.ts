@@ -1,12 +1,7 @@
 import { Request, Response } from "express";
 import { studentService } from "../services/studentService";
 import { Gender, StudentStatus } from "@prisma/client";
-
-function parseIntOrUndefined(v: unknown): number | undefined {
-  if (typeof v !== "string") return undefined;
-  const n = Number.parseInt(v, 10);
-  return Number.isFinite(n) ? n : undefined;
-}
+import { parseIntOrUndefined } from "../utils/request";
 
 function parseIsoDate(v: unknown): Date | null {
   if (v === undefined || v === null) return null;

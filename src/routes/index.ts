@@ -20,6 +20,7 @@ import subClassRouter from "./subClass";
 import termRouter from "./term";
 import sessionRouter from "./session";
 import activePeriodRouter from "./activePeriod";
+import staffRouter from "./staff";
 
 const router = Router();
 
@@ -39,6 +40,7 @@ router.use("/sub-classes", subClassRouter);
 router.use("/terms", termRouter);
 router.use("/sessions", sessionRouter);
 router.use("/active-period", activePeriodRouter);
+router.use("/staff", staffRouter);
 
 router.use("/upload", uploadRouter);
 

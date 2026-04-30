@@ -1,20 +1,7 @@
 import { Request, Response } from "express";
 import { inventoryItemService } from "../services/inventoryItemService";
 import { Status } from "@prisma/client";
-
-function parseIntOrUndefined(v: unknown): number | undefined {
-  if (typeof v !== "string") return undefined;
-  const n = Number.parseInt(v, 10);
-  return Number.isFinite(n) ? n : undefined;
-}
-
-function isStringOrNullOrUndefined(v: unknown): v is string | null | undefined {
-  return v === undefined || v === null || typeof v === "string";
-}
-
-function isNumberOrString(v: unknown): v is number | string {
-  return typeof v === "number" || typeof v === "string";
-}
+import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
 
 /**
  * @openapi

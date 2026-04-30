@@ -1,0 +1,182 @@
+[
+  {
+    "id": "69f256779208941d1c6abe9f",
+    "narration": "VAT MOBILE TRF TO PAY  AMUDALAT OLAPEJU OYEDOTUN",
+    "amount": 188,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abea0",
+    "narration": "COMMISSION MOBILE TRF TO PAY  AMUDALAT OLAPEJU OYEDOTUN",
+    "amount": 2500,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abea1",
+    "narration": "MOBILE TRF TO PAY  AMUDALAT OLAPEJU OYEDOTUN",
+    "amount": 2150000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abea2",
+    "narration": "VAT MOBILE TRF TO GTB  OJO RAPHEAL OLAKITAN",
+    "amount": 375,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abea3",
+    "narration": "COMMISSION MOBILE TRF TO GTB  OJO RAPHEAL OLAKITAN",
+    "amount": 5000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abea4",
+    "narration": "MOBILE TRF TO GTB  OJO RAPHEAL OLAKITAN",
+    "amount": 70000000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abea5",
+    "narration": "VAT MOBILE TRF TO GTB Tithe DAYSTAR CHRISTIAN CENTRE 2",
+    "amount": 188,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abea6",
+    "narration": "COMMISSION MOBILE TRF TO GTB Tithe DAYSTAR CHRISTIAN CENTRE 2",
+    "amount": 2500,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abea7",
+    "narration": "MOBILE TRF TO GTB Tithe DAYSTAR CHRISTIAN CENTRE 2",
+    "amount": 5000000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abea8",
+    "narration": "VAT MOBILE TRF TO GTB  OLORUNTOBA TEMITOPE ADETAYO",
+    "amount": 375,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abea9",
+    "narration": "COMMISSION MOBILE TRF TO GTB  OLORUNTOBA TEMITOPE ADETAYO",
+    "amount": 5000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abeaa",
+    "narration": "MOBILE TRF TO GTB  OLORUNTOBA TEMITOPE ADETAYO",
+    "amount": 17041200,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abeab",
+    "narration": "MAMUDA CARE NIGERIA LIMITED MC26-6916 1",
+    "amount": 112112000,
+    "type": "credit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abeac",
+    "narration": "MOBILE TRF FROM ACCESS N UKPONG ANIEDI OKONNA",
+    "amount": 10000000,
+    "type": "credit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-28T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abead",
+    "narration": "FGN Stamp Duty for 4 txns 19 04--25 04 26",
+    "amount": 20000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abeae",
+    "narration": "MOBILE BILLS PYMT MTN DATA 08166186938",
+    "amount": 75000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-24T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abeaf",
+    "narration": "VAT MOBILE TRF TO GTB  RAPHAEL OJO JUSTINAH OYEBOLA",
+    "amount": 188,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-22T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abeb0",
+    "narration": "COMMISSION MOBILE TRF TO GTB  RAPHAEL OJO JUSTINAH OYEBOLA",
+    "amount": 2500,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-22T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abeb1",
+    "narration": "MOBILE TRF TO GTB  RAPHAEL OJO JUSTINAH OYEBOLA",
+    "amount": 900000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-22T00:00:00.000Z"
+  },
+  {
+    "id": "69f256779208941d1c6abeb2",
+    "narration": "VAT MOBILE TRF TO ZIB Pure water yakubu emmanuel owunebe",
+    "amount": 188,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-22T00:00:00.000Z"
+  }
+]
