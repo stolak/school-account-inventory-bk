@@ -1,0 +1,452 @@
+[
+  {
+    "id": "69f24c99d1aa192addcbf0af",
+    "narration": "BAP:CD/FM-1404482692623200396-WZN/MTND/DataSubscri",
+    "amount": 350000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T17:11:32.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0b0",
+    "narration": "POS WDR-TOTALSERVICES@177748158/LA/NG/28042026",
+    "amount": 600000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T16:53:13.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0b1",
+    "narration": "POS TRAN-Atreos Retail Platform/LA/NG/28042026",
+    "amount": 2290000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T16:21:58.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0b2",
+    "narration": "POS TRAN-NOAHS ENERGIES LIMITED/LA/NG/28042026",
+    "amount": 1000000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T15:17:55.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0b3",
+    "narration": "FIP:GTB/OJO  RAPHEAL OLAKI/NIP Transfer to Ojo Rap",
+    "amount": 5000000,
+    "type": "credit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T15:17:26.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0b4",
+    "narration": "POS TRAN-NOAHS ENERGIES LIMITED/LA/NG/28042026",
+    "amount": 1250000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-29T15:16:17.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0b5",
+    "narration": "BAP:CD/FM-1404410478378780154-DQB/MTNN/AirtimePurc",
+    "amount": 120000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-28T21:07:59.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0b6",
+    "narration": "POS WDR-TOTALSERVICES@177739811/LA/NG/27042026",
+    "amount": 500000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-28T17:41:55.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0b7",
+    "narration": "BAP:CD/FM-1404361776576600148-MHP/MTNN/AirtimePurc",
+    "amount": 100000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-28T07:36:18.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0b8",
+    "narration": "Stamp Duty Charge on 1 TXNS FRM 27-04-2026 to 27-0",
+    "amount": 5000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-27T21:54:01.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0b9",
+    "narration": "FIP CHARGES",
+    "amount": 1075,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-27T16:18:04.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0ba",
+    "narration": "FIP:MB:MMB/NEYMAR MULTI TRADE/NEYMAR MULTI TRADE V",
+    "amount": 210000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-27T16:18:03.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0bb",
+    "narration": "FIP:MB:GTB/RAPHAEL OJO JUSTIN/RAPHAEL OJO JUSTINAH",
+    "amount": 300000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-27T13:43:24.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0bc",
+    "narration": "FIP CHARGES",
+    "amount": 1075,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-27T13:43:24.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0bd",
+    "narration": "FIP CHARGES",
+    "amount": 1075,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-27T07:05:11.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0be",
+    "narration": "FIP:MB:MMB/SHAIBU MUSA/SHAIBU MUSA/NONE",
+    "amount": 150000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-27T07:05:11.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0bf",
+    "narration": "FIP CHARGES",
+    "amount": 1075,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-27T06:25:26.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0c0",
+    "narration": "FIP:MB:GTB/RAPHAEL OJO JUSTIN/RAPHAEL OJO JUSTINAH",
+    "amount": 500000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-27T06:25:25.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0c1",
+    "narration": "POS TRAN-HYDROGEN PAYMENT SERVIC/LA/NG/27042026",
+    "amount": 1000000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-27T06:07:27.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0c2",
+    "narration": "PDC:INTEREST_RATE - 21224073SLITAMPC",
+    "amount": 30000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-27T03:09:37.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0c3",
+    "narration": "PDC:INSURE_FEE - 21223923SLITAMPC",
+    "amount": 30000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T22:20:40.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0c4",
+    "narration": "PDC:VAT_FEE - 21223923SLITAMPC",
+    "amount": 2250,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T22:20:13.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0c5",
+    "narration": "PDC:MGMT_FEE - 21223923SLITAMPC",
+    "amount": 30000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T22:20:03.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0c6",
+    "narration": "PDC:INSURE_FEE - 21224073SLITAMPC",
+    "amount": 10000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T22:19:32.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0c7",
+    "narration": "PDC:MGMT_FEE - 21224073SLITAMPC",
+    "amount": 10000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T22:15:33.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0c8",
+    "narration": "PDC:INTEREST_RATE - 21223923SLITAMPC",
+    "amount": 90000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T22:15:21.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0c9",
+    "narration": "PDC:VAT_FEE - 21224073SLITAMPC",
+    "amount": 750,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T22:13:39.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0ca",
+    "narration": "PDC:LOAN DISBURAL 21224073SLITAMPC/123395282",
+    "amount": 1000000,
+    "type": "credit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T21:56:48.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0cb",
+    "narration": "PDC:LOAN DISBURAL 21223923SLITAMPC/123394378",
+    "amount": 3000000,
+    "type": "credit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T21:55:16.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0cc",
+    "narration": "BAP:CD/FM-1404230313554250535-QNH/MTND/DataSubscri",
+    "amount": 100000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T19:05:14.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0cd",
+    "narration": "FBNMOBILE:FABIYI TIMOT/None",
+    "amount": 200000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T18:53:30.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0ce",
+    "narration": "FIP:MB:PST/SHUTTLERSMETR OJO /SHUTTLERSMETR OJO RA",
+    "amount": 310000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T18:20:41.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0cf",
+    "narration": "FIP CHARGES",
+    "amount": 1075,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T18:20:40.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0d0",
+    "narration": "Stamp Duty Charge on 1 TXNS FRM 26-04-2026 to 26-0",
+    "amount": 5000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T18:02:46.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0d1",
+    "narration": "POS TRAN-NOAHS ENERGIES LIMITED/LA/NG/26042026",
+    "amount": 500000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T17:48:42.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0d2",
+    "narration": "POS TRAN-POP EXCLUSIVE MINI MART/LA/NG/26042026",
+    "amount": 510000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T17:47:04.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0d3",
+    "narration": "CPWInward:100004260426173205158247996120/RAPHEAL O",
+    "amount": 2000000,
+    "type": "credit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T17:32:06.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0d4",
+    "narration": "FIP:MB:OPY/OYETOLA DAMILARE T/OYETOLA DAMILARE TEM",
+    "amount": 1560000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T16:51:44.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0d5",
+    "narration": "FIP CHARGES",
+    "amount": 2688,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-26T16:51:44.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0d6",
+    "narration": "BAP:CD/FM-1404141786365510265-QHV/MTND/DataSubscri",
+    "amount": 100000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-25T18:29:47.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0d7",
+    "narration": "BAP:CD/FM-1404133357893670103-IWR/MTND/DataSubscri",
+    "amount": 100000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-25T16:09:18.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0d8",
+    "narration": "POS WDR-TOTALSERVICES@177712844/LA/NG/24042026",
+    "amount": 500000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-25T14:47:25.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0d9",
+    "narration": "PDC:INSURE_FEE - 21212820SLITAMPC",
+    "amount": 28000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-25T14:06:58.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0da",
+    "narration": "PDC:MGMT_FEE - 21212820SLITAMPC",
+    "amount": 28000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-25T14:02:37.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0db",
+    "narration": "PDC:VAT_FEE - 21212820SLITAMPC",
+    "amount": 2100,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-25T14:02:36.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0dc",
+    "narration": "PDC:INTEREST_RATE - 21212820SLITAMPC",
+    "amount": 84000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-25T13:58:56.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0dd",
+    "narration": "FIP:MB:GTB/RAPHAEL OJO JUSTIN/RAPHAEL OJO JUSTINAH",
+    "amount": 600000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-25T13:12:43.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0de",
+    "narration": "FIP CHARGES",
+    "amount": 2688,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-25T13:12:43.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0df",
+    "narration": "PDC:LOAN DISBURAL 21212820SLITAMPC/123326714",
+    "amount": 2800000,
+    "type": "credit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-25T13:11:13.000Z"
+  },
+  {
+    "id": "69f24c99d1aa192addcbf0e0",
+    "narration": "BAP:CD/FM-1404114043581390601-JDW/MTND/DataSubscri",
+    "amount": 100000,
+    "type": "debit",
+    "category": null,
+    "balance": null,
+    "date": "2026-04-25T10:47:24.000Z"
+  }
+]
