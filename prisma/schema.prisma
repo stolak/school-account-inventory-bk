@@ -512,8 +512,9 @@ model Staff {
 
   receivedDistributions ClassInventoryDistribution[] @relation("DistributionReceivedBy")
 
-  userId String? @unique @db.Char(36)
-  user   User?   @relation("StaffUser", fields: [userId], references: [id], onDelete: SetNull)
+  userId                String?                @unique @db.Char(36)
+  user                  User?                  @relation("StaffUser", fields: [userId], references: [id], onDelete: SetNull)
+  inventoryTransactions InventoryTransaction[]
 
   @@index([userId])
   @@index([StaffNumber])
@@ -575,6 +576,8 @@ model InventoryTransaction {
   term             Term?                      @relation(fields: [termId], references: [id], onDelete: SetNull)
   subclassId       String?                    @map("subclass_id") @db.Char(36)
   subclass         SubClass?                  @relation(fields: [subclassId], references: [id], onDelete: SetNull)
+  staffId          String?                    @map("staff_id") @db.Char(36)
+  staff            Staff?                     @relation(fields: [staffId], references: [id], onDelete: SetNull)
   transactionDate  DateTime                   @default(now()) @map("transaction_date")
   createdById      String                     @map("created_by") @db.Char(36)
   createdAt        DateTime                   @default(now()) @map("created_at")
