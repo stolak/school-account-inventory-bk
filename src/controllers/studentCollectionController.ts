@@ -4,6 +4,12 @@ import { studentCollectionService } from "../services/studentCollectionService";
 import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
+function httpStatusForStudentCollectionCreate(message: string): number {
+  if (message.startsWith("Invalid ")) return 404;
+  if (message.includes("not authorized to issue items")) return 403;
+  return 500;
+}
+
 /**
  * @openapi
  * /api/v1/student-collections:
@@ -12,7 +18,11 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *     tags: [StudentCollections]
  *     security:
  *       - bearerAuth: []
- *     description: Creates an InventoryTransaction with transactionType=student_collection (locked). Status defaults to completed. classId/subclassId derived from studentId; sessionId/termId derived from active period; referenceNo auto-generated if missing.
+ *     description: |
+ *       Creates an InventoryTransaction with transactionType=student_collection (locked). Status defaults to completed.
+ *       classId/subclassId derived from studentId; sessionId/termId from active period; referenceNo auto-generated if missing.
+ *       storeId optional — must be a store you manage; if omitted, the first store you manage (by name) is used.
+ *       If you manage no store, the request is rejected (403).
  *     requestBody:
  *       required: true
  *       content:
@@ -27,6 +37,10 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *                 type: string
  *               qtyOut:
  *                 oneOf: [{ type: string }, { type: number }]
+ *               storeId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Optional. Must be a store where you are the manager. If omitted, first managed store is used.
  *               referenceNo:
  *                 type: string
  *                 nullable: true
@@ -42,8 +56,10 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         description: Student collection created
  *       400:
  *         description: Validation error
+ *       403:
+ *         description: User is not a store manager or cannot issue from the chosen store
  *       404:
- *         description: Referenced item/student not found
+ *         description: Referenced item, student, or store not found
  *       500:
  *         description: Server error
  *   get:
@@ -497,7 +513,10 @@ export const studentCollectionController = {
    *     tags: [StudentCollections]
    *     security:
    *       - bearerAuth: []
-   *     description: Creates multiple InventoryTransaction rows with transactionType=student_collection (locked). Status defaults to completed. Shared studentId/referenceNo/notes/transactionDate; only items[].itemId and items[].qtyOut vary.
+   *     description: |
+   *       Creates multiple InventoryTransaction rows with transactionType=student_collection (locked).
+   *       Shared studentId, storeId (optional; defaults to first managed store), referenceNo, notes, transactionDate.
+   *       Only items[].itemId and items[].qtyOut vary. Issuer must manage a store unless storeId resolves from assignment.
    *     requestBody:
    *       required: true
    *       content:
@@ -518,33 +537,42 @@ export const studentCollectionController = {
    *                 type: string
    *                 format: date-time
    *                 description: Optional. Defaults to today.
+   *               storeId:
+   *                 type: string
+   *                 format: uuid
+   *                 description: Optional. Store you manage; if omitted, first managed store is used.
    *               items:
-   *                 type: array
-   *                 minItems: 1
-   *                 items:
-   *                   type: object
-   *                   required: [itemId, qtyOut]
-   *                   properties:
-   *                     itemId:
-   *                       type: string
-   *                     qtyOut:
-   *                       oneOf: [{ type: string }, { type: number }]
-   *     responses:
-   *       201:
-   *         description: Student collections created
-   *       400:
-   *         description: Validation error
-   *       404:
-   *         description: Referenced item/student not found
-   *       500:
-   *         description: Server error
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required: [itemId, qtyOut]
+ *                   properties:
+ *                     itemId:
+ *                       type: string
+ *                     qtyOut:
+ *                       oneOf: [{ type: string }, { type: number }]
+ *     responses:
+ *       201:
+ *         description: Student collections created
+ *       400:
+ *         description: Validation error
+ *       403:
+ *         description: Not a store manager or cannot issue from chosen store
+ *       404:
+ *         description: Referenced item/student/store not found
+ *       500:
+ *         description: Server error
    */
   createBulkStudentCollections: async (req: Request, res: Response) => {
     try {
-      const { studentId, referenceNo, notes, transactionDate, items } = req.body ?? {};
+      const { studentId, referenceNo, notes, transactionDate, items, storeId } = req.body ?? {};
 
       if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
         return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+      if (storeId !== undefined && storeId !== null && (typeof storeId !== "string" || !storeId.trim())) {
+        return res.status(400).json({ success: false, message: "storeId must be a non-empty string or null" });
       }
       if (!isStringOrNullOrUndefined(referenceNo)) {
         return res
@@ -613,6 +641,7 @@ export const studentCollectionController = {
         notes: notes === undefined ? null : notes,
         transactionDate: parsedDate ?? undefined,
         createdById,
+        storeId: storeId === undefined ? undefined : storeId === null ? null : storeId.trim(),
         items: normalizedItems,
       });
 
@@ -623,20 +652,22 @@ export const studentCollectionController = {
       });
     } catch (error: any) {
       const message = error?.message ?? "Failed to create student collections";
-      const code = message.startsWith("Invalid ") ? 404 : 500;
-      return res.status(code).json({ success: false, message });
+      return res.status(httpStatusForStudentCollectionCreate(message)).json({ success: false, message });
     }
   },
 
   createStudentCollection: async (req: Request, res: Response) => {
     try {
-      const { itemId, studentId, qtyOut, referenceNo, notes, transactionDate } = req.body ?? {};
+      const { itemId, studentId, qtyOut, referenceNo, notes, transactionDate, storeId } = req.body ?? {};
 
       if (!itemId || typeof itemId !== "string" || !itemId.trim()) {
         return res.status(400).json({ success: false, message: "itemId is required" });
       }
       if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
         return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+      if (storeId !== undefined && storeId !== null && (typeof storeId !== "string" || !storeId.trim())) {
+        return res.status(400).json({ success: false, message: "storeId must be a non-empty string or null" });
       }
       if (!isNumberOrString(qtyOut)) {
         return res
@@ -685,6 +716,7 @@ export const studentCollectionController = {
         notes: notes === undefined || notes === null || notes.trim() === "" ? null : notes,
         transactionDate: parsedDate ?? undefined,
         createdById,
+        storeId: storeId === undefined ? undefined : storeId === null ? null : storeId.trim(),
       });
 
       return res.status(201).json({
@@ -694,14 +726,12 @@ export const studentCollectionController = {
       });
     } catch (error: any) {
       const message = error?.message ?? "Failed to create student collection";
-      const code = message.startsWith("Invalid ") ? 404 : 500;
-      return res.status(code).json({ success: false, message });
+      return res.status(httpStatusForStudentCollectionCreate(message)).json({ success: false, message });
     }
   },
 
   listStudentCollections: async (req: Request, res: Response) => {
     try {
-      console.log(req.query);
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
       const itemId = typeof req.query.itemId === "string" ? req.query.itemId : undefined;
       const studentId = typeof req.query.studentId === "string" ? req.query.studentId : undefined;

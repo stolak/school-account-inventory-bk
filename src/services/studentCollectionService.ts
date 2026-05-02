@@ -1,5 +1,6 @@
 import prisma from "../utils/prisma";
 import { activePeriodService } from "./activePeriodService";
+import { resolveStoreIdForIssuer } from "./resolveStoreForIssuer";
 import { InventoryTransactionStatus, InventoryTransactionType, Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 
@@ -18,9 +19,11 @@ export interface StudentCollectionData {
   subclassId: string | null;
   transactionDate: Date;
   createdById: string;
+  storeId: string | null;
   createdAt: Date;
   updatedAt: Date;
   item?: { name: string } | null;
+  store?: { id: string; name: string } | null;
   student?: {
     id: string;
     admissionNumber: string;
@@ -129,10 +132,13 @@ export class StudentCollectionService {
     referenceNo?: string | null;
     notes?: string | null;
     studentId?: string | null;
+    storeId?: string | null;
     transactionDate?: Date;
     createdById: string;
   }): Promise<StudentCollectionData> {
     await this.assertItemExists(input.itemId);
+
+    const storeId = await resolveStoreIdForIssuer(input.storeId, input.createdById);
 
     const studentIdNormalized = input.studentId ?? null;
     const studentDerived = studentIdNormalized
@@ -160,11 +166,13 @@ export class StudentCollectionService {
         subclassId: studentDerived?.subclassId ?? null,
         sessionId: active.sessionId,
         termId: active.termId,
+        storeId,
         transactionDate: input.transactionDate ?? new Date(),
         createdById: input.createdById,
       },
       include: {
         item: { select: { name: true } },
+        store: { select: { id: true, name: true } },
         createdBy: { select: { firstName: true, lastName: true } },
       },
     });
@@ -176,9 +184,12 @@ export class StudentCollectionService {
     transactionDate?: Date;
     createdById: string;
     studentId?: string | null;
+    storeId?: string | null;
     items: Array<{ itemId: string; qtyOut: string | number }>;
   }): Promise<StudentCollectionData[]> {
     if (!input.items.length) throw new Error("items must not be empty");
+
+    const storeId = await resolveStoreIdForIssuer(input.storeId, input.createdById);
 
     const itemIds = [...new Set(input.items.map((i) => i.itemId))];
     const existingItems = await this.prisma.inventoryItem.findMany({
@@ -221,11 +232,13 @@ export class StudentCollectionService {
             subclassId: studentDerived?.subclassId ?? null,
             sessionId: active.sessionId,
             termId: active.termId,
+            storeId,
             transactionDate: txDate,
             createdById: input.createdById,
           },
           include: {
             item: { select: { name: true } },
+            store: { select: { id: true, name: true } },
             createdBy: { select: { firstName: true, lastName: true } },
           },
         })
@@ -253,6 +266,7 @@ export class StudentCollectionService {
         take: limit,
         include: {
           item: { select: { name: true } },
+          store: { select: { id: true, name: true } },
           student: {
             select: {
               id: true,
@@ -339,6 +353,7 @@ export class StudentCollectionService {
       where: { id, transactionType: InventoryTransactionType.student_collection },
       include: {
         item: { select: { name: true } },
+        store: { select: { id: true, name: true } },
         createdBy: { select: { firstName: true, lastName: true } },
       },
     });
@@ -394,6 +409,7 @@ export class StudentCollectionService {
       },
       include: {
         item: { select: { name: true } },
+        store: { select: { id: true, name: true } },
         createdBy: { select: { firstName: true, lastName: true } },
       },
     });
@@ -470,6 +486,7 @@ export class StudentCollectionService {
           },
           include: {
             item: { select: { name: true } },
+            store: { select: { id: true, name: true } },
             createdBy: { select: { firstName: true, lastName: true } },
           },
         });
@@ -489,6 +506,7 @@ export class StudentCollectionService {
       where: { id },
       include: {
         item: { select: { name: true } },
+        store: { select: { id: true, name: true } },
         createdBy: { select: { firstName: true, lastName: true } },
       },
     });
@@ -502,6 +520,7 @@ export class StudentCollectionService {
       where: { id: { in: ids }, transactionType: InventoryTransactionType.student_collection },
       include: {
         item: { select: { name: true } },
+        store: { select: { id: true, name: true } },
         createdBy: { select: { firstName: true, lastName: true } },
       },
     });

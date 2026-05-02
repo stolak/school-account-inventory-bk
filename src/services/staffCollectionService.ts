@@ -1,5 +1,6 @@
 import prisma from "../utils/prisma";
 import { activePeriodService } from "./activePeriodService";
+import { resolveStoreIdForIssuer } from "./resolveStoreForIssuer";
 import { InventoryTransactionStatus, InventoryTransactionType, Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 
@@ -17,9 +18,11 @@ export interface StaffCollectionData {
   sessionId: string | null;
   transactionDate: Date;
   createdById: string;
+  storeId: string | null;
   createdAt: Date;
   updatedAt: Date;
   item?: { name: string } | null;
+  store?: { id: string; name: string } | null;
   staff?: { id: string; StaffNumber: string; name: string; email: string } | null;
   createdBy?: { firstName: string | null; lastName: string | null } | null;
 }
@@ -50,6 +53,13 @@ function generateReferenceNo(): string {
   const day = String(d.getUTCDate()).padStart(2, "0");
   return `SFC-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
+
+const staffCollectionInclude = {
+  item: { select: { name: true } },
+  staff: { select: { id: true, StaffNumber: true, name: true, email: true } },
+  createdBy: { select: { firstName: true, lastName: true } },
+  store: { select: { id: true, name: true } },
+} satisfies Prisma.InventoryTransactionInclude;
 
 export class StaffCollectionService {
   private prisma = prisma;
@@ -101,10 +111,13 @@ export class StaffCollectionService {
     staffId?: string | null;
     transactionDate?: Date;
     createdById: string;
+    storeId?: string | null;
   }): Promise<StaffCollectionData> {
     await this.assertItemExists(input.itemId);
     const staffIdNormalized = input.staffId ?? null;
     if (staffIdNormalized) await this.assertStaffExists(staffIdNormalized);
+
+    const storeId = await resolveStoreIdForIssuer(input.storeId, input.createdById);
 
     const active = await this.getActivePeriodIdsOrNull();
     const finalReferenceNo =
@@ -126,12 +139,9 @@ export class StaffCollectionService {
         termId: active.termId,
         transactionDate: input.transactionDate ?? new Date(),
         createdById: input.createdById,
+        storeId,
       },
-      include: {
-        item: { select: { name: true } },
-        staff: { select: { id: true, StaffNumber: true, name: true, email: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: staffCollectionInclude,
     });
   }
 
@@ -141,12 +151,15 @@ export class StaffCollectionService {
     notes?: string | null;
     transactionDate?: Date;
     createdById: string;
+    storeId?: string | null;
     items: Array<{ itemId: string; qtyOut: string | number; outCost?: string | number }>;
   }): Promise<StaffCollectionData[]> {
     if (!input.items.length) throw new Error("items must not be empty");
 
     const staffIdNormalized = input.staffId ?? null;
     if (staffIdNormalized) await this.assertStaffExists(staffIdNormalized);
+
+    const storeId = await resolveStoreIdForIssuer(input.storeId, input.createdById);
 
     const itemIds = [...new Set(input.items.map((i) => i.itemId))];
     const existingItems = await this.prisma.inventoryItem.findMany({ where: { id: { in: itemIds } }, select: { id: true } });
@@ -177,12 +190,9 @@ export class StaffCollectionService {
             termId: active.termId,
             transactionDate: txDate,
             createdById: input.createdById,
+            storeId,
           },
-          include: {
-            item: { select: { name: true } },
-            staff: { select: { id: true, StaffNumber: true, name: true, email: true } },
-            createdBy: { select: { firstName: true, lastName: true } },
-          },
+          include: staffCollectionInclude,
         })
       )
     );
@@ -205,11 +215,7 @@ export class StaffCollectionService {
         orderBy: { transactionDate: "desc" },
         skip,
         take: limit,
-        include: {
-          item: { select: { name: true } },
-          staff: { select: { id: true, StaffNumber: true, name: true, email: true } },
-          createdBy: { select: { firstName: true, lastName: true } },
-        },
+        include: staffCollectionInclude,
       }),
     ]);
 
@@ -220,11 +226,7 @@ export class StaffCollectionService {
   async getStaffCollectionById(id: string): Promise<StaffCollectionData | null> {
     return await this.prisma.inventoryTransaction.findFirst({
       where: { id, transactionType: InventoryTransactionType.staff_collection },
-      include: {
-        item: { select: { name: true } },
-        staff: { select: { id: true, StaffNumber: true, name: true, email: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: staffCollectionInclude,
     });
   }
 
@@ -264,11 +266,7 @@ export class StaffCollectionService {
         status: InventoryTransactionStatus.completed,
         updatedAt: new Date(),
       },
-      include: {
-        item: { select: { name: true } },
-        staff: { select: { id: true, StaffNumber: true, name: true, email: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: staffCollectionInclude,
     });
   }
 
@@ -332,11 +330,7 @@ export class StaffCollectionService {
             status: InventoryTransactionStatus.completed,
             updatedAt: new Date(),
           },
-          include: {
-            item: { select: { name: true } },
-            staff: { select: { id: true, StaffNumber: true, name: true, email: true } },
-            createdBy: { select: { firstName: true, lastName: true } },
-          },
+          include: staffCollectionInclude,
         });
         out.push(row);
       }
@@ -349,11 +343,7 @@ export class StaffCollectionService {
     if (!existing) throw new Error("Staff collection not found");
     return await this.prisma.inventoryTransaction.delete({
       where: { id },
-      include: {
-        item: { select: { name: true } },
-        staff: { select: { id: true, StaffNumber: true, name: true, email: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: staffCollectionInclude,
     });
   }
 
@@ -363,11 +353,7 @@ export class StaffCollectionService {
 
     const existing = await this.prisma.inventoryTransaction.findMany({
       where: { id: { in: ids }, transactionType: InventoryTransactionType.staff_collection },
-      include: {
-        item: { select: { name: true } },
-        staff: { select: { id: true, StaffNumber: true, name: true, email: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: staffCollectionInclude,
     });
     const existingSet = new Set(existing.map((r) => r.id));
     const missing = ids.filter((id) => !existingSet.has(id));

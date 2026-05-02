@@ -4,6 +4,12 @@ import { projectCollectionService } from "../services/projectCollectionService";
 import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
+function httpStatusForProjectCollectionCreate(message: string): number {
+  if (message.startsWith("Invalid ")) return 404;
+  if (message.includes("not authorized to issue items")) return 403;
+  return 500;
+}
+
 /**
  * @openapi
  * /api/v1/project-collections:
@@ -17,6 +23,7 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *       Status is completed. sessionId/termId come from the active period.
  *       referenceNo is auto-generated (PCOL-YYYYMMDD-xxxxxxxx) if omitted or empty.
  *       notes is required. projectId must exist. staffId and hostelId are optional; when provided they must exist.
+ *       storeId optional — must be a store you manage; if omitted, the first store you manage (by name) is used. If you manage no store, the request is rejected (403).
  *     requestBody:
  *       required: true
  *       content:
@@ -52,6 +59,10 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *                 type: string
  *                 format: date-time
  *                 description: Defaults to now if omitted
+ *               storeId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Optional. Must be a store you manage; defaults to first managed store by name.
  *     responses:
  *       201:
  *         description: Project collection created
@@ -59,8 +70,10 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         description: Validation error
  *       401:
  *         description: Unauthorized (missing or invalid JWT)
+ *       403:
+ *         description: Issuer is not allowed to issue from store(s)
  *       404:
- *         description: Invalid itemId, projectId, staffId, or hostelId
+ *         description: Invalid itemId, projectId, staffId, hostelId, or storeId
  *       500:
  *         description: Server error
  *   get:
@@ -134,8 +147,8 @@ export const projectCollectionController = {
    *       - bearerAuth: []
    *     description: |
    *       Creates multiple rows with transactionType=project_collection.
-   *       Shared notes, projectId, optional staffId/hostelId, referenceNo, and transactionDate across all rows.
-   *       Each items[] entry supplies itemId and qtyOut. notes and projectId are required.
+ *       Shared notes, projectId, optional staffId/hostelId/referenceNo/transactionDate/storeId across all rows.
+ *       Each items[] entry supplies itemId and qtyOut. notes and projectId are required. storeId follows single-create rules.
    *     requestBody:
    *       required: true
    *       content:
@@ -161,36 +174,41 @@ export const projectCollectionController = {
    *               referenceNo:
    *                 type: string
    *                 nullable: true
-   *               transactionDate:
-   *                 type: string
-   *                 format: date-time
-   *               items:
-   *                 type: array
-   *                 minItems: 1
-   *                 items:
-   *                   type: object
-   *                   required: [itemId, qtyOut]
-   *                   properties:
-   *                     itemId:
-   *                       type: string
-   *                       format: uuid
-   *                     qtyOut:
-   *                       oneOf: [{ type: string }, { type: number }]
-   *     responses:
-   *       201:
-   *         description: Project collections created
-   *       400:
-   *         description: Validation error
-   *       401:
-   *         description: Unauthorized
-   *       404:
-   *         description: Invalid itemId(s), projectId, staffId, or hostelId
-   *       500:
-   *         description: Server error
-   */
+ *               transactionDate:
+ *                 type: string
+ *                 format: date-time
+ *               storeId:
+ *                 type: string
+ *                 nullable: true
+ *               items:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required: [itemId, qtyOut]
+ *                   properties:
+ *                     itemId:
+ *                       type: string
+ *                       format: uuid
+ *                     qtyOut:
+ *                       oneOf: [{ type: string }, { type: number }]
+ *     responses:
+ *       201:
+ *         description: Project collections created
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Issuer is not allowed to issue from store(s)
+ *       404:
+ *         description: Invalid itemId(s), projectId, staffId, hostelId, or storeId
+ *       500:
+ *         description: Server error
+ */
   createBulkProjectCollections: async (req: Request, res: Response) => {
     try {
-      const { referenceNo, notes, transactionDate, items, projectId, staffId, hostelId } = req.body ?? {};
+      const { referenceNo, notes, transactionDate, items, projectId, staffId, hostelId, storeId } = req.body ?? {};
 
       if (notes === undefined || notes === null || typeof notes !== "string" || !notes.trim()) {
         return res.status(400).json({ success: false, message: "notes is required and must be a non-empty string" });
@@ -209,6 +227,9 @@ export const projectCollectionController = {
       }
       if (transactionDate !== undefined && typeof transactionDate !== "string") {
         return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
+      }
+      if (storeId !== undefined && storeId !== null && (typeof storeId !== "string" || !storeId.trim())) {
+        return res.status(400).json({ success: false, message: "storeId must be a non-empty string or null" });
       }
       const parsedDate =
         transactionDate === undefined
@@ -256,14 +277,14 @@ export const projectCollectionController = {
         referenceNo: referenceNo === undefined ? null : referenceNo,
         transactionDate: parsedDate ?? undefined,
         createdById,
+        storeId: storeId === undefined ? undefined : storeId === null ? null : storeId.trim(),
         items: normalizedItems,
       });
 
       return res.status(201).json({ success: true, message: "Project collections created successfully", data: created });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to create project collections";
-      const code = message.startsWith("Invalid ") ? 404 : 500;
-      return res.status(code).json({ success: false, message });
+      return res.status(httpStatusForProjectCollectionCreate(message)).json({ success: false, message });
     }
   },
 
@@ -491,7 +512,7 @@ export const projectCollectionController = {
 
   createProjectCollection: async (req: Request, res: Response) => {
     try {
-      const { itemId, qtyOut, referenceNo, notes, transactionDate, projectId, staffId, hostelId } = req.body ?? {};
+      const { itemId, qtyOut, referenceNo, notes, transactionDate, projectId, staffId, hostelId, storeId } = req.body ?? {};
 
       if (!itemId || typeof itemId !== "string" || !itemId.trim()) {
         return res.status(400).json({ success: false, message: "itemId is required" });
@@ -514,6 +535,9 @@ export const projectCollectionController = {
       }
       if (hostelId !== undefined && hostelId !== null && (typeof hostelId !== "string" || !hostelId.trim())) {
         return res.status(400).json({ success: false, message: "hostelId must be a non-empty string or null" });
+      }
+      if (storeId !== undefined && storeId !== null && (typeof storeId !== "string" || !storeId.trim())) {
+        return res.status(400).json({ success: false, message: "storeId must be a non-empty string or null" });
       }
       if (referenceNo !== undefined && referenceNo !== null && typeof referenceNo !== "string") {
         return res.status(400).json({ success: false, message: "referenceNo must be a string or null" });
@@ -545,13 +569,13 @@ export const projectCollectionController = {
         referenceNo: referenceNo === undefined ? undefined : referenceNo,
         transactionDate: parsedDate ?? undefined,
         createdById,
+        storeId: storeId === undefined ? undefined : storeId === null ? null : storeId.trim(),
       });
 
       return res.status(201).json({ success: true, message: "Project collection created successfully", data: created });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to create project collection";
-      const code = message.startsWith("Invalid ") ? 404 : 500;
-      return res.status(code).json({ success: false, message });
+      return res.status(httpStatusForProjectCollectionCreate(message)).json({ success: false, message });
     }
   },
 

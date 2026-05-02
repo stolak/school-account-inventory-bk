@@ -4,6 +4,12 @@ import { staffCollectionService } from "../services/staffCollectionService";
 import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
+function httpStatusForStaffCollectionCreate(message: string): number {
+  if (message.startsWith("Invalid ")) return 404;
+  if (message.includes("not authorized to issue items")) return 403;
+  return 500;
+}
+
 /**
  * @openapi
  * /api/v1/staff-collections:
@@ -12,7 +18,9 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *     tags: [StaffCollections]
  *     security:
  *       - bearerAuth: []
- *     description: Creates an InventoryTransaction with transactionType=staff_collection (locked). Status defaults to completed. sessionId/termId derived from active period; referenceNo auto-generated if missing.
+ *     description: |
+ *       Creates an InventoryTransaction with transactionType=staff_collection (locked). Status defaults to completed. sessionId/termId derived from active period; referenceNo auto-generated if missing.
+ *       storeId optional — must be a store you manage; if omitted, the first store you manage (by name) is used. If you manage no store, the request is rejected (403).
  *     requestBody:
  *       required: true
  *       content:
@@ -40,13 +48,19 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *                 type: string
  *                 format: date-time
  *                 description: Optional. Defaults to today.
+ *               storeId:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Optional. Must be a store you manage; defaults to first managed store by name.
  *     responses:
  *       201:
  *         description: Staff collection created
  *       400:
  *         description: Validation error
+ *       403:
+ *         description: Issuer is not allowed to issue from store(s)
  *       404:
- *         description: Referenced item/staff not found
+ *         description: Referenced item/staff/store not found
  *       500:
  *         description: Server error
  *   get:
@@ -121,7 +135,9 @@ export const staffCollectionController = {
    *     tags: [StaffCollections]
    *     security:
    *       - bearerAuth: []
-   *     description: Creates multiple InventoryTransaction rows with transactionType=staff_collection (locked). Status defaults to completed. Shared staffId/referenceNo/notes/transactionDate; only items[].itemId and items[].qtyOut/outCost vary.
+   *     description: |
+   *       Creates multiple InventoryTransaction rows with transactionType=staff_collection (locked). Status defaults to completed. Shared staffId/referenceNo/notes/transactionDate/storeId; only items[].itemId and items[].qtyOut/outCost vary.
+   *       storeId optional — same rules as single create (defaults to first managed store; 403 if not a store manager).
    *     requestBody:
    *       required: true
    *       content:
@@ -141,6 +157,9 @@ export const staffCollectionController = {
    *               transactionDate:
    *                 type: string
    *                 format: date-time
+   *               storeId:
+   *                 type: string
+   *                 nullable: true
    *               items:
    *                 type: array
    *                 minItems: 1
@@ -156,11 +175,12 @@ export const staffCollectionController = {
    *     responses:
    *       201: { description: Staff collections created }
    *       400: { description: Validation error }
-   *       404: { description: Referenced item/staff not found }
+   *       403: { description: Issuer is not allowed to issue from store(s) }
+   *       404: { description: Referenced item/staff/store not found }
    */
   createBulkStaffCollections: async (req: Request, res: Response) => {
     try {
-      const { staffId, referenceNo, notes, transactionDate, items } = req.body ?? {};
+      const { staffId, referenceNo, notes, transactionDate, items, storeId } = req.body ?? {};
       if (!staffId || typeof staffId !== "string" || !staffId.trim()) {
         return res.status(400).json({ success: false, message: "staffId is required" });
       }
@@ -172,6 +192,9 @@ export const staffCollectionController = {
       }
       if (transactionDate !== undefined && typeof transactionDate !== "string") {
         return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
+      }
+      if (storeId !== undefined && storeId !== null && (typeof storeId !== "string" || !storeId.trim())) {
+        return res.status(400).json({ success: false, message: "storeId must be a non-empty string or null" });
       }
       const parsedDate =
         transactionDate === undefined
@@ -226,14 +249,14 @@ export const staffCollectionController = {
         notes: notes === undefined ? null : notes,
         transactionDate: parsedDate ?? undefined,
         createdById,
+        storeId: storeId === undefined ? undefined : storeId === null ? null : storeId.trim(),
         items: normalizedItems,
       });
 
       return res.status(201).json({ success: true, message: "Staff collections created successfully", data: created });
     } catch (error: any) {
       const message = error?.message ?? "Failed to create staff collections";
-      const code = message.startsWith("Invalid ") ? 404 : 500;
-      return res.status(code).json({ success: false, message });
+      return res.status(httpStatusForStaffCollectionCreate(message)).json({ success: false, message });
     }
   },
 
@@ -406,7 +429,7 @@ export const staffCollectionController = {
 
   createStaffCollection: async (req: Request, res: Response) => {
     try {
-      const { itemId, staffId, qtyOut, outCost, referenceNo, notes, transactionDate } = req.body ?? {};
+      const { itemId, staffId, qtyOut, outCost, referenceNo, notes, transactionDate, storeId } = req.body ?? {};
 
       if (!itemId || typeof itemId !== "string" || !itemId.trim()) {
         return res.status(400).json({ success: false, message: "itemId is required" });
@@ -439,6 +462,9 @@ export const staffCollectionController = {
       if (transactionDate !== undefined && typeof transactionDate !== "string") {
         return res.status(400).json({ success: false, message: "transactionDate must be an ISO date string" });
       }
+      if (storeId !== undefined && storeId !== null && (typeof storeId !== "string" || !storeId.trim())) {
+        return res.status(400).json({ success: false, message: "storeId must be a non-empty string or null" });
+      }
       const parsedDate =
         transactionDate === undefined
           ? undefined
@@ -462,13 +488,13 @@ export const staffCollectionController = {
         notes: notes === undefined || notes === null || notes.trim() === "" ? null : notes,
         transactionDate: parsedDate ?? undefined,
         createdById,
+        storeId: storeId === undefined ? undefined : storeId === null ? null : storeId.trim(),
       });
 
       return res.status(201).json({ success: true, message: "Staff collection created successfully", data: created });
     } catch (error: any) {
       const message = error?.message ?? "Failed to create staff collection";
-      const code = message.startsWith("Invalid ") ? 404 : 500;
-      return res.status(code).json({ success: false, message });
+      return res.status(httpStatusForStaffCollectionCreate(message)).json({ success: false, message });
     }
   },
 

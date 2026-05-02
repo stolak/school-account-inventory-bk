@@ -1,5 +1,6 @@
 import prisma from "../utils/prisma";
 import { activePeriodService } from "./activePeriodService";
+import { resolveStoreIdForIssuer } from "./resolveStoreForIssuer";
 import { InventoryTransactionStatus, InventoryTransactionType, Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 
@@ -18,9 +19,11 @@ export interface ProjectCollectionTransactionData {
   hostelId: string | null;
   transactionDate: Date;
   createdById: string;
+  storeId: string | null;
   createdAt: Date;
   updatedAt: Date;
   item?: { name: string } | null;
+  store?: { id: string; name: string } | null;
   createdBy?: { firstName: string | null; lastName: string | null } | null;
   project?: { id: string; name: string } | null;
   staff?: { id: string; StaffNumber: string; name: string; email: string } | null;
@@ -57,6 +60,7 @@ function generateReferenceNo(): string {
 const collectionInclude = {
   item: { select: { name: true } },
   createdBy: { select: { firstName: true, lastName: true } },
+  store: { select: { id: true, name: true } },
   project: { select: { id: true, name: true } },
   staff: { select: { id: true, StaffNumber: true, name: true, email: true } },
   hostel: { select: { id: true, name: true } },
@@ -123,11 +127,14 @@ export class ProjectCollectionService {
     referenceNo?: string | null;
     transactionDate?: Date;
     createdById: string;
+    storeId?: string | null;
   }): Promise<ProjectCollectionTransactionData> {
     await this.assertItemExists(input.itemId);
     await this.assertProjectExists(input.projectId);
     if (input.staffId) await this.assertStaffExists(input.staffId);
     if (input.hostelId) await this.assertHostelExists(input.hostelId);
+
+    const storeId = await resolveStoreIdForIssuer(input.storeId, input.createdById);
 
     const active = await this.getActivePeriodIdsOrNull();
     const finalReferenceNo =
@@ -150,6 +157,7 @@ export class ProjectCollectionService {
         hostelId: input.hostelId ?? null,
         transactionDate: input.transactionDate ?? new Date(),
         createdById: input.createdById,
+        storeId,
       },
       include: collectionInclude,
     });
@@ -163,6 +171,7 @@ export class ProjectCollectionService {
     referenceNo?: string | null;
     transactionDate?: Date;
     createdById: string;
+    storeId?: string | null;
     items: Array<{ itemId: string; qtyOut: string | number }>;
   }): Promise<ProjectCollectionTransactionData[]> {
     if (!input.items.length) throw new Error("items must not be empty");
@@ -170,6 +179,8 @@ export class ProjectCollectionService {
     await this.assertProjectExists(input.projectId);
     if (input.staffId) await this.assertStaffExists(input.staffId);
     if (input.hostelId) await this.assertHostelExists(input.hostelId);
+
+    const storeId = await resolveStoreIdForIssuer(input.storeId, input.createdById);
 
     const itemIds = [...new Set(input.items.map((i) => i.itemId))];
     const existingItems = await this.prisma.inventoryItem.findMany({
@@ -204,6 +215,7 @@ export class ProjectCollectionService {
             hostelId: input.hostelId ?? null,
             transactionDate: txDate,
             createdById: input.createdById,
+            storeId,
           },
           include: collectionInclude,
         })
