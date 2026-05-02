@@ -1,5 +1,5 @@
 import prisma from "../utils/prisma";
-import { Prisma } from "@prisma/client";
+import { InventoryTransactionStatus, InventoryTransactionType, Prisma } from "@prisma/client";
 import { Status } from "@prisma/client";
 
 export interface InventoryItemData {
@@ -35,6 +35,76 @@ export interface ListInventoryItemsParams {
 
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
+}
+
+function endOfUtcDay(d: Date): Date {
+  const y = d.getUTCFullYear();
+  const m = d.getUTCMonth();
+  const day = d.getUTCDate();
+  return new Date(Date.UTC(y, m, day, 23, 59, 59, 999));
+}
+
+function startOfUtcMonthContaining(d: Date): Date {
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1, 0, 0, 0, 0));
+}
+
+/** Default window: first day of current UTC month 00:00 through end of today UTC. */
+function defaultMonthIntervalToToday(): { from: Date; to: Date } {
+  const now = new Date();
+  return { from: startOfUtcMonthContaining(now), to: endOfUtcDay(now) };
+}
+
+function decimalNetBalance(sumIn: Prisma.Decimal | null, sumOut: Prisma.Decimal | null): string {
+  const qtyIn = sumIn ?? new Prisma.Decimal(0);
+  const qtyOut = sumOut ?? new Prisma.Decimal(0);
+  return qtyIn.minus(qtyOut).toString();
+}
+
+export interface InventoryItemTransactionLogParams {
+  itemId: string;
+  storeId?: string;
+  transactionDateFrom?: Date;
+  transactionDateTo?: Date;
+}
+
+export type InventoryItemTransactionLogRow = {
+  id: string;
+  transactionType: InventoryTransactionType;
+  qtyIn: string;
+  qtyOut: string;
+  inCost: string;
+  outCost: string;
+  amountPaid: string;
+  status: InventoryTransactionStatus;
+  referenceNo: string | null;
+  notes: string | null;
+  transactionDate: Date;
+  store: { id: string; name: string } | null;
+  createdBy: { id: string; firstName: string | null; lastName: string | null };
+};
+
+export interface InventoryItemTransactionLogResult {
+  item: { id: string; name: string; sku: string | null };
+  transactionDateFrom: Date;
+  transactionDateTo: Date;
+  storeId: string | null;
+  /** Sum(qtyIn) − sum(qtyOut) for completed rows with transactionDate strictly before `transactionDateFrom`. */
+  balanceBeforeFromDate: string;
+  transactions: InventoryItemTransactionLogRow[];
+}
+
+export interface ItemBalancesParams {
+  categoryId?: string;
+  subCategoryId?: string;
+  storeId?: string;
+}
+
+export interface ItemBalanceRow {
+  itemId: string;
+  name: string;
+  sku: string | null;
+  /** sum(qtyIn) − sum(qtyOut) for completed transactions; scoped by store when `storeId` was passed. */
+  balance: string;
 }
 
 function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
@@ -228,6 +298,168 @@ export class InventoryItemService {
 
   async getInventoryItemById(id: string): Promise<InventoryItemData | null> {
     return await this.prisma.inventoryItem.findUnique({ where: { id } });
+  }
+
+  /**
+   * Completed inventory transactions for an item in a date window. Defaults to current UTC month through today.
+   * Opening balance uses completed rows only, strictly before the window start; scoped by store when `storeId` is set.
+   */
+  async getInventoryItemTransactionLog(
+    params: InventoryItemTransactionLogParams
+  ): Promise<InventoryItemTransactionLogResult> {
+    const itemId = params.itemId.trim();
+    if (!itemId) throw new Error("itemId is required");
+
+    const storeId = params.storeId?.trim();
+    if (storeId && storeId.length > 0) {
+      const store = await this.prisma.store.findUnique({ where: { id: storeId }, select: { id: true } });
+      if (!store) throw new Error("Invalid storeId");
+    }
+
+    const item = await this.prisma.inventoryItem.findUnique({
+      where: { id: itemId },
+      select: { id: true, name: true, sku: true },
+    });
+    if (!item) throw new Error("Inventory item not found");
+
+    let from: Date;
+    let to: Date;
+    if (params.transactionDateFrom !== undefined && params.transactionDateTo !== undefined) {
+      from = params.transactionDateFrom;
+      to = params.transactionDateTo;
+    } else if (params.transactionDateFrom !== undefined) {
+      from = params.transactionDateFrom;
+      to = endOfUtcDay(new Date());
+    } else if (params.transactionDateTo !== undefined) {
+      const t = params.transactionDateTo;
+      from = startOfUtcMonthContaining(t);
+      to = endOfUtcDay(t);
+    } else {
+      ({ from, to } = defaultMonthIntervalToToday());
+    }
+
+    if (from.getTime() > to.getTime()) {
+      throw new Error("transactionDateFrom must be before or equal to transactionDateTo");
+    }
+
+    const storeFilter = storeId && storeId.length > 0 ? { storeId } : {};
+
+    const completed = InventoryTransactionStatus.completed;
+
+    const [balanceAgg, rows] = await Promise.all([
+      this.prisma.inventoryTransaction.aggregate({
+        where: {
+          itemId,
+          status: completed,
+          transactionDate: { lt: from },
+          ...storeFilter,
+        },
+        _sum: { qtyIn: true, qtyOut: true },
+      }),
+      this.prisma.inventoryTransaction.findMany({
+        where: {
+          itemId,
+          status: completed,
+          transactionDate: { gte: from, lte: to },
+          ...storeFilter,
+        },
+        orderBy: [{ transactionDate: "asc" }, { id: "asc" }],
+        include: {
+          store: { select: { id: true, name: true } },
+          createdBy: { select: { id: true, firstName: true, lastName: true } },
+        },
+      }),
+    ]);
+
+    const balanceBeforeFromDate = decimalNetBalance(balanceAgg._sum.qtyIn ?? null, balanceAgg._sum.qtyOut ?? null);
+
+    const transactions: InventoryItemTransactionLogRow[] = rows.map((r) => ({
+      id: r.id,
+      transactionType: r.transactionType,
+      qtyIn: r.qtyIn.toString(),
+      qtyOut: r.qtyOut.toString(),
+      inCost: r.inCost.toString(),
+      outCost: r.outCost.toString(),
+      amountPaid: r.amountPaid.toString(),
+      status: r.status,
+      referenceNo: r.referenceNo,
+      notes: r.notes,
+      transactionDate: r.transactionDate,
+      store: r.store,
+      createdBy: r.createdBy,
+    }));
+
+    return {
+      item,
+      transactionDateFrom: from,
+      transactionDateTo: to,
+      storeId: storeId && storeId.length > 0 ? storeId : null,
+      balanceBeforeFromDate,
+      transactions,
+    };
+  }
+
+  /**
+   * Current quantity balance per item (completed transactions only): sum(qtyIn) − sum(qtyOut).
+   * Only **Active** catalog items are included; optional filters narrow which items participate.
+   */
+  async getItemBalancesGrouped(params: ItemBalancesParams = {}): Promise<{ balances: ItemBalanceRow[] }> {
+    const categoryId = params.categoryId?.trim();
+    const subCategoryId = params.subCategoryId?.trim();
+    const storeId = params.storeId?.trim();
+
+    if (storeId) {
+      const st = await this.prisma.store.findUnique({ where: { id: storeId }, select: { id: true } });
+      if (!st) throw new Error("Invalid storeId");
+    }
+
+    await this.assertLookupsExist({
+      ...(categoryId ? { categoryId } : {}),
+      ...(subCategoryId ? { subCategoryId } : {}),
+    });
+
+    const items = await this.prisma.inventoryItem.findMany({
+      where: {
+        status: Status.Active,
+        ...(categoryId ? { categoryId } : {}),
+        ...(subCategoryId ? { subCategoryId } : {}),
+      },
+      select: { id: true, name: true, sku: true },
+      orderBy: { name: "asc" },
+    });
+
+    if (!items.length) {
+      return { balances: [] };
+    }
+
+    const ids = items.map((i) => i.id);
+
+    const agg = await this.prisma.inventoryTransaction.groupBy({
+      by: ["itemId"],
+      where: {
+        itemId: { in: ids },
+        status: InventoryTransactionStatus.completed,
+        ...(storeId ? { storeId } : {}),
+      },
+      _sum: { qtyIn: true, qtyOut: true },
+    });
+
+    const balanceByItemId = new Map<string, string>();
+    for (const row of agg) {
+      balanceByItemId.set(
+        row.itemId,
+        decimalNetBalance(row._sum.qtyIn ?? null, row._sum.qtyOut ?? null)
+      );
+    }
+
+    const balances: ItemBalanceRow[] = items.map((it) => ({
+      itemId: it.id,
+      name: it.name,
+      sku: it.sku,
+      balance: balanceByItemId.get(it.id) ?? "0",
+    }));
+
+    return { balances };
   }
 
   async updateInventoryItem(

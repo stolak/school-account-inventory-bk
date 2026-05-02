@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { inventoryItemService } from "../services/inventoryItemService";
 import { Status } from "@prisma/client";
 import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
+import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 /**
  * @openapi
@@ -352,6 +353,178 @@ export const inventoryItemController = {
         success: false,
         message: "Failed to retrieve inventory items",
         error: error?.message,
+      });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/inventory-items/transaction-log:
+   *   get:
+   *     summary: Inventory transaction log for one item (completed only)
+   *     tags: [InventoryItems]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       Lists completed `InventoryTransaction` rows for `itemId` between `transactionDateFrom` and `transactionDateTo` (inclusive).
+   *       If both dates are omitted, the window is the current UTC calendar month from the 1st through end of today.
+   *       If only `transactionDateFrom` is set, `transactionDateTo` defaults to end of today UTC.
+   *       If only `transactionDateTo` is set, `transactionDateFrom` defaults to the first day of that date's UTC month.
+   *       `balanceBeforeFromDate` is sum(qtyIn) − sum(qtyOut) for completed rows strictly before the window; when `storeId`
+   *       is set, balances are for that store only; otherwise across all stores (including null storeId rows).
+   *       Not paginated.
+   *     parameters:
+   *       - in: query
+   *         name: itemId
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: storeId
+   *         schema: { type: string, format: uuid }
+   *         description: Optional; restrict log and opening balance to this store
+   *       - in: query
+   *         name: transactionDateFrom
+   *         schema: { type: string, format: date }
+   *       - in: query
+   *         name: transactionDateTo
+   *         schema: { type: string, format: date }
+   *     responses:
+   *       200:
+   *         description: Item summary, date window, opening balance, and transactions
+   *       400:
+   *         description: Invalid parameters or date range
+   *       401:
+   *         description: Unauthorized
+   *       404:
+   *         description: Item or store not found
+   *       500:
+   *         description: Server error
+   */
+  getInventoryItemTransactionLog: async (req: Request, res: Response) => {
+    try {
+      const itemIdRaw = typeof req.query.itemId === "string" ? req.query.itemId.trim() : "";
+      if (!itemIdRaw) {
+        return res.status(400).json({ success: false, message: "itemId is required" });
+      }
+
+      const storeId =
+        typeof req.query.storeId === "string" && req.query.storeId.trim()
+          ? req.query.storeId.trim()
+          : undefined;
+
+      const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
+      const toRaw = parseQueryDateEndInclusive(req.query.transactionDateTo);
+
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+
+      const data = await inventoryItemService.getInventoryItemTransactionLog({
+        itemId: itemIdRaw,
+        ...(storeId !== undefined ? { storeId } : {}),
+        ...(transactionDateFrom !== undefined ? { transactionDateFrom } : {}),
+        ...(transactionDateTo !== undefined ? { transactionDateTo } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Inventory transaction log retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve transaction log";
+      const code =
+        message === "Inventory item not found" || message === "Invalid storeId"
+          ? 404
+          : message === "transactionDateFrom must be before or equal to transactionDateTo"
+            ? 400
+            : 500;
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/inventory-items/balances:
+   *   get:
+   *     summary: Current item balances grouped by item (completed transactions)
+   *     tags: [InventoryItems]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       For each **Active** inventory item matching optional catalog filters, returns `balance` = sum(qtyIn) − sum(qtyOut)
+   *       over **completed** inventory transactions. With `storeId`, only transactions for that store are summed; otherwise all stores.
+   *       No date filter and no per-item id filter. Not paginated.
+   *     parameters:
+   *       - in: query
+   *         name: categoryId
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: subCategoryId
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: storeId
+   *         schema: { type: string, format: uuid }
+   *         description: Optional; restrict balance calculation to this store
+   *     responses:
+   *       200:
+   *         description: >-
+   *           Success body includes data.balances, an array of objects with itemId, name, sku, and balance (decimal string).
+   *       401:
+   *         description: Unauthorized
+   *       404:
+   *         description: Invalid categoryId, subCategoryId, or storeId
+   *       500:
+   *         description: Server error
+   */
+  getItemBalancesGrouped: async (req: Request, res: Response) => {
+    try {
+      const categoryId =
+        typeof req.query.categoryId === "string" && req.query.categoryId.trim()
+          ? req.query.categoryId.trim()
+          : undefined;
+      const subCategoryId =
+        typeof req.query.subCategoryId === "string" && req.query.subCategoryId.trim()
+          ? req.query.subCategoryId.trim()
+          : undefined;
+      const storeId =
+        typeof req.query.storeId === "string" && req.query.storeId.trim()
+          ? req.query.storeId.trim()
+          : undefined;
+
+      const data = await inventoryItemService.getItemBalancesGrouped({
+        ...(categoryId !== undefined ? { categoryId } : {}),
+        ...(subCategoryId !== undefined ? { subCategoryId } : {}),
+        ...(storeId !== undefined ? { storeId } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Item balances retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve item balances";
+      const code =
+        message === "Invalid storeId" ||
+        message === "Invalid categoryId" ||
+        message === "Invalid subCategoryId"
+          ? 404
+          : 500;
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
       });
     }
   },
