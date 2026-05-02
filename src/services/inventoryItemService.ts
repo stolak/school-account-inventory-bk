@@ -365,7 +365,7 @@ export class InventoryItemService {
           transactionDate: { gte: from, lte: to },
           ...storeFilter,
         },
-        orderBy: [{ transactionDate: "asc" }, { id: "asc" }],
+        orderBy: [{ transactionDate: "asc" }, { updatedAt: "asc" }, { createdAt: "asc" }],
         include: {
           store: { select: { id: true, name: true } },
           createdBy: { select: { id: true, firstName: true, lastName: true } },
