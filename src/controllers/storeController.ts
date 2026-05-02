@@ -55,7 +55,7 @@ import { parseIntOrUndefined } from "../utils/request";
  *       - bearerAuth: []
  *     description: |
  *       Defaults to Active stores only unless status=All or another status is passed.
- *       Each row includes manager and transaction count.
+ *       Each row includes manager, transaction count, and accessibleUsers (users with UserStore access), ordered by accessGrantedAt ascending.
  *     parameters:
  *       - in: query
  *         name: q
@@ -340,6 +340,132 @@ export const storeController = {
       const message = error instanceof Error ? error.message : "Failed to delete store";
       const code =
         message === "Store not found" ? 404 : message.includes("cannot be deleted") ? 409 : 500;
+      return res.status(code).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/stores/{id}/users:
+   *   post:
+   *     summary: Grant a user access to a store (UserStore)
+   *     tags: [Stores]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       Creates a row in `user_stores` so the user has access to this store (many-to-many).
+   *       This is separate from `managerId` on the store. Duplicate grants return 409.
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         description: Store id
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [userId]
+   *             properties:
+   *               userId:
+   *                 type: string
+   *                 format: uuid
+   *                 description: User to grant store access
+   *     responses:
+   *       201:
+   *         description: Access granted; returns UserStore with user and store summaries
+   *       400:
+   *         description: Validation error
+   *       401:
+   *         description: Unauthorized
+   *       404:
+   *         description: Store not found or invalid userId
+   *       409:
+   *         description: User already has access to this store
+   *       500:
+   *         description: Server error
+   */
+  addUserToStore: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { userId } = req.body ?? {};
+      if (!id || typeof id !== "string" || !id.trim()) {
+        return res.status(400).json({ success: false, message: "id is required" });
+      }
+      if (!userId || typeof userId !== "string" || !userId.trim()) {
+        return res.status(400).json({ success: false, message: "userId is required" });
+      }
+
+      const data = await storeService.addUserToStore(id.trim(), userId.trim());
+      return res.status(201).json({ success: true, message: "User added to store successfully", data });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to add user to store";
+      const code =
+        message === "Store not found" || message === "Invalid userId"
+          ? 404
+          : message === "User already has access to this store"
+            ? 409
+            : 500;
+      return res.status(code).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/stores/{id}/users/{userId}:
+   *   delete:
+   *     summary: Revoke a user's access to a store
+   *     tags: [Stores]
+   *     security:
+   *       - bearerAuth: []
+   *     description: Deletes the `user_stores` row for this pair if it exists.
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         description: Store id
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *         description: User id to remove from store access
+   *     responses:
+   *       200:
+   *         description: Access revoked
+   *       400:
+   *         description: Missing path parameters
+   *       401:
+   *         description: Unauthorized
+   *       404:
+   *         description: Store not found or user was not assigned to this store
+   *       500:
+   *         description: Server error
+   */
+  removeUserFromStore: async (req: Request, res: Response) => {
+    try {
+      const { id, userId } = req.params;
+      if (!id || typeof id !== "string" || !id.trim()) {
+        return res.status(400).json({ success: false, message: "id is required" });
+      }
+      if (!userId || typeof userId !== "string" || !userId.trim()) {
+        return res.status(400).json({ success: false, message: "userId is required" });
+      }
+
+      const data = await storeService.removeUserFromStore(id.trim(), userId.trim());
+      return res.json({ success: true, message: "User removed from store successfully", data });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to remove user from store";
+      const code =
+        message === "Store not found" || message === "User is not assigned to this store" ? 404 : 500;
       return res.status(code).json({ success: false, message });
     }
   },

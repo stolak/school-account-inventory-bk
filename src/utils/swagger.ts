@@ -29,6 +29,7 @@ const options: swaggerJSDoc.Options = {
       { name: "Terms", description: "Term management" },
       { name: "Sessions", description: "Session management" },
       { name: "Stores", description: "Store management" },
+      { name: "StoreTransfers", description: "Inter-store inventory transfers" },
       {
         name: "ActivePeriod",
         description: "Active period singleton (session + term + date range)",

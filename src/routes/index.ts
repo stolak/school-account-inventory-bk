@@ -26,6 +26,7 @@ import staffRouter from "./staff";
 import projectRouter from "./project";
 import projectCollectionRouter from "./projectCollection";
 import storeRouter from "./store";
+import storeTransferRouter from "./storeTransfer";
 import userRouter from "./user";
 
 const router = Router();
@@ -52,6 +53,7 @@ router.use("/staff", staffRouter);
 router.use("/projects", projectRouter);
 router.use("/project-collections", projectCollectionRouter);
 router.use("/stores", storeRouter);
+router.use("/store-transfers", storeTransferRouter);
 router.use("/users", userRouter);
 
 router.use("/upload", uploadRouter);

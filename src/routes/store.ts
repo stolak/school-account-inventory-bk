@@ -8,6 +8,8 @@ router.use(authenticateJWT);
 
 router.post("/", storeController.createStore);
 router.get("/", storeController.listStores);
+router.post("/:id/users", storeController.addUserToStore);
+router.delete("/:id/users/:userId", storeController.removeUserFromStore);
 router.get("/:id", storeController.getStoreById);
 router.put("/:id", storeController.updateStore);
 router.delete("/:id", storeController.deleteStore);

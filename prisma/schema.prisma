@@ -103,6 +103,8 @@ model User {
 
   createdProjects Project[] @relation("ProjectCreatedBy")
   managedStores   Store[]   @relation("StoreManager")
+  /** Stores this user is granted access to (many-to-many; separate from primary manager role). */
+  storeAccesses   UserStore[]
 
   @@map("users")
 }
@@ -167,6 +169,7 @@ enum InventoryTransactionType {
 
   sales
   disposal
+  store_transfer
 }
 
 enum InventoryTransactionStatus {
@@ -674,6 +677,21 @@ model Store {
   createdAt             DateTime               @default(now()) @map("created_at")
   updatedAt             DateTime               @default(now()) @map("updated_at")
   inventoryTransactions InventoryTransaction[]
+  /** Users granted access to this store (many-to-many). */
+  userAccesses          UserStore[]
 
   @@map("stores")
+}
+
+/// Join table: which users may access which stores (M:N). Distinct from `Store.managerId` (primary manager).
+model UserStore {
+  userId    String   @map("user_id") @db.Char(36)
+  storeId   String   @map("store_id") @db.Char(36)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@id([userId, storeId])
+  @@index([storeId])
+  @@map("user_stores")
 }

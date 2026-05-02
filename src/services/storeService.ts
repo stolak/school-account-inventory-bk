@@ -1,6 +1,15 @@
 import prisma from "../utils/prisma";
 import { Prisma, Status } from "@prisma/client";
 
+/** Users with explicit store access via `user_stores` (included on list stores). */
+export interface StoreAccessibleUser {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  accessGrantedAt: Date;
+}
+
 export interface StoreData {
   id: string;
   name: string;
@@ -11,6 +20,7 @@ export interface StoreData {
   updatedAt: Date;
   manager?: { id: string; firstName: string | null; lastName: string | null; email: string } | null;
   _count?: { inventoryTransactions: number };
+  accessibleUsers?: StoreAccessibleUser[];
 }
 
 export interface ListStoresParams {
@@ -19,6 +29,14 @@ export interface ListStoresParams {
   managerId?: string;
   page?: number;
   limit?: number;
+}
+
+export interface UserStoreAccessData {
+  userId: string;
+  storeId: string;
+  createdAt: Date;
+  user: { id: string; email: string; firstName: string | null; lastName: string | null };
+  store: { id: string; name: string };
 }
 
 function clampInt(n: number, min: number, max: number) {
@@ -34,12 +52,31 @@ const storeInclude = {
   _count: { select: { inventoryTransactions: true } },
 } satisfies Prisma.StoreInclude;
 
+const listStoresInclude = {
+  ...storeInclude,
+  userAccesses: {
+    orderBy: { createdAt: "asc" as const },
+    include: {
+      user: { select: { id: true, email: true, firstName: true, lastName: true } },
+    },
+  },
+} satisfies Prisma.StoreInclude;
+
 export class StoreService {
   private prisma = prisma;
 
   private async assertManagerExists(managerId: string) {
     const u = await this.prisma.user.findUnique({ where: { id: managerId }, select: { id: true } });
     if (!u) throw new Error("Invalid managerId");
+  }
+
+  /** Grants `UserStore` access for the assigned manager (same as add-user-to-store). Idempotent. */
+  private async ensureManagerStoreAccess(storeId: string, managerUserId: string): Promise<void> {
+    await this.prisma.userStore.upsert({
+      where: { userId_storeId: { userId: managerUserId, storeId } },
+      create: { userId: managerUserId, storeId },
+      update: {},
+    });
   }
 
   async createStore(input: {
@@ -54,7 +91,7 @@ export class StoreService {
     if (input.managerId) await this.assertManagerExists(input.managerId);
 
     try {
-      return await this.prisma.store.create({
+      const created = await this.prisma.store.create({
         data: {
           name,
           description: input.description === undefined || input.description === null ? null : String(input.description),
@@ -63,6 +100,10 @@ export class StoreService {
         },
         include: storeInclude,
       });
+      if (created.managerId) {
+        await this.ensureManagerStoreAccess(created.id, created.managerId);
+      }
+      return created;
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
         throw new Error("Store name already exists");
@@ -103,12 +144,26 @@ export class StoreService {
         orderBy: { name: "asc" },
         skip,
         take: limit,
-        include: storeInclude,
+        include: listStoresInclude,
       }),
     ]);
 
+    const stores: StoreData[] = rows.map((row) => {
+      const { userAccesses, ...rest } = row;
+      return {
+        ...rest,
+        accessibleUsers: userAccesses.map((ua) => ({
+          id: ua.user.id,
+          email: ua.user.email,
+          firstName: ua.user.firstName,
+          lastName: ua.user.lastName,
+          accessGrantedAt: ua.createdAt,
+        })),
+      };
+    });
+
     const totalPages = Math.max(1, Math.ceil(total / limit));
-    return { stores: rows, pagination: { page, limit, total, totalPages } };
+    return { stores, pagination: { page, limit, total, totalPages } };
   }
 
   async getStoreById(id: string): Promise<StoreData | null> {
@@ -137,7 +192,7 @@ export class StoreService {
     if (!existing) throw new Error("Store not found");
 
     try {
-      return await this.prisma.store.update({
+      const updated = await this.prisma.store.update({
         where: { id },
         data: {
           ...(input.name !== undefined ? { name: input.name.trim() } : {}),
@@ -150,6 +205,10 @@ export class StoreService {
         },
         include: storeInclude,
       });
+      if (updated.managerId) {
+        await this.ensureManagerStoreAccess(updated.id, updated.managerId);
+      }
+      return updated;
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") {
         throw new Error("Store not found");
@@ -176,6 +235,48 @@ export class StoreService {
       }
       throw e;
     }
+  }
+
+  async addUserToStore(storeId: string, userId: string): Promise<UserStoreAccessData> {
+    const store = await this.prisma.store.findUnique({ where: { id: storeId }, select: { id: true } });
+    if (!store) throw new Error("Store not found");
+
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) throw new Error("Invalid userId");
+
+    try {
+      const row = await this.prisma.userStore.create({
+        data: { userId, storeId },
+        include: {
+          store: { select: { id: true, name: true } },
+          user: { select: { id: true, email: true, firstName: true, lastName: true } },
+        },
+      });
+      return row;
+    } catch (e) {
+      if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
+        throw new Error("User already has access to this store");
+      }
+      throw e;
+    }
+  }
+
+  async removeUserFromStore(storeId: string, userId: string): Promise<{ storeId: string; userId: string }> {
+    const store = await this.prisma.store.findUnique({ where: { id: storeId }, select: { id: true } });
+    if (!store) throw new Error("Store not found");
+
+    try {
+      await this.prisma.userStore.delete({
+        where: { userId_storeId: { userId, storeId } },
+      });
+    } catch (e) {
+      if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") {
+        throw new Error("User is not assigned to this store");
+      }
+      throw e;
+    }
+
+    return { storeId, userId };
   }
 }
 
