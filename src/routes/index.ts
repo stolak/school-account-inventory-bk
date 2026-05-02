@@ -15,6 +15,7 @@ import supplierRouter from "./supplier";
 import purchaseRouter from "./purchase";
 import studentCollectionRouter from "./studentCollection";
 import staffCollectionRouter from "./staffCollection";
+import donationRouter from "./donation";
 import schoolClassRouter from "./schoolClass";
 import studentRouter from "./student";
 import subClassRouter from "./subClass";
@@ -22,6 +23,7 @@ import termRouter from "./term";
 import sessionRouter from "./session";
 import activePeriodRouter from "./activePeriod";
 import staffRouter from "./staff";
+import projectRouter from "./project";
 
 const router = Router();
 
@@ -36,6 +38,7 @@ router.use("/suppliers", supplierRouter);
 router.use("/purchases", purchaseRouter);
 router.use("/student-collections", studentCollectionRouter);
 router.use("/staff-collections", staffCollectionRouter);
+router.use("/donations", donationRouter);
 router.use("/school-classes", schoolClassRouter);
 router.use("/students", studentRouter);
 router.use("/sub-classes", subClassRouter);
@@ -43,6 +46,7 @@ router.use("/terms", termRouter);
 router.use("/sessions", sessionRouter);
 router.use("/active-period", activePeriodRouter);
 router.use("/staff", staffRouter);
+router.use("/projects", projectRouter);
 
 router.use("/upload", uploadRouter);
 

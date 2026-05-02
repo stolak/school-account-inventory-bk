@@ -100,6 +100,10 @@ model User {
   createdInventoryTransactions       InventoryTransaction[]       @relation("InventoryTransactionCreatedBy")
   createdClassInventoryEntitlements  ClassInventoryEntitlement[]  @relation("ClassInventoryEntitlementCreatedBy")
   staffProfile                       Staff?                       @relation("StaffUser")
+
+  createdProjects Project[] @relation("ProjectCreatedBy")
+
+  @@map("users")
 }
 
 model PasswordResetToken {
@@ -589,6 +593,8 @@ model InventoryTransaction {
   createdBy                    User                        @relation("InventoryTransactionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   classInventoryDistribution   ClassInventoryDistribution? @relation(fields: [classInventoryDistributionId], references: [id])
   classInventoryDistributionId String?                     @db.Char(36)
+  project                      Project?                    @relation("ProjectTransactions", fields: [projectId], references: [id])
+  projectId                    String?                     @db.Char(36)
 
   @@index([itemId])
   @@index([supplierId])
@@ -619,4 +625,18 @@ model ClassInventoryEntitlement {
   @@index([sessionTermId])
   @@index([createdById])
   @@map("class_inventory_entitlements")
+}
+
+model Project {
+  id                    String                 @id @default(uuid()) @db.Char(36)
+  name                  String
+  description           String?
+  status                Status                 @default(Active)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @default(now()) @map("updated_at")
+  inventoryTransactions InventoryTransaction[] @relation("ProjectTransactions")
+  CreatedBy             User?                  @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  createdById           String?                @map("created_by") @db.Char(36)
+
+  @@map("projects")
 }
