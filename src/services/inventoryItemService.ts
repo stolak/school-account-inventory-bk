@@ -103,6 +103,8 @@ export interface ItemBalanceRow {
   itemId: string;
   name: string;
   sku: string | null;
+  category: { id: string; name: string } | null;
+  subCategory: { id: string; name: string } | null;
   /** sum(qtyIn) − sum(qtyOut) for completed transactions; scoped by store when `storeId` was passed. */
   balance: string;
 }
@@ -424,7 +426,13 @@ export class InventoryItemService {
         ...(categoryId ? { categoryId } : {}),
         ...(subCategoryId ? { subCategoryId } : {}),
       },
-      select: { id: true, name: true, sku: true },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        category: { select: { id: true, name: true } },
+        subCategory: { select: { id: true, name: true } },
+      },
       orderBy: { name: "asc" },
     });
 
@@ -456,6 +464,8 @@ export class InventoryItemService {
       itemId: it.id,
       name: it.name,
       sku: it.sku,
+      category: it.category,
+      subCategory: it.subCategory,
       balance: balanceByItemId.get(it.id) ?? "0",
     }));
 

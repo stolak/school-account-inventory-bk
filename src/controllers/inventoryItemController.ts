@@ -479,7 +479,8 @@ export const inventoryItemController = {
    *     responses:
    *       200:
    *         description: >-
-   *           Success body includes data.balances, an array of objects with itemId, name, sku, and balance (decimal string).
+   *           Success body includes data.balances, an array of objects with itemId, name, sku, category and
+   *           subCategory (each id and name or null), and balance (decimal string).
    *       401:
    *         description: Unauthorized
    *       404:
