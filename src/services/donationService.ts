@@ -15,15 +15,18 @@ export interface DonationTransactionData {
   sessionId: string | null;
   transactionDate: Date;
   createdById: string;
+  storeId: string | null;
   createdAt: Date;
   updatedAt: Date;
   item?: { name: string } | null;
+  store?: { id: string; name: string } | null;
   createdBy?: { firstName: string | null; lastName: string | null } | null;
 }
 
 export interface ListDonationsParams {
   q?: string;
   itemId?: string;
+  storeId?: string;
   sessionId?: string;
   termId?: string;
   status?: InventoryTransactionStatus;
@@ -45,6 +48,12 @@ function generateReferenceNo(): string {
   return `DON-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
+const donationInclude = {
+  item: { select: { name: true } },
+  createdBy: { select: { firstName: true, lastName: true } },
+  store: { select: { id: true, name: true } },
+} satisfies Prisma.InventoryTransactionInclude;
+
 export class DonationService {
   private prisma = prisma;
 
@@ -52,6 +61,7 @@ export class DonationService {
     return {
       transactionType: InventoryTransactionType.donation,
       ...(params.itemId ? { itemId: params.itemId } : {}),
+      ...(params.storeId ? { storeId: params.storeId } : {}),
       ...(params.sessionId ? { sessionId: params.sessionId } : {}),
       ...(params.termId ? { termId: params.termId } : {}),
       ...(params.status ? { status: params.status } : {}),
@@ -72,6 +82,11 @@ export class DonationService {
     if (!item) throw new Error("Invalid itemId");
   }
 
+  private async assertStoreExists(storeId: string) {
+    const store = await this.prisma.store.findUnique({ where: { id: storeId }, select: { id: true } });
+    if (!store) throw new Error("Invalid storeId");
+  }
+
   private async getActivePeriodIdsOrNull(): Promise<{ sessionId: string | null; termId: string | null }> {
     const ap = await activePeriodService.getActivePeriod();
     if (!ap) return { sessionId: null, termId: null };
@@ -80,6 +95,7 @@ export class DonationService {
 
   async createDonation(input: {
     itemId: string;
+    storeId: string;
     qtyIn: string | number;
     notes: string;
     referenceNo?: string | null;
@@ -87,6 +103,7 @@ export class DonationService {
     createdById: string;
   }): Promise<DonationTransactionData> {
     await this.assertItemExists(input.itemId);
+    await this.assertStoreExists(input.storeId);
 
     const active = await this.getActivePeriodIdsOrNull();
     const finalReferenceNo =
@@ -97,6 +114,7 @@ export class DonationService {
     return await this.prisma.inventoryTransaction.create({
       data: {
         itemId: input.itemId,
+        storeId: input.storeId,
         transactionType: InventoryTransactionType.donation,
         qtyIn: input.qtyIn as any,
         status: InventoryTransactionStatus.completed,
@@ -107,14 +125,12 @@ export class DonationService {
         transactionDate: input.transactionDate ?? new Date(),
         createdById: input.createdById,
       },
-      include: {
-        item: { select: { name: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: donationInclude,
     });
   }
 
   async createBulkDonations(input: {
+    storeId: string;
     notes: string;
     referenceNo?: string | null;
     transactionDate?: Date;
@@ -122,6 +138,8 @@ export class DonationService {
     items: Array<{ itemId: string; qtyIn: string | number }>;
   }): Promise<DonationTransactionData[]> {
     if (!input.items.length) throw new Error("items must not be empty");
+
+    await this.assertStoreExists(input.storeId);
 
     const itemIds = [...new Set(input.items.map((i) => i.itemId))];
     const existingItems = await this.prisma.inventoryItem.findMany({
@@ -144,6 +162,7 @@ export class DonationService {
         this.prisma.inventoryTransaction.create({
           data: {
             itemId: it.itemId,
+            storeId: input.storeId,
             transactionType: InventoryTransactionType.donation,
             qtyIn: it.qtyIn as any,
             status: InventoryTransactionStatus.completed,
@@ -154,10 +173,7 @@ export class DonationService {
             transactionDate: txDate,
             createdById: input.createdById,
           },
-          include: {
-            item: { select: { name: true } },
-            createdBy: { select: { firstName: true, lastName: true } },
-          },
+          include: donationInclude,
         })
       )
     );
@@ -180,10 +196,7 @@ export class DonationService {
         orderBy: { transactionDate: "desc" },
         skip,
         take: limit,
-        include: {
-          item: { select: { name: true } },
-          createdBy: { select: { firstName: true, lastName: true } },
-        },
+        include: donationInclude,
       }),
     ]);
 
@@ -194,10 +207,7 @@ export class DonationService {
   async getDonationById(id: string): Promise<DonationTransactionData | null> {
     return await this.prisma.inventoryTransaction.findFirst({
       where: { id, transactionType: InventoryTransactionType.donation },
-      include: {
-        item: { select: { name: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: donationInclude,
     });
   }
 
@@ -245,10 +255,7 @@ export class DonationService {
         status: InventoryTransactionStatus.completed,
         updatedAt: new Date(),
       },
-      include: {
-        item: { select: { name: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: donationInclude,
     });
   }
 
@@ -312,10 +319,7 @@ export class DonationService {
             status: InventoryTransactionStatus.completed,
             updatedAt: new Date(),
           },
-          include: {
-            item: { select: { name: true } },
-            createdBy: { select: { firstName: true, lastName: true } },
-          },
+          include: donationInclude,
         });
         out.push(row);
       }
@@ -328,10 +332,7 @@ export class DonationService {
     if (!existing) throw new Error("Donation not found");
     return await this.prisma.inventoryTransaction.delete({
       where: { id },
-      include: {
-        item: { select: { name: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: donationInclude,
     });
   }
 
@@ -341,10 +342,7 @@ export class DonationService {
 
     const existing = await this.prisma.inventoryTransaction.findMany({
       where: { id: { in: ids }, transactionType: InventoryTransactionType.donation },
-      include: {
-        item: { select: { name: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: donationInclude,
     });
     const existingSet = new Set(existing.map((r) => r.id));
     const missing = ids.filter((id) => !existingSet.has(id));

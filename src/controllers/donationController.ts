@@ -12,17 +12,21 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *     tags: [Donations]
  *     security:
  *       - bearerAuth: []
- *     description: Creates an InventoryTransaction with transactionType=donation (locked). Status is completed. sessionId/termId from active period. referenceNo is auto-generated if missing or empty. notes is required.
+ *     description: Creates an InventoryTransaction with transactionType=donation (locked). Status is completed. sessionId/termId from active period. referenceNo is auto-generated if missing or empty. notes is required. storeId is required (destination store for the donation stock).
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
  *             type: object
- *             required: [itemId, qtyIn, notes]
+ *             required: [itemId, qtyIn, notes, storeId]
  *             properties:
  *               itemId:
  *                 type: string
+ *               storeId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Store receiving the donated stock
  *               qtyIn:
  *                 oneOf: [{ type: string }, { type: number }]
  *               notes:
@@ -39,7 +43,7 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *       400:
  *         description: Validation error
  *       404:
- *         description: Item not found
+ *         description: Item or store not found
  *       500:
  *         description: Server error
  *   get:
@@ -57,6 +61,12 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         name: itemId
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: storeId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Optional filter by store id
  *       - in: query
  *         name: sessionId
  *         schema:
@@ -108,18 +118,22 @@ export const donationController = {
    *     tags: [Donations]
    *     security:
    *       - bearerAuth: []
-   *     description: Shared notes/referenceNo/transactionDate; items[].itemId and items[].qtyIn vary. notes required. referenceNo auto if missing.
-   *     requestBody:
-   *       required: true
-   *       content:
-   *         application/json:
-   *           schema:
-   *             type: object
-   *             required: [notes, items]
-   *             properties:
-   *               notes:
-   *                 type: string
-   *               referenceNo:
+ *     description: Shared storeId/notes/referenceNo/transactionDate; items[].itemId and items[].qtyIn vary. notes required. referenceNo auto if missing. storeId required for all lines.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [notes, items, storeId]
+ *             properties:
+ *               storeId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Store receiving the donated stock (applied to each row)
+ *               notes:
+ *                 type: string
+ *               referenceNo:
    *                 type: string
    *                 nullable: true
    *               transactionDate:
@@ -138,11 +152,15 @@ export const donationController = {
    *     responses:
    *       201: { description: Donations created }
    *       400: { description: Validation error }
-   *       404: { description: Invalid itemId }
+   *       404: { description: Invalid itemId or storeId }
    */
   createBulkDonations: async (req: Request, res: Response) => {
     try {
-      const { referenceNo, notes, transactionDate, items } = req.body ?? {};
+      const { storeId, referenceNo, notes, transactionDate, items } = req.body ?? {};
+
+      if (!storeId || typeof storeId !== "string" || !storeId.trim()) {
+        return res.status(400).json({ success: false, message: "storeId is required" });
+      }
 
       if (notes === undefined || notes === null || typeof notes !== "string" || !notes.trim()) {
         return res.status(400).json({ success: false, message: "notes is required and must be a non-empty string" });
@@ -192,6 +210,7 @@ export const donationController = {
       if (!createdById) return res.status(401).json({ success: false, message: "Unauthorized" });
 
       const created = await donationService.createBulkDonations({
+        storeId: storeId.trim(),
         notes: notes.trim(),
         referenceNo: referenceNo === undefined ? null : referenceNo,
         transactionDate: parsedDate ?? undefined,
@@ -373,10 +392,13 @@ export const donationController = {
 
   createDonation: async (req: Request, res: Response) => {
     try {
-      const { itemId, qtyIn, referenceNo, notes, transactionDate } = req.body ?? {};
+      const { itemId, storeId, qtyIn, referenceNo, notes, transactionDate } = req.body ?? {};
 
       if (!itemId || typeof itemId !== "string" || !itemId.trim()) {
         return res.status(400).json({ success: false, message: "itemId is required" });
+      }
+      if (!storeId || typeof storeId !== "string" || !storeId.trim()) {
+        return res.status(400).json({ success: false, message: "storeId is required" });
       }
       if (!isNumberOrString(qtyIn)) {
         return res.status(400).json({ success: false, message: "qtyIn is required (string or number)" });
@@ -410,6 +432,7 @@ export const donationController = {
 
       const created = await donationService.createDonation({
         itemId: itemId.trim(),
+        storeId: storeId.trim(),
         qtyIn,
         notes: notes.trim(),
         referenceNo: referenceNo === undefined ? undefined : referenceNo,
@@ -429,6 +452,10 @@ export const donationController = {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
       const itemId = typeof req.query.itemId === "string" ? req.query.itemId : undefined;
+      const storeId =
+        typeof req.query.storeId === "string" && req.query.storeId.trim()
+          ? req.query.storeId.trim()
+          : undefined;
       const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
       const termId = typeof req.query.termId === "string" ? req.query.termId : undefined;
 
@@ -466,6 +493,7 @@ export const donationController = {
       const result = await donationService.listDonations({
         q,
         itemId,
+        storeId,
         sessionId,
         termId,
         status,
@@ -497,6 +525,10 @@ export const donationController = {
    *         name: itemId
    *         schema: { type: string }
    *       - in: query
+   *         name: storeId
+   *         schema: { type: string, format: uuid }
+   *         description: Optional filter by store id
+   *       - in: query
    *         name: sessionId
    *         schema: { type: string }
    *       - in: query
@@ -520,6 +552,10 @@ export const donationController = {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
       const itemId = typeof req.query.itemId === "string" ? req.query.itemId : undefined;
+      const storeId =
+        typeof req.query.storeId === "string" && req.query.storeId.trim()
+          ? req.query.storeId.trim()
+          : undefined;
       const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
       const termId = typeof req.query.termId === "string" ? req.query.termId : undefined;
 
@@ -553,6 +589,7 @@ export const donationController = {
       const result = await donationService.summarizeDonationsByItem({
         q,
         itemId,
+        storeId,
         sessionId,
         termId,
         status,

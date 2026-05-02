@@ -19,10 +19,14 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         application/json:
  *           schema:
  *             type: object
- *             required: [itemId, qtyIn]
+ *             required: [itemId, qtyIn, storeId]
  *             properties:
  *               itemId:
  *                 type: string
+ *               storeId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Store receiving the stock (required)
  *               supplierId:
  *                 type: string
  *                 nullable: true
@@ -55,7 +59,7 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *       400:
  *         description: Validation error
  *       404:
- *         description: Referenced item/supplier not found
+ *         description: Referenced item/supplier/store not found
  *       500:
  *         description: Server error
  *   get:
@@ -77,6 +81,12 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         name: supplierId
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: storeId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Optional filter by store id
  *       - in: query
  *         name: status
  *         schema:
@@ -128,10 +138,14 @@ export const purchaseController = {
    *       content:
    *         application/json:
    *           schema:
-   *             type: object
-   *             required: [items]
-   *             properties:
-   *               supplierId:
+ *             type: object
+ *             required: [items, storeId]
+ *             properties:
+ *               storeId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: Store receiving the stock (required; applied to every line)
+ *               supplierId:
    *                 type: string
    *                 nullable: true
    *                 description: Optional. Empty string "" is treated as null.
@@ -170,15 +184,19 @@ export const purchaseController = {
    *         description: Purchases created
    *       400:
    *         description: Validation error
-   *       404:
-   *         description: Referenced item/supplier not found
-   *       500:
-   *         description: Server error
+ *       404:
+ *         description: Referenced item/supplier/store not found
+ *       500:
+ *         description: Server error
    */
   createBulkPurchases: async (req: Request, res: Response) => {
     try {
-      const { supplierId, referenceNo, notes, transactionDate, amountPaid, status, items } =
+      const { storeId, supplierId, referenceNo, notes, transactionDate, amountPaid, status, items } =
         req.body ?? {};
+
+      if (!storeId || typeof storeId !== "string" || !storeId.trim()) {
+        return res.status(400).json({ success: false, message: "storeId is required" });
+      }
 
       if (!isStringOrNullOrUndefined(supplierId)) {
         return res
@@ -299,6 +317,7 @@ export const purchaseController = {
       if (!createdById) return res.status(401).json({ success: false, message: "Unauthorized" });
 
       const created = await purchaseService.createBulkPurchases({
+        storeId: storeId.trim(),
         supplierId: normalizedSupplierId,
         referenceNo: referenceNo === undefined ? null : referenceNo,
         notes: notes === undefined ? null : notes,
@@ -323,6 +342,7 @@ export const purchaseController = {
     try {
       const {
         itemId,
+        storeId,
         supplierId,
         qtyIn,
         inCost,
@@ -335,6 +355,9 @@ export const purchaseController = {
 
       if (!itemId || typeof itemId !== "string" || !itemId.trim()) {
         return res.status(400).json({ success: false, message: "itemId is required" });
+      }
+      if (!storeId || typeof storeId !== "string" || !storeId.trim()) {
+        return res.status(400).json({ success: false, message: "storeId is required" });
       }
       if (!isStringOrNullOrUndefined(supplierId)) {
         return res
@@ -421,12 +444,13 @@ export const purchaseController = {
 
       const created = await purchaseService.createPurchase({
         itemId: itemId.trim(),
+        storeId: storeId.trim(),
         supplierId: normalizedSupplierId,
         qtyIn,
-        ...(inCost === undefined || inCost.trim() === "" ? { inCost: undefined } : { inCost }),
-        ...(amountPaid === undefined || amountPaid.trim() === ""
-          ? { amountPaid: undefined }
-          : { amountPaid }),
+        ...(inCost !== undefined && (typeof inCost !== "string" || inCost.trim() !== "") ? { inCost } : {}),
+        ...(amountPaid !== undefined && (typeof amountPaid !== "string" || amountPaid.trim() !== "")
+          ? { amountPaid }
+          : {}),
         referenceNo:
           referenceNo === undefined || referenceNo === null || referenceNo.trim() === ""
             ? null
@@ -453,6 +477,10 @@ export const purchaseController = {
       const itemId = typeof req.query.itemId === "string" ? req.query.itemId : undefined;
       const supplierId =
         typeof req.query.supplierId === "string" ? req.query.supplierId : undefined;
+      const storeId =
+        typeof req.query.storeId === "string" && req.query.storeId.trim()
+          ? req.query.storeId.trim()
+          : undefined;
       const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
       const status =
         statusRaw === undefined
@@ -504,6 +532,7 @@ export const purchaseController = {
         q,
         itemId,
         supplierId,
+        storeId,
         status,
         transactionDateFrom,
         transactionDateTo,

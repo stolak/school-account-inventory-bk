@@ -171,6 +171,86 @@ export const storeController = {
 
   /**
    * @openapi
+   * /api/v1/stores/me:
+   *   get:
+   *     summary: List stores the current user can access
+   *     tags: [Stores]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       Returns stores where the user is the assigned manager (`managerId`) and/or has a `user_stores` grant.
+   *       Each item includes `isStoreManager`, `hasUserStoreAccess`, and `userStoreAccessGrantedAt` when applicable.
+   *       Defaults to Active stores only (same as listing stores); pass status=All or a specific status to widen.
+   *     parameters:
+   *       - in: query
+   *         name: q
+   *         schema: { type: string }
+   *         description: Search store name or description (substring)
+   *       - in: query
+   *         name: status
+   *         schema:
+   *           type: string
+   *           enum: [Active, Inactive, Archived, All]
+   *         description: Omit for Active only; use All for all statuses
+   *       - in: query
+   *         name: page
+   *         schema: { type: integer, minimum: 1, default: 1 }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+   *     responses:
+   *       200:
+   *         description: Paginated stores for the authenticated user
+   *       400:
+   *         description: Invalid status filter
+   *       401:
+   *         description: Unauthorized
+   *       500:
+   *         description: Server error
+   */
+  listMyStores: async (req: Request, res: Response) => {
+    try {
+      const userId = (req as { user?: { id: string } }).user?.id;
+      if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const q = typeof req.query.q === "string" ? req.query.q : undefined;
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === undefined
+          ? undefined
+          : statusRaw === "All"
+            ? "All"
+            : statusRaw === "Active"
+              ? Status.Active
+              : statusRaw === "Inactive"
+                ? Status.Inactive
+                : statusRaw === "Archived"
+                  ? Status.Archived
+                  : undefined;
+
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, Archived, or All",
+        });
+      }
+
+      const page = parseIntOrUndefined(req.query.page);
+      const limit = parseIntOrUndefined(req.query.limit);
+
+      const result = await storeService.listStoresAccessibleByUser(userId, { q, status, page, limit });
+      return res.json({ success: true, message: "Stores retrieved successfully", data: result });
+    } catch (error: unknown) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve stores",
+        error: error instanceof Error ? error.message : undefined,
+      });
+    }
+  },
+
+  /**
+   * @openapi
    * /api/v1/stores/{id}:
    *   get:
    *     summary: Get a store by ID

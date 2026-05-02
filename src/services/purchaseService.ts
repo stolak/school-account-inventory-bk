@@ -14,10 +14,12 @@ export interface PurchaseData {
   notes: string | null;
   transactionDate: Date;
   createdById: string;
+  storeId: string | null;
   createdAt: Date;
   updatedAt: Date;
   item?: { name: string } | null;
   supplier?: { name: string } | null;
+  store?: { id: string; name: string } | null;
   createdBy?: { firstName: string | null; lastName: string | null } | null;
 }
 
@@ -25,6 +27,7 @@ export interface ListPurchasesParams {
   q?: string;
   itemId?: string;
   supplierId?: string;
+  storeId?: string;
   status?: InventoryTransactionStatus;
   /** Inclusive lower bound on transactionDate */
   transactionDateFrom?: Date;
@@ -37,6 +40,13 @@ export interface ListPurchasesParams {
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
+
+const purchaseInclude = {
+  item: { select: { name: true } },
+  supplier: { select: { name: true } },
+  createdBy: { select: { firstName: true, lastName: true } },
+  store: { select: { id: true, name: true } },
+} satisfies Prisma.InventoryTransactionInclude;
 
 export class PurchaseService {
   private prisma = prisma;
@@ -57,8 +67,17 @@ export class PurchaseService {
     if (!supplier) throw new Error("Invalid supplierId");
   }
 
+  private async assertStoreExists(storeId: string) {
+    const store = await this.prisma.store.findUnique({
+      where: { id: storeId },
+      select: { id: true },
+    });
+    if (!store) throw new Error("Invalid storeId");
+  }
+
   async createPurchase(input: {
     itemId: string;
+    storeId: string;
     supplierId?: string | null;
     qtyIn: string | number;
     inCost?: string | number;
@@ -70,10 +89,12 @@ export class PurchaseService {
     status?: InventoryTransactionStatus;
   }): Promise<PurchaseData> {
     await this.assertItemExists(input.itemId);
+    await this.assertStoreExists(input.storeId);
     if (input.supplierId) await this.assertSupplierExists(input.supplierId);
     return await this.prisma.inventoryTransaction.create({
       data: {
         itemId: input.itemId,
+        storeId: input.storeId,
         supplierId: input.supplierId ?? null,
         transactionType: InventoryTransactionType.purchase,
         qtyIn: input.qtyIn as any,
@@ -85,15 +106,12 @@ export class PurchaseService {
         transactionDate: input.transactionDate ?? new Date(),
         createdById: input.createdById,
       },
-      include: {
-        item: { select: { name: true } },
-        supplier: { select: { name: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: purchaseInclude,
     });
   }
 
   async createBulkPurchases(input: {
+    storeId: string;
     supplierId?: string | null;
     referenceNo?: string | null;
     notes?: string | null;
@@ -106,6 +124,8 @@ export class PurchaseService {
     if (!input.items.length) {
       throw new Error("items must not be empty");
     }
+
+    await this.assertStoreExists(input.storeId);
 
     const supplierId = input.supplierId ?? null;
     if (supplierId) await this.assertSupplierExists(supplierId);
@@ -129,6 +149,7 @@ export class PurchaseService {
         this.prisma.inventoryTransaction.create({
           data: {
             itemId: it.itemId,
+            storeId: input.storeId,
             supplierId,
             transactionType: InventoryTransactionType.purchase,
             qtyIn: it.qtyIn as any,
@@ -140,11 +161,7 @@ export class PurchaseService {
             transactionDate: txDate,
             createdById: input.createdById,
           },
-          include: {
-            item: { select: { name: true } },
-            supplier: { select: { name: true } },
-            createdBy: { select: { firstName: true, lastName: true } },
-          },
+          include: purchaseInclude,
         })
       )
     );
@@ -169,6 +186,7 @@ export class PurchaseService {
       transactionType: InventoryTransactionType.purchase,
       ...(params.itemId ? { itemId: params.itemId } : {}),
       ...(params.supplierId ? { supplierId: params.supplierId } : {}),
+      ...(params.storeId ? { storeId: params.storeId } : {}),
       ...(params.status ? { status: params.status } : {}),
       ...(params.transactionDateFrom !== undefined || params.transactionDateTo !== undefined
         ? {
@@ -198,11 +216,7 @@ export class PurchaseService {
         orderBy: { transactionDate: "desc" },
         skip,
         take: limit,
-        include: {
-          item: { select: { name: true } },
-          supplier: { select: { name: true } },
-          createdBy: { select: { firstName: true, lastName: true } },
-        },
+        include: purchaseInclude,
       }),
     ]);
 
@@ -213,11 +227,7 @@ export class PurchaseService {
   async getPurchaseById(id: string): Promise<PurchaseData | null> {
     return await this.prisma.inventoryTransaction.findFirst({
       where: { id, transactionType: InventoryTransactionType.purchase },
-      include: {
-        item: { select: { name: true } },
-        supplier: { select: { name: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: purchaseInclude,
     });
   }
 
@@ -258,11 +268,7 @@ export class PurchaseService {
         transactionType: InventoryTransactionType.purchase,
         updatedAt: new Date(),
       },
-      include: {
-        item: { select: { name: true } },
-        supplier: { select: { name: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: purchaseInclude,
     });
   }
 
@@ -272,11 +278,7 @@ export class PurchaseService {
 
     return await this.prisma.inventoryTransaction.delete({
       where: { id },
-      include: {
-        item: { select: { name: true } },
-        supplier: { select: { name: true } },
-        createdBy: { select: { firstName: true, lastName: true } },
-      },
+      include: purchaseInclude,
     });
   }
 }

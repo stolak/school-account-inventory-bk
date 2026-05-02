@@ -1,9 +1,11 @@
 import { Request, Response } from "express";
+import { InventoryTransactionStatus } from "@prisma/client";
 import {
   InsufficientStoreTransferError,
   storeTransferService,
 } from "../services/storeTransferService";
-import { isNumberOrString } from "../utils/request";
+import { isNumberOrString, parseIntOrUndefined } from "../utils/request";
+import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 function httpStatusForStoreTransfer(message: string): number {
   if (message.startsWith("Invalid ")) return 404;
@@ -64,15 +66,151 @@ function httpStatusForStoreTransfer(message: string): number {
  *       201:
  *         description: Transfer recorded (two rows per distinct item)
  *       400:
- *         description: Validation error or insufficient quantity at source
+ *         description: |
+ *           Validation error or insufficient quantity at source. When stock is insufficient, `data` includes
+ *           `sourceStore`, `evaluatedAt` (snapshot time inside the DB transaction), and `insufficient[]` with per-item
+ *           `available`, `requested`, and `shortfall`.
  *       403:
  *         description: User is not manager of source or destination store
  *       404:
  *         description: Invalid store or item id
  *       500:
  *         description: Server error
+ *   get:
+ *     summary: List store transfer lines (paired source → destination per item)
+ *     tags: [StoreTransfers]
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Returns logical transfer lines: quantity moved from `sourceStore` to `destStore` for each item, with
+ *       `outTransactionId` / `inTransactionId` for the two `store_transfer` rows.
+ *       Optional `sourceStoreId` filters the outbound leg; `destStoreId` alone filters the inbound leg; if both are set,
+ *       only pairs matching that source and destination store are returned.
+ *       Optional `status` filters by transaction status (`pending`, `cancelled`, `deleted`, `completed`); omit to include all.
+ *     parameters:
+ *       - in: query
+ *         name: sourceStoreId
+ *         schema: { type: string, format: uuid }
+ *         description: Filter by source store (out leg)
+ *       - in: query
+ *         name: destStoreId
+ *         schema: { type: string, format: uuid }
+ *         description: Filter by destination store (in leg)
+ *       - in: query
+ *         name: itemId
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [pending, cancelled, deleted, completed]
+ *         description: Filter by leg status (outbound leg; paired inbound has the same status)
+ *       - in: query
+ *         name: q
+ *         schema: { type: string }
+ *         description: Search in referenceNo and notes (out leg)
+ *       - in: query
+ *         name: transactionDateFrom
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: transactionDateTo
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Paginated `transfers` lines and `pagination`
+ *       400:
+ *         description: Invalid date range
+ *       401:
+ *         description: Unauthorized
+ *       500:
+ *         description: Server error
  */
 export const storeTransferController = {
+  listStoreTransfers: async (req: Request, res: Response) => {
+    try {
+      const sourceStoreId =
+        typeof req.query.sourceStoreId === "string" && req.query.sourceStoreId.trim()
+          ? req.query.sourceStoreId.trim()
+          : undefined;
+      const destStoreId =
+        typeof req.query.destStoreId === "string" && req.query.destStoreId.trim()
+          ? req.query.destStoreId.trim()
+          : undefined;
+      const itemId =
+        typeof req.query.itemId === "string" && req.query.itemId.trim()
+          ? req.query.itemId.trim()
+          : undefined;
+      const q = typeof req.query.q === "string" ? req.query.q : undefined;
+
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === undefined
+          ? undefined
+          : statusRaw === "pending"
+            ? InventoryTransactionStatus.pending
+            : statusRaw === "cancelled"
+              ? InventoryTransactionStatus.cancelled
+              : statusRaw === "deleted"
+                ? InventoryTransactionStatus.deleted
+                : statusRaw === "completed"
+                  ? InventoryTransactionStatus.completed
+                  : undefined;
+
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({ success: false, message: "Invalid status" });
+      }
+
+      const page = parseIntOrUndefined(req.query.page);
+      const limit = parseIntOrUndefined(req.query.limit);
+
+      const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
+      const toRaw = parseQueryDateEndInclusive(req.query.transactionDateTo);
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+      if (
+        transactionDateFrom !== undefined &&
+        transactionDateTo !== undefined &&
+        transactionDateFrom.getTime() > transactionDateTo.getTime()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "transactionDateFrom must be before or equal to transactionDateTo",
+        });
+      }
+
+      const data = await storeTransferService.listStoreTransfers({
+        sourceStoreId,
+        destStoreId,
+        itemId,
+        status,
+        q,
+        transactionDateFrom,
+        transactionDateTo,
+        page,
+        limit,
+      });
+      return res.json({ success: true, message: "Store transfers retrieved successfully", data });
+    } catch (error: unknown) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to list store transfers",
+        error: error instanceof Error ? error.message : undefined,
+      });
+    }
+  },
+
   transfer: async (req: Request, res: Response) => {
     try {
       const { sourceStoreId, destStoreId, items, referenceNo, notes, transactionDate } = req.body ?? {};
@@ -149,7 +287,10 @@ export const storeTransferController = {
         return res.status(400).json({
           success: false,
           message: error.message,
-          data: { insufficient: error.details },
+          data: {
+            ...error.snapshot,
+            insufficient: error.details,
+          },
         });
       }
       const message = error instanceof Error ? error.message : "Failed to transfer between stores";

@@ -31,6 +31,14 @@ export interface ListStoresParams {
   limit?: number;
 }
 
+/** Store row plus how the requesting user relates to it (manager and/or explicit UserStore). */
+export interface StoreAccessibleByUser extends StoreData {
+  isStoreManager: boolean;
+  hasUserStoreAccess: boolean;
+  /** When the user has a `user_stores` row, its `createdAt`; otherwise null. */
+  userStoreAccessGrantedAt: Date | null;
+}
+
 export interface UserStoreAccessData {
   userId: string;
   storeId: string;
@@ -61,6 +69,18 @@ const listStoresInclude = {
     },
   },
 } satisfies Prisma.StoreInclude;
+
+function myStoresInclude(userId: string) {
+  return {
+    ...storeInclude,
+    userAccesses: {
+      where: { userId },
+      orderBy: { createdAt: "asc" as const },
+      take: 1,
+      select: { createdAt: true },
+    },
+  } satisfies Prisma.StoreInclude;
+}
 
 export class StoreService {
   private prisma = prisma;
@@ -159,6 +179,67 @@ export class StoreService {
           lastName: ua.user.lastName,
           accessGrantedAt: ua.createdAt,
         })),
+      };
+    });
+
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+    return { stores, pagination: { page, limit, total, totalPages } };
+  }
+
+  /**
+   * Stores the user may use: assigned manager (`Store.managerId`) and/or explicit `UserStore` grant.
+   */
+  async listStoresAccessibleByUser(
+    userId: string,
+    params: Omit<ListStoresParams, "managerId"> = {}
+  ): Promise<{
+    stores: StoreAccessibleByUser[];
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }> {
+    const page = clampInt(params.page ?? 1, 1, 1_000_000);
+    const limit = clampInt(params.limit ?? 20, 1, 100);
+    const skip = (page - 1) * limit;
+
+    const accessFilter: Prisma.StoreWhereInput = {
+      OR: [{ managerId: userId }, { userAccesses: { some: { userId } } }],
+    };
+
+    const whereParts: Prisma.StoreWhereInput[] = [accessFilter];
+
+    if (params.status === undefined) {
+      whereParts.push({ status: Status.Active });
+    } else if (params.status !== "All") {
+      whereParts.push({ status: params.status });
+    }
+
+    if (params.q?.trim()) {
+      const q = params.q.trim();
+      whereParts.push({ OR: [{ name: { contains: q } }, { description: { contains: q } }] });
+    }
+
+    const where: Prisma.StoreWhereInput = { AND: whereParts };
+
+    const include = myStoresInclude(userId);
+
+    const [total, rows] = await Promise.all([
+      this.prisma.store.count({ where }),
+      this.prisma.store.findMany({
+        where,
+        orderBy: { name: "asc" },
+        skip,
+        take: limit,
+        include,
+      }),
+    ]);
+
+    const stores: StoreAccessibleByUser[] = rows.map((row) => {
+      const { userAccesses, ...rest } = row;
+      const grant = userAccesses[0];
+      return {
+        ...rest,
+        isStoreManager: rest.managerId === userId,
+        hasUserStoreAccess: userAccesses.length > 0,
+        userStoreAccessGrantedAt: grant?.createdAt ?? null,
       };
     });
 
