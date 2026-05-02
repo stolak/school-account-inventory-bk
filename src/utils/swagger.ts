@@ -21,6 +21,7 @@ const options: swaggerJSDoc.Options = {
       { name: "SubCategories", description: "Sub-category management" },
       { name: "Suppliers", description: "Supplier management" },
       { name: "Projects", description: "Project management" },
+      { name: "ProjectCollections", description: "Inventory project_collection transactions" },
       { name: "Purchases", description: "Purchase transactions" },
       { name: "SchoolClasses", description: "School class management" },
       { name: "Students", description: "Student management" },

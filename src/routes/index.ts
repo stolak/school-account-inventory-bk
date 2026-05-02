@@ -24,6 +24,7 @@ import sessionRouter from "./session";
 import activePeriodRouter from "./activePeriod";
 import staffRouter from "./staff";
 import projectRouter from "./project";
+import projectCollectionRouter from "./projectCollection";
 
 const router = Router();
 
@@ -47,6 +48,7 @@ router.use("/sessions", sessionRouter);
 router.use("/active-period", activePeriodRouter);
 router.use("/staff", staffRouter);
 router.use("/projects", projectRouter);
+router.use("/project-collections", projectCollectionRouter);
 
 router.use("/upload", uploadRouter);
 

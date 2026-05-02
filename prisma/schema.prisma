@@ -157,6 +157,7 @@ enum InventoryTransactionType {
   hostel_collection
   departmental_collection
   staff_collection
+  project_collection
 
   student_return
   hostel_return
@@ -420,13 +421,28 @@ model SubClass {
 }
 
 model Hostel {
-  id        String   @id @default(uuid()) @db.Char(36)
-  name      String   @unique
-  status    Status   @default(Active)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @map("updated_at")
+  id                    String                 @id @default(uuid()) @db.Char(36)
+  name                  String                 @unique
+  status                Status                 @default(Active)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @default(now()) @map("updated_at")
+  hostelRooms           HostelRoom[]
+  inventoryTransactions InventoryTransaction[]
 
   @@map("hostels")
+}
+
+model HostelRoom {
+  id                    String                 @id @default(uuid()) @db.Char(36)
+  name                  String                 @unique
+  hostelId              String                 @map("hostel_id") @db.Char(36)
+  hostel                Hostel                 @relation(fields: [hostelId], references: [id], onDelete: Restrict)
+  status                Status                 @default(Active)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @default(now()) @map("updated_at")
+  inventoryTransactions InventoryTransaction[]
+
+  @@map("hostel_rooms")
 }
 
 model Student {
@@ -595,6 +611,10 @@ model InventoryTransaction {
   classInventoryDistributionId String?                     @db.Char(36)
   project                      Project?                    @relation("ProjectTransactions", fields: [projectId], references: [id])
   projectId                    String?                     @db.Char(36)
+  hostelRoomId                 String?                     @map("hostel_room_id") @db.Char(36)
+  hostelRoom                   HostelRoom?                 @relation(fields: [hostelRoomId], references: [id], onDelete: SetNull)
+  hostelId                     String?                     @map("hostel_id") @db.Char(36)
+  hostel                       Hostel?                     @relation(fields: [hostelId], references: [id], onDelete: SetNull)
 
   @@index([itemId])
   @@index([supplierId])
