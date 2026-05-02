@@ -28,10 +28,12 @@ const options: swaggerJSDoc.Options = {
       { name: "SubClasses", description: "Sub class management" },
       { name: "Terms", description: "Term management" },
       { name: "Sessions", description: "Session management" },
+      { name: "Stores", description: "Store management" },
       {
         name: "ActivePeriod",
         description: "Active period singleton (session + term + date range)",
       },
+      { name: "Users", description: "User listing and profile (authenticated)" },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
       { name: "Dashboard", description: "Dashboard endpoints" },

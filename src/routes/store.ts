@@ -1,0 +1,15 @@
+import { Router } from "express";
+import { authenticateJWT } from "../middlewares/auth";
+import { storeController } from "../controllers/storeController";
+
+const router = Router();
+
+router.use(authenticateJWT);
+
+router.post("/", storeController.createStore);
+router.get("/", storeController.listStores);
+router.get("/:id", storeController.getStoreById);
+router.put("/:id", storeController.updateStore);
+router.delete("/:id", storeController.deleteStore);
+
+export default router;

@@ -102,6 +102,7 @@ model User {
   staffProfile                       Staff?                       @relation("StaffUser")
 
   createdProjects Project[] @relation("ProjectCreatedBy")
+  managedStores   Store[]   @relation("StoreManager")
 
   @@map("users")
 }
@@ -615,6 +616,8 @@ model InventoryTransaction {
   hostelRoom                   HostelRoom?                 @relation(fields: [hostelRoomId], references: [id], onDelete: SetNull)
   hostelId                     String?                     @map("hostel_id") @db.Char(36)
   hostel                       Hostel?                     @relation(fields: [hostelId], references: [id], onDelete: SetNull)
+  storeId                      String?                     @map("store_id") @db.Char(36)
+  store                        Store?                      @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   @@index([itemId])
   @@index([supplierId])
@@ -659,4 +662,18 @@ model Project {
   createdById           String?                @map("created_by") @db.Char(36)
 
   @@map("projects")
+}
+
+model Store {
+  id                    String                 @id @default(uuid()) @db.Char(36)
+  name                  String                 @unique
+  description           String?
+  status                Status                 @default(Active)
+  managerId             String?                @map("manager_id") @db.Char(36)
+  manager               User?                  @relation("StoreManager", fields: [managerId], references: [id])
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @default(now()) @map("updated_at")
+  inventoryTransactions InventoryTransaction[]
+
+  @@map("stores")
 }
