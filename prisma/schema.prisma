@@ -612,3 +612,50 @@ model UserStore {
   @@index([storeId])
   @@map("user_stores")
 }
+
+/// Chart of accounts: top-level group (e.g. Assets, Liabilities).
+model AccountGroup {
+  id   Int    @id @default(autoincrement())
+  name String @map("name")
+  rank Int
+
+  heads    AccountHead[]
+  subHeads AccountSubhead[]
+
+  @@map("account_groups")
+}
+
+/// Account head under a group (e.g. Cash, Bank).
+model AccountHead {
+  id      Int    @id @default(autoincrement())
+  groupId Int    @map("group_id")
+  code    String @map("code")
+  name    String @map("name")
+  rank    Int
+
+  group    AccountGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  subHeads AccountSubhead[]
+
+  @@index([groupId])
+  @@map("account_heads")
+}
+
+/// Subhead under a head (detailed ledger line).
+model AccountSubhead {
+  id            Int     @id @default(autoincrement())
+  groupId       Int     @map("group_id")
+  headId        Int     @map("head_id")
+  code          String  @map("code")
+  name          String  @map("name")
+  status        Status  @default(Active)
+  rank          Int
+  afs           String? @map("afs")
+  paymentMethod String? @map("payment_method")
+
+  group AccountGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  head  AccountHead  @relation(fields: [headId], references: [id], onDelete: Restrict)
+
+  @@index([groupId])
+  @@index([headId])
+  @@map("account_subheads")
+}
