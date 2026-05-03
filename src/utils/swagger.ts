@@ -34,6 +34,18 @@ const options: swaggerJSDoc.Options = {
         name: "ActivePeriod",
         description: "Active period singleton (session + term + date range)",
       },
+      {
+        name: "AccountGroups",
+        description: "Chart of accounts — top-level account groups (read-only listing)",
+      },
+      {
+        name: "AccountHeads",
+        description: "Chart of accounts — account heads under a group (read-only listing)",
+      },
+      {
+        name: "AccountSubheads",
+        description: "Chart of accounts — subheads (CRUD); groupId is derived from headId on write",
+      },
       { name: "Users", description: "User listing and profile (authenticated)" },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
