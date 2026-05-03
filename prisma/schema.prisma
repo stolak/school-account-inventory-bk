@@ -51,6 +51,17 @@ enum Status {
   Archived
 }
 
+enum JournalTransferType {
+  Debit
+  Credit
+}
+
+enum BatchStatus {
+  Pending
+  Processed
+  Failed
+}
+
 model User {
   id              String   @id @default(uuid()) @db.Char(36)
   password        String
@@ -576,6 +587,8 @@ model Project {
   createdAt             DateTime               @default(now()) @map("created_at")
   updatedAt             DateTime               @default(now()) @map("updated_at")
   inventoryTransactions InventoryTransaction[] @relation("ProjectTransactions")
+  accountTransactions   AccountTransaction[]
+  tempJournalTransfers  TempJournalTransfer[]
   CreatedBy             User?                  @relation("ProjectCreatedBy", fields: [createdById], references: [id])
   createdById           String?                @map("created_by") @db.Char(36)
 
@@ -619,8 +632,10 @@ model AccountGroup {
   name String @map("name")
   rank Int
 
-  heads    AccountHead[]
-  subHeads AccountSubhead[]
+  heads               AccountHead[]
+  subHeads            AccountSubhead[]
+  accountCharts       AccountChart[]
+  accountTransactions AccountTransaction[]
 
   @@map("account_groups")
 }
@@ -633,8 +648,10 @@ model AccountHead {
   name    String @map("name")
   rank    Int
 
-  group    AccountGroup     @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  subHeads AccountSubhead[]
+  group               AccountGroup         @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  subHeads            AccountSubhead[]
+  accountCharts       AccountChart[]
+  accountTransactions AccountTransaction[]
 
   @@index([groupId])
   @@map("account_heads")
@@ -652,10 +669,102 @@ model AccountSubhead {
   afs           String? @map("afs")
   paymentMethod String? @map("payment_method")
 
-  group AccountGroup @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  head  AccountHead  @relation(fields: [headId], references: [id], onDelete: Restrict)
+  group               AccountGroup         @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  head                AccountHead          @relation(fields: [headId], references: [id], onDelete: Restrict)
+  accountCharts       AccountChart[]
+  accountTransactions AccountTransaction[]
 
   @@index([groupId])
   @@index([headId])
   @@map("account_subheads")
+}
+
+/// Ledger / chart row: concrete account number under group, head, and subhead.
+model AccountChart {
+  id                 Int      @id @default(autoincrement())
+  groupId            Int      @map("group_id")
+  headId             Int      @map("head_id")
+  subheadId          Int      @map("sub_head_id")
+  accountNo          String   @map("account_no")
+  accountRef         String?  @map("account_ref")
+  accountDescription String   @map("account_description")
+  status             Status   @default(Active)
+  rank               Int
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  group                AccountGroup          @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  head                 AccountHead           @relation(fields: [headId], references: [id], onDelete: Restrict)
+  subhead              AccountSubhead        @relation(fields: [subheadId], references: [id], onDelete: Restrict)
+  accountTransactions  AccountTransaction[]
+  tempJournalTransfers TempJournalTransfer[]
+
+  @@index([groupId])
+  @@index([headId])
+  @@index([subheadId])
+  @@map("account_charts")
+}
+
+/// Posted ledger line (double-entry detail).
+model AccountTransaction {
+  id              Int      @id @default(autoincrement())
+  groupId         Int      @map("group_id")
+  headId          Int      @map("head_id")
+  subheadId       Int      @map("sub_head_id")
+  accountId       Int      @map("account_id")
+  accountCode     String   @map("account_code")
+  accountSub      String   @map("account_sub")
+  debit           Decimal  @default(0) @db.Decimal(14, 2)
+  credit          Decimal  @default(0) @db.Decimal(14, 2)
+  remarks         String?  @map("remarks")
+  ref             String?  @map("reference_no")
+  manualRef       String?  @map("manual_reference_no")
+  transactionDate DateTime @map("transaction_date")
+  postedBy        String?  @map("posted_by")
+  createdAt       DateTime @default(now()) @map("created_at")
+  projectId       String?  @map("project_id") @db.Char(36)
+
+  group   AccountGroup   @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  head    AccountHead    @relation(fields: [headId], references: [id], onDelete: Restrict)
+  subhead AccountSubhead @relation(fields: [subheadId], references: [id], onDelete: Restrict)
+  account AccountChart   @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  project Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([groupId])
+  @@index([headId])
+  @@index([subheadId])
+  @@index([accountId])
+  @@index([projectId])
+  @@index([transactionDate])
+  @@map("account_transactions")
+}
+
+/// Staging journal lines before transfer to the live ledger.
+model TempJournalTransfer {
+  id                Int                 @id @default(autoincrement())
+  transType         JournalTransferType @map("transaction_type")
+  accountId         Int                 @map("accountid")
+  debit             Decimal             @default(0) @db.Decimal(14, 2)
+  credit            Decimal             @default(0) @db.Decimal(14, 2)
+  status            Status              @default(Active)
+  batchStatus       BatchStatus         @default(Pending)
+  referenceNo       String?             @map("reference_no")
+  manualReferenceNo String?             @map("manual_reference_no")
+  transactionDate   DateTime            @map("transaction_date")
+  postedAt          DateTime?           @map("posted_at")
+  postedBy          String?             @map("posted_by")
+  remarks           String?             @map("remarks")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  finalPostedAt     DateTime?           @map("final_posted_at")
+  finalPostedBy     String?             @map("final_posted_by")
+  projectId         String?             @map("project_id") @db.Char(36)
+  updatedAt         DateTime            @default(now()) @map("updated_at")
+
+  account AccountChart @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  project Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([accountId])
+  @@index([projectId])
+  @@index([transactionDate])
+  @@index([batchStatus])
+  @@map("temp_journal_transfer")
 }
