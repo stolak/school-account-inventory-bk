@@ -54,7 +54,7 @@ export class AccountSubheadService {
       data: {
         groupId,
         headId: input.headId,
-        code: input.code.trim(),
+        code: input.code.trim(), // optional: if not provided, it will be generated automatically
         name: input.name.trim(),
         ...(input.status !== undefined ? { status: input.status } : {}),
         rank: input.rank ?? 0,
@@ -103,7 +103,7 @@ export class AccountSubheadService {
       rank?: number;
       afs?: string | null;
       paymentMethod?: string | null;
-    },
+    }
   ): Promise<AccountSubheadWithRelations> {
     const data: Prisma.AccountSubheadUpdateInput = {};
 

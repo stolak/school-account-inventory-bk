@@ -77,14 +77,70 @@ const options: swaggerJSDoc.Options = {
   ],
 };
 
-const swaggerSpec = swaggerJSDoc(options);
+const swaggerSpec = swaggerJSDoc(options) as {
+  tags?: Array<{ name: string; description?: string }>;
+};
+
+/** Ensures stable tag order in the spec (Swagger UI may still alpha-sort unless tagsSorter runs). */
+function orderTagsAuthFirstInSpec(spec: { tags?: Array<{ name: string; description?: string }> }) {
+  const tags = spec.tags;
+  if (!tags?.length) {
+    return;
+  }
+  const byName = new Map(tags.map((t) => [t.name, t] as const));
+  const orderedNames = [...byName.keys()].sort((a, b) => {
+    if (a === "Auth") {
+      return -1;
+    }
+    if (b === "Auth") {
+      return 1;
+    }
+    return a.localeCompare(b);
+  });
+  spec.tags = orderedNames.map((n) => byName.get(n)!);
+}
+
+orderTagsAuthFirstInSpec(swaggerSpec);
+
+/**
+ * Must be fully self-contained: swagger-ui-express embeds only this function in the browser.
+ * A helper like `swaggerTagName()` would not exist there and causes "Could not render BaseLayout".
+ */
+function tagsSorterAuthFirst(a: unknown, b: unknown): number {
+  function tagName(t: unknown): string {
+    if (typeof t === "string") {
+      return t;
+    }
+    if (t && typeof t === "object") {
+      const o = t as { name?: unknown; get?: (k: string) => unknown };
+      if (typeof o.name === "string") {
+        return o.name;
+      }
+      if (typeof o.get === "function") {
+        const n = o.get("name");
+        if (typeof n === "string") {
+          return n;
+        }
+      }
+    }
+    return String(t);
+  }
+  const na = tagName(a);
+  const nb = tagName(b);
+  if (na === "Auth") {
+    return -1;
+  }
+  if (nb === "Auth") {
+    return 1;
+  }
+  return na.localeCompare(nb);
+}
 
 export function setupSwagger(app: Express) {
-  // Swagger UI options with alphabetical sorting
   const swaggerUiOptions = {
     swaggerOptions: {
-      tagsSorter: "alpha", // Sort tags alphabetically
-      operationsSorter: "alpha", // Sort operations within tags alphabetically
+      tagsSorter: tagsSorterAuthFirst,
+      operationsSorter: "alpha",
     },
   };
 
