@@ -52,7 +52,7 @@ const statusValues = `${Status.Active}, ${Status.Inactive}, ${Status.Archived}`;
  *         application/json:
  *           schema:
  *             type: object
- *             required: [headId, code, name]
+ *             required: [headId, name]
  *             properties:
  *               headId:
  *                 type: integer
@@ -60,8 +60,11 @@ const statusValues = `${Status.Active}, ${Status.Inactive}, ${Status.Archived}`;
  *                 description: Parent account head (group is derived from this head)
  *               code:
  *                 type: string
+ *                 nullable: true
+ *                 description: Optional; must be globally unique when set. Omit or null to leave unset.
  *               name:
  *                 type: string
+ *                 description: Required; unique per account head (same headId).
  *               status:
  *                 type: string
  *                 enum: [Active, Inactive, Archived]
@@ -82,6 +85,8 @@ const statusValues = `${Status.Active}, ${Status.Inactive}, ${Status.Archived}`;
  *         description: Validation error (including if groupId is sent)
  *       404:
  *         description: Account head not found (invalid headId)
+ *       409:
+ *         description: Duplicate name for this head or duplicate code globally
  *       500:
  *         description: Server error
  *   get:
@@ -137,12 +142,20 @@ export const accountSubheadController = {
         });
       }
 
-      const { code, name } = body;
-      if (typeof code !== "string" || !code.trim()) {
-        return res.status(400).json({ success: false, message: "code is required" });
-      }
+      const { name } = body;
       if (typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ success: false, message: "name is required" });
+      }
+
+      let codeArg: string | null | undefined;
+      if (body.code !== undefined && body.code !== null) {
+        if (typeof body.code !== "string") {
+          return res.status(400).json({
+            success: false,
+            message: "code must be a string when provided",
+          });
+        }
+        codeArg = body.code.trim() === "" ? undefined : body.code.trim();
       }
 
       if (body.status !== undefined && !Object.values(Status).includes(body.status)) {
@@ -180,8 +193,8 @@ export const accountSubheadController = {
 
       const created = await accountSubheadService.create({
         headId,
-        code: code.trim(),
         name: name.trim(),
+        ...(codeArg !== undefined ? { code: codeArg } : {}),
         ...(body.status !== undefined ? { status: body.status as Status } : {}),
         ...(body.rank !== undefined
           ? {
@@ -202,6 +215,12 @@ export const accountSubheadController = {
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
+      if (message.includes("already exists")) {
+        return res.status(409).json({ success: false, message });
+      }
+      if (message.includes("name is required")) {
+        return res.status(400).json({ success: false, message });
+      }
       if (message.includes("Invalid headId") || message.includes("not found")) {
         return res.status(404).json({ success: false, message });
       }
@@ -320,9 +339,10 @@ export const accountSubheadController = {
    *               headId:
    *                 type: integer
    *                 minimum: 1
-   *               code:
-   *                 type: string
-   *               name:
+ *               code:
+ *                 type: string
+ *                 nullable: true
+ *               name:
    *                 type: string
    *               status:
    *                 type: string
@@ -340,11 +360,13 @@ export const accountSubheadController = {
    *         description: Updated subhead
    *       400:
    *         description: Validation error or no fields to update
-   *       404:
-   *         description: Subhead or head not found
-   *       500:
-   *         description: Server error
-   *   delete:
+ *       404:
+ *         description: Subhead or head not found
+ *       409:
+ *         description: Duplicate name for this head or duplicate code globally
+ *       500:
+ *         description: Server error
+ *   delete:
    *     summary: Delete an account subhead
    *     tags: [AccountSubheads]
    *     parameters:
@@ -446,8 +468,11 @@ export const accountSubheadController = {
         headId = n;
       }
 
-      if (hasCode && (typeof body.code !== "string" || !body.code.trim())) {
-        return res.status(400).json({ success: false, message: "code must be a non-empty string" });
+      if (hasCode && body.code !== null && typeof body.code !== "string") {
+        return res.status(400).json({
+          success: false,
+          message: "code must be a string or null when provided",
+        });
       }
       if (hasName && (typeof body.name !== "string" || !body.name.trim())) {
         return res.status(400).json({ success: false, message: "name must be a non-empty string" });
@@ -490,7 +515,16 @@ export const accountSubheadController = {
 
       const updated = await accountSubheadService.update(id, {
         ...(headId !== undefined ? { headId } : {}),
-        ...(hasCode ? { code: (body.code as string).trim() } : {}),
+        ...(hasCode
+          ? {
+              code:
+                body.code === null
+                  ? null
+                  : (body.code as string).trim() === ""
+                    ? null
+                    : (body.code as string).trim(),
+            }
+          : {}),
         ...(hasName ? { name: (body.name as string).trim() } : {}),
         ...(hasStatus ? { status: body.status as Status } : {}),
         ...(hasRank
@@ -512,6 +546,12 @@ export const accountSubheadController = {
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
+      if (message.includes("already exists")) {
+        return res.status(409).json({ success: false, message });
+      }
+      if (message.includes("code cannot be empty")) {
+        return res.status(400).json({ success: false, message });
+      }
       if (message.includes("not found")) {
         return res.status(404).json({ success: false, message });
       }

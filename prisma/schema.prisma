@@ -662,7 +662,7 @@ model AccountSubhead {
   id            Int     @id @default(autoincrement())
   groupId       Int     @map("group_id")
   headId        Int     @map("head_id")
-  code          String  @map("code")
+  code          String? @map("code")
   name          String  @map("name")
   status        Status  @default(Active)
   rank          Int
