@@ -64,6 +64,11 @@ const options: swaggerJSDoc.Options = {
         name: "DefaultAccountSettings",
         description: "Default account settings row — PATCH update only (by settingsId)",
       },
+      { name: "BillingItems", description: "Billing item master data (CRUD)" },
+      {
+        name: "ConcessionDiscounts",
+        description: "Concessions/discounts with appliesTo billing items (CRUD)",
+      },
       { name: "Users", description: "User listing and profile (authenticated)" },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },

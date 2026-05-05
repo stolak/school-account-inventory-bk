@@ -11,6 +11,8 @@ import accountChartRouter from "./accountChart";
 import accountTransactionRouter from "./accountTransaction";
 import defaulSubheadSettingsRouter from "./defaulSubheadSettings";
 import defaultAccountSettingsRouter from "./defaultAccountSettings";
+import billingItemRouter from "./billingItem";
+import concessionDiscountRouter from "./concessionDiscount";
 
 import uploadRouter from "./upload";
 import categoryRouter from "./category";
@@ -47,6 +49,8 @@ router.use("/account-charts", accountChartRouter);
 router.use("/account-transactions", accountTransactionRouter);
 router.use("/default-subhead-settings", defaulSubheadSettingsRouter);
 router.use("/default-account-settings", defaultAccountSettingsRouter);
+router.use("/billing-items", billingItemRouter);
+router.use("/concession-discounts", concessionDiscountRouter);
 router.use("/categories", categoryRouter);
 router.use("/sub-categories", subCategoryRouter);
 router.use("/brands", brandRouter);

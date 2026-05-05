@@ -28,6 +28,7 @@ async function main() {
         status: "active",
       },
       create: {
+        id: "77e7a005-b0a5-4a6e-897c-f827333924d4",
         email: "admin@admin.com",
         password: hashedPassword,
         firstName: "Admin",
@@ -59,6 +60,7 @@ async function main() {
         status: "active",
       },
       create: {
+        id: "39fc583a-a071-49f3-980f-8932fa6cb6c9",
         email: "admin@example.com",
         password: hashedPassword,
         firstName: "Admin",
