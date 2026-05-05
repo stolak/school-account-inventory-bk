@@ -669,10 +669,11 @@ model AccountSubhead {
   afs           String? @map("afs")
   paymentMethod String? @map("payment_method")
 
-  group               AccountGroup         @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  head                AccountHead          @relation(fields: [headId], references: [id], onDelete: Restrict)
-  accountCharts       AccountChart[]
-  accountTransactions AccountTransaction[]
+  group                 AccountGroup            @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  head                  AccountHead             @relation(fields: [headId], references: [id], onDelete: Restrict)
+  accountCharts         AccountChart[]
+  accountTransactions   AccountTransaction[]
+  defaulSubheadSettings DefaulSubheadSettings[]
 
   @@index([groupId])
   @@index([headId])
@@ -685,18 +686,19 @@ model AccountChart {
   groupId            Int      @map("group_id")
   headId             Int      @map("head_id")
   subheadId          Int      @map("sub_head_id")
-  accountNo          String   @map("account_no")
+  accountNo          String?  @map("account_no")
   accountRef         String?  @map("account_ref")
   accountDescription String   @map("account_description")
   status             Status   @default(Active)
   rank               Int
   createdAt          DateTime @default(now()) @map("created_at")
 
-  group                AccountGroup          @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  head                 AccountHead           @relation(fields: [headId], references: [id], onDelete: Restrict)
-  subhead              AccountSubhead        @relation(fields: [subheadId], references: [id], onDelete: Restrict)
-  accountTransactions  AccountTransaction[]
-  tempJournalTransfers TempJournalTransfer[]
+  group                  AccountGroup             @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  head                   AccountHead              @relation(fields: [headId], references: [id], onDelete: Restrict)
+  subhead                AccountSubhead           @relation(fields: [subheadId], references: [id], onDelete: Restrict)
+  accountTransactions    AccountTransaction[]
+  tempJournalTransfers   TempJournalTransfer[]
+  defaultAccountSettings DefaultAccountSettings[]
 
   @@index([groupId])
   @@index([headId])
@@ -767,4 +769,24 @@ model TempJournalTransfer {
   @@index([transactionDate])
   @@index([batchStatus])
   @@map("temp_journal_transfer")
+}
+
+model DefaulSubheadSettings {
+  settingsId String          @unique
+  settings   String          @map("settings")
+  subheadId  Int?            @map("subhead_id")
+  subhead    AccountSubhead? @relation(fields: [subheadId], references: [id], onDelete: Restrict)
+
+  @@index([settingsId])
+  @@map("defaul_subhead_settings")
+}
+
+model DefaultAccountSettings {
+  settingsId String        @unique
+  settings   String        @map("settings")
+  accountId  Int?          @map("account_id")
+  account    AccountChart? @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([settingsId])
+  @@map("default_account_settings")
 }

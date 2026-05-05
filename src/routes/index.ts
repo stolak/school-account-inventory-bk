@@ -7,6 +7,8 @@ import bankRouter from "./bank";
 import accountGroupRouter from "./accountGroup";
 import accountHeadRouter from "./accountHead";
 import accountSubheadRouter from "./accountSubhead";
+import accountChartRouter from "./accountChart";
+import defaulSubheadSettingsRouter from "./defaulSubheadSettings";
 
 import uploadRouter from "./upload";
 import categoryRouter from "./category";
@@ -39,6 +41,8 @@ router.use("/banks", bankRouter);
 router.use("/account-groups", accountGroupRouter);
 router.use("/account-heads", accountHeadRouter);
 router.use("/account-subheads", accountSubheadRouter);
+router.use("/account-charts", accountChartRouter);
+router.use("/default-subhead-settings", defaulSubheadSettingsRouter);
 router.use("/categories", categoryRouter);
 router.use("/sub-categories", subCategoryRouter);
 router.use("/brands", brandRouter);
