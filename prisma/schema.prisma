@@ -790,3 +790,71 @@ model DefaultAccountSettings {
   @@index([settingsId])
   @@map("default_account_settings")
 }
+
+enum BillingItemCategory {
+  TUITION
+  MATERIALS
+  SERVICES
+  TRANSPORTATION
+  TECHNOLOGY
+  UTILITIES
+  CONSTRUCTION
+  FEEDING
+  MEDICAL
+  OTHER
+}
+
+model BillingItem {
+  id        Int                 @id @default(autoincrement())
+  code      String              @unique
+  name      String
+  category  BillingItemCategory
+  optional  Boolean             @default(false)
+  status    Status              @default(Active)
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+  // concessions ConcessionDiscount[]
+
+  @@index([code])
+  @@index([category])
+  @@index([status])
+  @@map("billing_items")
+}
+
+enum ConcessionDiscountType {
+  CONCESSION
+  DISCOUNT
+}
+
+enum ConcessionDiscountCalculationType {
+  PERCENTAGE
+  FIXED_AMOUNT
+}
+
+enum ConcessionDiscountAppliesTo {
+  TUITION
+  ACCOMMODATION
+  ALL_BILLING_ITEMS
+  SPECIFIC_BILLING_ITEMS
+}
+
+model ConcessionDiscount {
+  id              Int                               @id @default(autoincrement())
+  code            String                            @unique
+  name            String
+  type            ConcessionDiscountType
+  calculationType ConcessionDiscountCalculationType @map("calculation_type")
+  value           Decimal                           @db.Decimal(14, 2)
+  appliesTo       ConcessionDiscountAppliesTo       @map("applies_to")
+  maxLimit        Decimal?                          @map("max_limit") @db.Decimal(14, 2)
+  status          Status                            @default(Active)
+
+  // billingItems BillingItem[]
+
+  @@index([code])
+  @@index([type])
+  @@index([calculationType])
+  @@index([appliesTo])
+  @@index([status])
+  @@map("concession_discounts")
+}
