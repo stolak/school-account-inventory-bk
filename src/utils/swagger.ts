@@ -52,8 +52,17 @@ const options: swaggerJSDoc.Options = {
           "Ledger account chart lines (CRUD); groupId and headId are derived from subheadId on write",
       },
       {
+        name: "AccountTransactions",
+        description:
+          "Post debit/credit entries; group/head/subhead/accountCode are derived from accountId",
+      },
+      {
         name: "DefaultSubheadSettings",
         description: "Default subhead settings row — PATCH update only (by settingsId)",
+      },
+      {
+        name: "DefaultAccountSettings",
+        description: "Default account settings row — PATCH update only (by settingsId)",
       },
       { name: "Users", description: "User listing and profile (authenticated)" },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
