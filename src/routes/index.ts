@@ -13,6 +13,7 @@ import defaulSubheadSettingsRouter from "./defaulSubheadSettings";
 import defaultAccountSettingsRouter from "./defaultAccountSettings";
 import billingItemRouter from "./billingItem";
 import concessionDiscountRouter from "./concessionDiscount";
+import classDefaultBillingRouter from "./classDefaultBilling";
 
 import uploadRouter from "./upload";
 import categoryRouter from "./category";
@@ -51,6 +52,7 @@ router.use("/default-subhead-settings", defaulSubheadSettingsRouter);
 router.use("/default-account-settings", defaultAccountSettingsRouter);
 router.use("/billing-items", billingItemRouter);
 router.use("/concession-discounts", concessionDiscountRouter);
+router.use("/class-default-billings", classDefaultBillingRouter);
 router.use("/categories", categoryRouter);
 router.use("/sub-categories", subCategoryRouter);
 router.use("/brands", brandRouter);

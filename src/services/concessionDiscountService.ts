@@ -129,10 +129,7 @@ export class ConcessionDiscountService {
       where.status = params.status;
     }
     if (params.q) {
-      where.OR = [
-        { name: { contains: params.q } },
-        { code: { contains: params.q } },
-      ];
+      where.OR = [{ name: { contains: params.q } }, { code: { contains: params.q } }];
     }
 
     const finalWhere = Object.keys(where).length ? where : undefined;
@@ -141,7 +138,10 @@ export class ConcessionDiscountService {
       this.prisma.concessionDiscount.count({ where: finalWhere }),
       this.prisma.concessionDiscount.findMany({
         where: finalWhere,
-        include: concessionInclude,
+        include: {
+          account: { select: { id: true, accountDescription: true } },
+          ...concessionInclude,
+        },
         orderBy: [{ type: "asc" }, { name: "asc" }],
         skip,
         take: limit,
@@ -175,7 +175,7 @@ export class ConcessionDiscountService {
       accountId?: number | null;
       maxLimit?: number | null;
       status?: Status;
-    },
+    }
   ): Promise<ConcessionDiscountRow> {
     try {
       let appliesToSet: number[] | undefined;

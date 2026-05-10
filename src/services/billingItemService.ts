@@ -1,6 +1,10 @@
 import prisma from "../utils/prisma";
 import { BillingItemCategory, Prisma, Status } from "@prisma/client";
 
+const billingItemListInclude = {
+  account: { select: { id: true, accountDescription: true } },
+} satisfies Prisma.BillingItemInclude;
+
 export type BillingItemRow = Prisma.BillingItemGetPayload<Record<string, never>>;
 
 export interface ListBillingItemsParams {
@@ -92,10 +96,7 @@ export class BillingItemService {
     }
 
     if (params.q) {
-      where.OR = [
-        { name: { contains: params.q } },
-        { code: { contains: params.q } },
-      ];
+      where.OR = [{ name: { contains: params.q } }, { code: { contains: params.q } }];
     }
 
     const finalWhere = Object.keys(where).length ? where : undefined;
@@ -104,6 +105,7 @@ export class BillingItemService {
       this.prisma.billingItem.count({ where: finalWhere }),
       this.prisma.billingItem.findMany({
         where: finalWhere,
+        include: billingItemListInclude,
         orderBy: [{ category: "asc" }, { name: "asc" }],
         skip,
         take: limit,
@@ -131,7 +133,7 @@ export class BillingItemService {
       accountId?: number | null;
       optional?: boolean;
       status?: Status;
-    },
+    }
   ): Promise<BillingItemRow> {
     try {
       if (input.accountId !== undefined) {

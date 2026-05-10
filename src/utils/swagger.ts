@@ -66,6 +66,10 @@ const options: swaggerJSDoc.Options = {
       },
       { name: "BillingItems", description: "Billing item master data (CRUD)" },
       {
+        name: "ClassDefaultBillings",
+        description: "Default class billing rows (CRUD + bulk create by billingId/amount pairs)",
+      },
+      {
         name: "ConcessionDiscounts",
         description: "Concessions/discounts with appliesTo billing items (CRUD)",
       },
@@ -164,6 +168,7 @@ export function setupSwagger(app: Express) {
     swaggerOptions: {
       tagsSorter: tagsSorterAuthFirst,
       operationsSorter: "alpha",
+      persistAuthorization: true,
     },
   };
 
