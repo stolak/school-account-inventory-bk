@@ -73,6 +73,10 @@ const options: swaggerJSDoc.Options = {
         name: "ConcessionDiscounts",
         description: "Concessions/discounts with appliesTo billing items (CRUD)",
       },
+      {
+        name: "TempJournalTransfers",
+        description: "Temporary journal transfer entries (CRUD)",
+      },
       { name: "Users", description: "User listing and profile (authenticated)" },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
