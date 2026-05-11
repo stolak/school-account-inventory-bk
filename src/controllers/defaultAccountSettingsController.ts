@@ -3,6 +3,17 @@ import { defaultAccountSettingsService } from "../services/defaultAccountSetting
 
 /**
  * @openapi
+ * /api/v1/default-account-settings:
+ *   get:
+ *     summary: List default account settings
+ *     description: Returns all default account settings rows.
+ *     tags: [DefaultAccountSettings]
+ *     responses:
+ *       200:
+ *         description: Retrieved successfully
+ *       500:
+ *         description: Server error
+ *
  * /api/v1/default-account-settings/{settingsId}:
  *   patch:
  *     summary: Update default account settings (partial)
@@ -40,6 +51,25 @@ import { defaultAccountSettingsService } from "../services/defaultAccountSetting
  *         description: Server error
  */
 export const defaultAccountSettingsController = {
+  list: async (_req: Request, res: Response) => {
+    try {
+      const rows = await defaultAccountSettingsService.list();
+      return res.json({
+        success: true,
+        message: "Default account settings retrieved successfully",
+        data: rows,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.error("Error retrieving default account settings:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve default account settings",
+        error: message,
+      });
+    }
+  },
+
   patch: async (req: Request, res: Response) => {
     try {
       const settingsId =

@@ -3,7 +3,38 @@ import { defaulSubheadSettingsService } from "../services/defaulSubheadSettingsS
 
 /**
  * @openapi
+ * /api/v1/default-subhead-settings:
+ *   get:
+ *     summary: List default subhead settings
+ *     description: Returns all default subhead settings rows.
+ *     tags: [DefaultSubheadSettings]
+ *     responses:
+ *       200:
+ *         description: Retrieved successfully
+ *       500:
+ *         description: Server error
+ *
  * /api/v1/default-subhead-settings/{settingsId}:
+ *   get:
+ *     summary: Get default subhead settings by settingsId
+ *     description: Retrieves one default subhead settings row by `settingsId`.
+ *     tags: [DefaultSubheadSettings]
+ *     parameters:
+ *       - in: path
+ *         name: settingsId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Retrieved successfully
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Not found
+ *       500:
+ *         description: Server error
+ *
  *   patch:
  *     summary: Update default subhead settings (partial)
  *     description: Update-only endpoint — no create/list/delete. Identifies the row by `settingsId`.
@@ -40,10 +71,63 @@ import { defaulSubheadSettingsService } from "../services/defaulSubheadSettingsS
  *         description: Server error
  */
 export const defaulSubheadSettingsController = {
-  patch: async (req: Request, res: Response) => {
+  list: async (_req: Request, res: Response) => {
+    try {
+      const rows = await defaulSubheadSettingsService.list();
+      return res.json({
+        success: true,
+        message: "Default subhead settings retrieved successfully",
+        data: rows,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.error("Error retrieving default subhead settings:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve default subhead settings",
+        error: message,
+      });
+    }
+  },
+
+  getBySettingsId: async (req: Request, res: Response) => {
     try {
       const settingsId =
         typeof req.params.settingsId === "string" ? req.params.settingsId : "";
+      if (!settingsId.trim()) {
+        return res.status(400).json({ success: false, message: "settingsId is required" });
+      }
+
+      const row = await defaulSubheadSettingsService.getBySettingsId(settingsId);
+      if (!row) {
+        return res.status(404).json({ success: false, message: "Default subhead settings not found" });
+      }
+
+      return res.json({
+        success: true,
+        message: "Default subhead settings retrieved successfully",
+        data: row,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      if (message.includes("required")) {
+        return res.status(400).json({ success: false, message });
+      }
+      if (message.includes("not found")) {
+        return res.status(404).json({ success: false, message });
+      }
+      console.error("Error retrieving default subhead settings by settingsId:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve default subhead settings",
+        error: message,
+      });
+    }
+  },
+
+  patch: async (req: Request, res: Response) => {
+    try {
+      const settingsId = typeof req.params.settingsId === "string" ? req.params.settingsId : "";
       const body = req.body ?? {};
 
       const hasSettings = body.settings !== undefined;

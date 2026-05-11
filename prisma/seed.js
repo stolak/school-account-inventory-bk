@@ -122,6 +122,44 @@ async function main() {
       `   ✓ ${accountGroups.length} account groups, ${accountHeads.length} account heads`
     );
 
+    // Default subhead settings (seed placeholders; API PATCH can bind real subheadId later)
+    console.log("⚙️ Seeding default subhead settings...");
+    const defaultSubheadSettings = [
+      {
+        settingsId: "STUDENT_SUBHEAD",
+        settings: "Default subhead for student-related postings",
+        subheadId: null,
+      },
+
+      {
+        settingsId: "SUPPLIER_SUBHEAD",
+        settings: "Default subhead for supplier-related postings",
+        subheadId: null,
+      },
+      {
+        settingsId: "DISCOUNT_SUBHEAD",
+        settings: "Default subhead for discount/concession postings",
+        subheadId: null,
+      },
+      {
+        settingsId: "COLLECTION_SUBHEAD",
+        settings: "Default subhead for collection postings",
+        subheadId: null,
+      },
+    ];
+
+    for (const s of defaultSubheadSettings) {
+      await prisma.defaulSubheadSettings.upsert({
+        where: { settingsId: s.settingsId },
+        update: {
+          settings: s.settings,
+          subheadId: s.subheadId,
+        },
+        create: s,
+      });
+    }
+    console.log(`   ✓ ${defaultSubheadSettings.length} default subhead settings`);
+
     // Create merchant users for each merchant
   } catch (error) {
     console.error("❌ Error during seeding:", error);

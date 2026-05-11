@@ -1,17 +1,51 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../utils/prisma";
 
-export type DefaulSubheadSettingsRow = Prisma.DefaulSubheadSettingsGetPayload<Record<string, never>>;
+export type DefaulSubheadSettingsRow = Prisma.DefaulSubheadSettingsGetPayload<
+  Record<string, never>
+>;
 
 export class DefaulSubheadSettingsService {
   private prisma = prisma;
+
+  async list(): Promise<DefaulSubheadSettingsRow[]> {
+    return this.prisma.defaulSubheadSettings.findMany({
+      orderBy: { settingsId: "asc" },
+      include: {
+        subhead: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+  }
+
+  async getBySettingsId(settingsId: string): Promise<DefaulSubheadSettingsRow | null> {
+    const trimmedId = settingsId.trim();
+    if (!trimmedId) {
+      throw new Error("settingsId is required");
+    }
+    return this.prisma.defaulSubheadSettings.findUnique({
+      where: { settingsId: trimmedId },
+      include: {
+        subhead: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+    });
+  }
 
   /**
    * Partial update by business key `settingsId`. At least one of `settings` or `subheadId` must be provided.
    */
   async update(
     settingsId: string,
-    input: { settings?: string; subheadId?: number | null },
+    input: { settings?: string; subheadId?: number | null }
   ): Promise<DefaulSubheadSettingsRow> {
     const trimmedId = settingsId.trim();
     if (!trimmedId) {

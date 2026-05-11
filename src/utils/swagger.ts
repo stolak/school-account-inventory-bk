@@ -57,7 +57,7 @@ const options: swaggerJSDoc.Options = {
           "Post debit/credit entries; group/head/subhead/accountCode are derived from accountId",
       },
       {
-        name: "DefaultSubheadSettings",
+        name: "DefaulSubheadSettings",
         description: "Default subhead settings row — PATCH update only (by settingsId)",
       },
       {

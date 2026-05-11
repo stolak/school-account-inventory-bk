@@ -3,6 +3,7 @@ import { defaultAccountSettingsController } from "../controllers/defaultAccountS
 
 const router = Router();
 
+router.get("/", defaultAccountSettingsController.list);
 router.patch("/:settingsId", defaultAccountSettingsController.patch);
 
 export default router;

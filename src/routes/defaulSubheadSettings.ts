@@ -3,6 +3,8 @@ import { defaulSubheadSettingsController } from "../controllers/defaulSubheadSet
 
 const router = Router();
 
+router.get("/", defaulSubheadSettingsController.list);
+router.get("/:settingsId", defaulSubheadSettingsController.getBySettingsId);
 router.patch("/:settingsId", defaulSubheadSettingsController.patch);
 
 export default router;

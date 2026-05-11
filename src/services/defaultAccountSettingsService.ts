@@ -8,6 +8,12 @@ export type DefaultAccountSettingsRow = Prisma.DefaultAccountSettingsGetPayload<
 export class DefaultAccountSettingsService {
   private prisma = prisma;
 
+  async list(): Promise<DefaultAccountSettingsRow[]> {
+    return this.prisma.defaultAccountSettings.findMany({
+      orderBy: { settingsId: "asc" },
+    });
+  }
+
   /**
    * Partial update by business key `settingsId`.
    * At least one of `settings` or `accountId` must be provided.

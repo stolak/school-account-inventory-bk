@@ -451,9 +451,12 @@ model Student {
   guardianContact String?       @map("guardian_contact")
   address         String?
   status          StudentStatus @default(Active)
-  createdById     String        @map("created_by") @db.Char(36)
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @default(now()) @map("updated_at")
+
+  accountId   String?       @map("account_id") @db.Char(36)
+  account     AccountChart? @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  createdById String        @map("created_by") @db.Char(36)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @default(now()) @map("updated_at")
 
   class     SchoolClass? @relation(fields: [classId], references: [id], onDelete: SetNull)
   createdBy User         @relation("StudentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
@@ -702,6 +705,7 @@ model AccountChart {
   defaultAccountSettings DefaultAccountSettings[]
   concessionDiscounts    ConcessionDiscount[]
   billingItems           BillingItem[]
+  students               Student[]
 
   @@index([groupId])
   @@index([headId])
