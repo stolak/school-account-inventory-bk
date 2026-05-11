@@ -1,6 +1,7 @@
 import { BatchStatus, JournalTransferType, Prisma, Status } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { randomUUID } from "crypto";
+import { accountTransactionService } from "./accountTransactionService";
 
 const tempJournalTransferInclude = {
   account: { select: { id: true, accountDescription: true, accountNo: true } },
@@ -341,6 +342,59 @@ export class TempJournalTransferService {
         }),
       ),
     );
+
+    if (processedEntries.length > 0) {
+      const postedAccountTransactionIds: number[] = [];
+      try {
+        for (const entry of normalizedEntries) {
+          if (entry.batchStatus !== BatchStatus.Processed) {
+            continue;
+          }
+
+          const manualRef = this.normalizeOptionalString(entry.manualReferenceNo);
+          if (!manualRef) {
+            throw new Error("manualReferenceNo is required when batchStatus is Processed");
+          }
+
+          const debitAmount = Number(entry.debit);
+          const creditAmount = Number(entry.credit);
+          const amount = debitAmount > 0 ? debitAmount : creditAmount;
+
+          const posted =
+            debitAmount > 0
+              ? await accountTransactionService.debitAccount({
+                  accountId: String(entry.accountId),
+                  amount,
+                  ref: finalReferenceNo,
+                  manualRef,
+                  transactionDate: entry.transactionDate.toISOString(),
+                  postedBy: createdById,
+                  ...(entry.projectId ? { projectId: entry.projectId } : {}),
+                })
+              : await accountTransactionService.creditAccount({
+                  accountId: String(entry.accountId),
+                  amount,
+                  ref: finalReferenceNo,
+                  manualRef,
+                  transactionDate: entry.transactionDate.toISOString(),
+                  postedBy: createdById,
+                  ...(entry.projectId ? { projectId: entry.projectId } : {}),
+                });
+
+          postedAccountTransactionIds.push(posted.id);
+        }
+      } catch (error) {
+        if (postedAccountTransactionIds.length > 0) {
+          await this.prisma.accountTransaction.deleteMany({
+            where: { id: { in: postedAccountTransactionIds } },
+          });
+        }
+        await this.prisma.tempJournalTransfer.deleteMany({
+          where: { id: { in: rows.map((row) => row.id) } },
+        });
+        throw error;
+      }
+    }
 
     return { referenceNo: finalReferenceNo, rows };
   }
