@@ -1,5 +1,7 @@
 import prisma from "../utils/prisma";
 import { Status } from "@prisma/client";
+import { defaulSubheadSettingsService } from "./defaulSubheadSettingsService";
+import { accountChartService } from "./accountChartService";
 
 export interface SupplierData {
   id: string;
@@ -38,6 +40,7 @@ function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
 
 export class SupplierService {
   private prisma = prisma;
+  private static readonly SUPPLIER_SUBHEAD_SETTINGS_ID = "SUPPLIER_SUBHEAD";
 
   async createSupplier(input: {
     name: string;
@@ -54,7 +57,7 @@ export class SupplierService {
     createdById?: string | null;
   }): Promise<SupplierData> {
     try {
-      return await this.prisma.supplier.create({
+      const created = await this.prisma.supplier.create({
         data: {
           name: input.name,
           contactName: input.contactName ?? null,
@@ -73,6 +76,25 @@ export class SupplierService {
           createdBy: { select: { firstName: true, lastName: true } },
         },
       });
+
+      try {
+        const defaultSubhead = await defaulSubheadSettingsService.getBySettingsId(
+          SupplierService.SUPPLIER_SUBHEAD_SETTINGS_ID,
+        );
+
+        if (defaultSubhead?.subheadId) {
+          await accountChartService.create({
+            subheadId: defaultSubhead.subheadId,
+            accountDescription: created.name,
+            accountRef: created.id,
+          });
+        }
+      } catch (linkError) {
+        await this.prisma.supplier.delete({ where: { id: created.id } }).catch(() => undefined);
+        throw linkError;
+      }
+
+      return created;
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === 'P2002') {
         throw new Error("Supplier name already exists");

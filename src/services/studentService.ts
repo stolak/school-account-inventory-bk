@@ -1,5 +1,7 @@
 import prisma from "../utils/prisma";
 import { Gender, Prisma, StudentStatus } from "@prisma/client";
+import { defaulSubheadSettingsService } from "./defaulSubheadSettingsService";
+import { accountChartService } from "./accountChartService";
 
 export interface StudentData {
   id: string;
@@ -44,6 +46,7 @@ function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
 
 export class StudentService {
   private prisma = prisma;
+  private static readonly STUDENT_SUBHEAD_SETTINGS_ID = "STUDENT_SUBHEAD";
 
   private async assertClassExists(classId: string) {
     const cls = await this.prisma.schoolClass.findUnique({
@@ -82,7 +85,7 @@ export class StudentService {
     if (input.subClassId) await this.assertSubClassExists(input.subClassId);
 
     try {
-      return await this.prisma.student.create({
+      const created = await this.prisma.student.create({
         data: {
           admissionNumber: input.admissionNumber,
           firstName: input.firstName,
@@ -106,6 +109,48 @@ export class StudentService {
           createdBy: { select: { firstName: true, lastName: true } },
         },
       });
+      let accountId: number | null = null;
+      try {
+        const defaultSubhead = await defaulSubheadSettingsService.getBySettingsId(
+          StudentService.STUDENT_SUBHEAD_SETTINGS_ID
+        );
+
+        if (defaultSubhead?.subheadId) {
+          const accountDescription = `${created.firstName} ${created.lastName} (${created.admissionNumber})`;
+          const createdAccount = await accountChartService.create({
+            subheadId: defaultSubhead.subheadId,
+            accountDescription,
+            accountRef: created.id,
+          });
+          accountId = createdAccount.id;
+          await this.prisma.$executeRaw(
+            Prisma.sql`UPDATE students SET account_id = ${createdAccount.id} WHERE id = ${created.id}`
+          );
+
+          const updatedStudent = await this.prisma.student.findUnique({
+            where: { id: created.id },
+            include: {
+              class: { select: { id: true, name: true } },
+              subClass: { select: { id: true, name: true, classId: true } },
+              createdBy: { select: { firstName: true, lastName: true } },
+            },
+          });
+          if (!updatedStudent) {
+            throw new Error("Student not found after account chart linking");
+          }
+
+          return updatedStudent;
+        }
+      } catch (linkError) {
+        // Keep student/account chart linkage atomic from API perspective.
+        await this.prisma.student.delete({ where: { id: created.id } }).catch(() => undefined);
+        if (accountId) {
+          await accountChartService.delete(accountId);
+        }
+        throw linkError;
+      }
+
+      return created;
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
         throw new Error("Admission number already exists");
@@ -229,7 +274,9 @@ export class StudentService {
       return await this.prisma.student.update({
         where: { id },
         data: {
-          ...(input.admissionNumber !== undefined ? { admissionNumber: input.admissionNumber } : {}),
+          ...(input.admissionNumber !== undefined
+            ? { admissionNumber: input.admissionNumber }
+            : {}),
           ...(input.firstName !== undefined ? { firstName: input.firstName } : {}),
           ...(input.middleName !== undefined ? { middleName: input.middleName } : {}),
           ...(input.lastName !== undefined ? { lastName: input.lastName } : {}),
@@ -240,7 +287,9 @@ export class StudentService {
           ...(input.subClassId !== undefined ? { subClassId: input.subClassId } : {}),
           ...(input.guardianName !== undefined ? { guardianName: input.guardianName } : {}),
           ...(input.guardianEmail !== undefined ? { guardianEmail: input.guardianEmail } : {}),
-          ...(input.guardianContact !== undefined ? { guardianContact: input.guardianContact } : {}),
+          ...(input.guardianContact !== undefined
+            ? { guardianContact: input.guardianContact }
+            : {}),
           ...(input.address !== undefined ? { address: input.address } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
           updatedAt: new Date(),

@@ -452,7 +452,7 @@ model Student {
   address         String?
   status          StudentStatus @default(Active)
 
-  accountId   String?       @map("account_id") @db.Char(36)
+  accountId   Int?          @map("account_id")
   account     AccountChart? @relation(fields: [accountId], references: [id], onDelete: SetNull)
   createdById String        @map("created_by") @db.Char(36)
   createdAt   DateTime      @default(now()) @map("created_at")
