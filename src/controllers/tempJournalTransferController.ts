@@ -167,6 +167,52 @@ function parseCreateEntry(
 
 /**
  * @openapi
+ * /api/v1/temp-journal-transfers/reference/{referenceNo}/bulk:
+ *   post:
+ *     summary: Add multiple temp journal transfers to an existing referenceNo
+ *     tags: [TempJournalTransfers]
+ *     parameters:
+ *       - in: path
+ *         name: referenceNo
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [entries]
+ *             properties:
+ *               entries:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required: [transType, accountId, transactionDate]
+ *                   properties:
+ *                     transType: { type: string, enum: [Debit, Credit] }
+ *                     accountId: { type: integer, minimum: 1 }
+ *                     debit: { type: number, minimum: 0 }
+ *                     credit: { type: number, minimum: 0 }
+ *                     status: { type: string, enum: [Active, Inactive, Archived] }
+ *                     batchStatus: { type: string, enum: [Pending, Processed, Failed] }
+ *                     manualReferenceNo: { type: string, nullable: true }
+ *                     transactionDate: { type: string, format: date-time }
+ *                     postedAt: { type: string, format: date-time, nullable: true }
+ *                     postedBy: { type: string, nullable: true }
+ *                     remarks: { type: string, nullable: true }
+ *                     finalPostedAt: { type: string, format: date-time, nullable: true }
+ *                     finalPostedBy: { type: string, nullable: true }
+ *                     projectId: { type: string, nullable: true }
+ *     responses:
+ *       201: { description: Created }
+ *       400: { description: Validation error }
+ *       404: { description: referenceNo or related records not found }
+ *       500: { description: Server error }
+ */
+/**
+ * @openapi
  * /api/v1/temp-journal-transfers/bulk:
  *   post:
  *     summary: Bulk create temp journal transfers with one reference number
@@ -261,6 +307,12 @@ function parseCreateEntry(
  *         name: projectId
  *         schema: { type: string }
  *       - in: query
+ *         name: referenceNo
+ *         schema: { type: string }
+ *       - in: query
+ *         name: manualReferenceNo
+ *         schema: { type: string }
+ *       - in: query
  *         name: page
  *         schema: { type: integer, minimum: 1, default: 1 }
  *       - in: query
@@ -353,6 +405,116 @@ export const tempJournalTransferController = {
     }
   },
 
+  appendBulkByReferenceNo: async (req: Request, res: Response) => {
+    try {
+      const createdById = getAuthenticatedUserId(req);
+      if (!createdById) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const referenceNo =
+        typeof req.params.referenceNo === "string" ? req.params.referenceNo.trim() : "";
+      if (!referenceNo) {
+        return res.status(400).json({ success: false, message: "referenceNo is required" });
+      }
+
+      const body = req.body ?? {};
+      if (!Array.isArray(body.entries) || body.entries.length === 0) {
+        return res.status(400).json({ success: false, message: "entries must be a non-empty array" });
+      }
+
+      const entries = [];
+      for (const entry of body.entries) {
+        const parsed = parseCreateEntry(entry, { allowReferenceNo: false });
+        if (!parsed.data) {
+          return res.status(400).json({ success: false, message: parsed.message ?? "Validation error" });
+        }
+        entries.push(parsed.data);
+      }
+
+      const created = await tempJournalTransferService.appendManyByReferenceNo({
+        createdById,
+        referenceNo,
+        entries,
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Temp journal transfers appended successfully",
+        data: created,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to append temp journal transfers";
+      const status = message.includes("not found")
+        ? 404
+        : message.includes("must be") || message.includes("invalid")
+          ? 400
+          : 500;
+      return res.status(status).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/temp-journal-transfers/grouped/reference-no:
+   *   get:
+   *     summary: Group temp journal transfers by referenceNo
+   *     tags: [TempJournalTransfers]
+   *     parameters:
+   *       - in: query
+   *         name: status
+   *         schema: { type: string, enum: [Active, Inactive, Archived, All] }
+   *       - in: query
+   *         name: batchStatus
+   *         schema: { type: string, enum: [Pending, Processed, Failed] }
+   *     responses:
+   *       200: { description: Grouped list }
+   *       400: { description: Validation error }
+   *       500: { description: Server error }
+   */
+  listGroupedByReferenceNo: async (req: Request, res: Response) => {
+    try {
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === undefined
+          ? undefined
+          : statusRaw === "All"
+            ? "All"
+            : Object.values(Status).includes(statusRaw as Status)
+              ? (statusRaw as Status)
+              : undefined;
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({ success: false, message: "status is invalid" });
+      }
+
+      const batchStatusRaw = typeof req.query.batchStatus === "string" ? req.query.batchStatus : undefined;
+      const batchStatus =
+        batchStatusRaw !== undefined && Object.values(BatchStatus).includes(batchStatusRaw as BatchStatus)
+          ? (batchStatusRaw as BatchStatus)
+          : undefined;
+      if (batchStatusRaw !== undefined && batchStatus === undefined) {
+        return res.status(400).json({ success: false, message: "batchStatus is invalid" });
+      }
+
+      const rows = await tempJournalTransferService.listGroupedByReferenceNo({
+        status,
+        batchStatus,
+      });
+
+      return res.json({
+        success: true,
+        message: "Temp journal transfers grouped by referenceNo retrieved successfully",
+        data: rows,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve grouped temp journal transfers",
+        error: error?.message,
+      });
+    }
+  },
+
   list: async (req: Request, res: Response) => {
     try {
       const transTypeRaw = typeof req.query.transType === "string" ? req.query.transType : undefined;
@@ -397,6 +559,16 @@ export const tempJournalTransferController = {
       if (projectIdRaw !== undefined && typeof projectIdRaw !== "string") {
         return res.status(400).json({ success: false, message: "projectId must be a string" });
       }
+      const referenceNo = asTrimmedString(req.query.referenceNo);
+      const referenceNoRaw = req.query.referenceNo;
+      if (referenceNoRaw !== undefined && typeof referenceNoRaw !== "string") {
+        return res.status(400).json({ success: false, message: "referenceNo must be a string" });
+      }
+      const manualReferenceNo = asTrimmedString(req.query.manualReferenceNo);
+      const manualReferenceNoRaw = req.query.manualReferenceNo;
+      if (manualReferenceNoRaw !== undefined && typeof manualReferenceNoRaw !== "string") {
+        return res.status(400).json({ success: false, message: "manualReferenceNo must be a string" });
+      }
 
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
@@ -407,6 +579,8 @@ export const tempJournalTransferController = {
         status,
         batchStatus,
         ...(projectId !== undefined ? { projectId } : {}),
+        ...(referenceNo !== undefined ? { referenceNo } : {}),
+        ...(manualReferenceNo !== undefined ? { manualReferenceNo } : {}),
         page,
         limit,
       });
@@ -675,6 +849,51 @@ export const tempJournalTransferController = {
         : message.includes("must be") || message.includes("invalid")
           ? 400
           : 500;
+      return res.status(status).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/temp-journal-transfers/reference/{referenceNo}:
+   *   delete:
+   *     summary: Delete temp journal transfers by referenceNo
+   *     tags: [TempJournalTransfers]
+   *     parameters:
+   *       - in: path
+   *         name: referenceNo
+   *         required: true
+   *         schema: { type: string }
+   *     responses:
+   *       200: { description: Deleted }
+   *       400: { description: Validation error }
+   *       404: { description: Not found }
+   *       500: { description: Server error }
+   */
+  deleteByReferenceNo: async (req: Request, res: Response) => {
+    try {
+      const referenceNo =
+        typeof req.params.referenceNo === "string" ? req.params.referenceNo.trim() : "";
+      if (!referenceNo) {
+        return res.status(400).json({ success: false, message: "referenceNo is required" });
+      }
+
+      const deleted = await tempJournalTransferService.deleteByReferenceNo(referenceNo);
+      if (deleted.count < 1) {
+        return res.status(404).json({ success: false, message: "Temp journal transfer referenceNo not found" });
+      }
+
+      return res.json({
+        success: true,
+        message: "Temp journal transfers deleted successfully",
+        data: {
+          referenceNo,
+          deletedCount: deleted.count,
+        },
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to delete temp journal transfers by referenceNo";
+      const status = message.includes("required") ? 400 : 500;
       return res.status(status).json({ success: false, message });
     }
   },

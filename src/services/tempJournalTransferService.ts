@@ -17,8 +17,15 @@ export interface ListTempJournalTransfersParams {
   status?: Status | "All";
   batchStatus?: BatchStatus;
   projectId?: string;
+  referenceNo?: string;
+  manualReferenceNo?: string;
   page?: number;
   limit?: number;
+}
+
+export interface ListTempJournalTransfersGroupedByReferenceParams {
+  status?: Status | "All";
+  batchStatus?: BatchStatus;
 }
 
 type CreateTempJournalTransferInput = {
@@ -45,6 +52,11 @@ type CreateManyTempJournalTransferInput = {
   createdById: string;
   referenceNo?: string | null;
   entries: Array<Omit<CreateTempJournalTransferInput, "createdById">>;
+};
+type AppendManyByReferenceNoInput = {
+  createdById: string;
+  referenceNo: string;
+  entries: Array<Omit<CreateTempJournalTransferInput, "createdById" | "referenceNo">>;
 };
 
 function clampInt(n: number, min: number, max: number) {
@@ -143,6 +155,22 @@ export class TempJournalTransferService {
     return normalized;
   }
 
+  private normalizeRequiredReferenceNo(value: string): string {
+    const normalized = value.trim();
+    if (!normalized) {
+      throw new Error("referenceNo is required");
+    }
+    return normalized;
+  }
+
+  private normalizeRequiredManualReferenceNo(value?: string | null): string {
+    const normalized = this.normalizeOptionalString(value);
+    if (normalized === undefined || normalized === null) {
+      throw new Error("manualReferenceNo is required when batchStatus is Processed");
+    }
+    return normalized;
+  }
+
   async create(input: CreateTempJournalTransferInput): Promise<TempJournalTransferRow> {
     const createdById = this.normalizeRequiredUserId(input.createdById);
     this.validatePositiveInt(input.accountId, "accountId");
@@ -203,7 +231,7 @@ export class TempJournalTransferService {
 
     const finalReferenceNo = this.resolveReferenceNo(input.referenceNo);
 
-    const normalizedEntries = input.entries.map((entry) => {
+    let normalizedEntries = input.entries.map((entry) => {
       this.validatePositiveInt(entry.accountId, "accountId");
 
       const debit = entry.debit ?? 0;
@@ -219,6 +247,11 @@ export class TempJournalTransferService {
       if (entry.finalPostedAt !== undefined && entry.finalPostedAt !== null) {
         this.validateDate(entry.finalPostedAt, "finalPostedAt");
       }
+      const effectiveBatchStatus = entry.batchStatus ?? BatchStatus.Pending;
+      const normalizedManualReferenceNo = this.normalizeOptionalString(entry.manualReferenceNo);
+      if (effectiveBatchStatus === BatchStatus.Processed) {
+        this.normalizeRequiredManualReferenceNo(normalizedManualReferenceNo);
+      }
 
       return {
         transType: entry.transType,
@@ -226,10 +259,8 @@ export class TempJournalTransferService {
         debit,
         credit,
         ...(entry.status !== undefined ? { status: entry.status } : {}),
-        ...(entry.batchStatus !== undefined ? { batchStatus: entry.batchStatus } : {}),
-        ...(entry.manualReferenceNo !== undefined
-          ? { manualReferenceNo: this.normalizeOptionalString(entry.manualReferenceNo) }
-          : {}),
+        batchStatus: effectiveBatchStatus,
+        ...(normalizedManualReferenceNo !== undefined ? { manualReferenceNo: normalizedManualReferenceNo } : {}),
         transactionDate: entry.transactionDate,
         ...(entry.postedAt !== undefined ? { postedAt: entry.postedAt } : {}),
         ...(entry.postedBy !== undefined
@@ -244,6 +275,37 @@ export class TempJournalTransferService {
       };
     });
 
+    const processedEntries = normalizedEntries.filter(
+      (entry) => entry.batchStatus === BatchStatus.Processed,
+    );
+    if (processedEntries.length > 0) {
+      const totalDebit = processedEntries.reduce(
+        (sum, entry) => sum.plus(new Prisma.Decimal(entry.debit)),
+        new Prisma.Decimal(0),
+      );
+      const totalCredit = processedEntries.reduce(
+        (sum, entry) => sum.plus(new Prisma.Decimal(entry.credit)),
+        new Prisma.Decimal(0),
+      );
+      if (!totalDebit.equals(totalCredit)) {
+        throw new Error(
+          "When batchStatus is Processed, total debit must equal total credit for the batch",
+        );
+      }
+
+      const finalPostedAt = new Date();
+      normalizedEntries = normalizedEntries.map((entry) =>
+        entry.batchStatus === BatchStatus.Processed
+          ? {
+              ...entry,
+              postedBy: createdById,
+              finalPostedBy: createdById,
+              finalPostedAt,
+            }
+          : entry,
+      );
+    }
+
     const accountIds = [...new Set(normalizedEntries.map((entry) => entry.accountId))];
     const accountCount = await this.prisma.accountChart.count({
       where: { id: { in: accountIds } },
@@ -256,7 +318,7 @@ export class TempJournalTransferService {
       ...new Set(
         normalizedEntries
           .map((entry) => entry.projectId)
-          .filter((projectId): projectId is string => projectId !== null),
+          .filter((projectId): projectId is string => projectId !== null && projectId !== undefined),
       ),
     ];
     if (projectIds.length > 0) {
@@ -283,6 +345,26 @@ export class TempJournalTransferService {
     return { referenceNo: finalReferenceNo, rows };
   }
 
+  async appendManyByReferenceNo(
+    input: AppendManyByReferenceNoInput,
+  ): Promise<{ referenceNo: string; rows: TempJournalTransferRow[] }> {
+    const referenceNo = this.normalizeRequiredReferenceNo(input.referenceNo);
+
+    const existing = await this.prisma.tempJournalTransfer.findFirst({
+      where: { referenceNo },
+      select: { id: true },
+    });
+    if (!existing) {
+      throw new Error("Temp journal transfer referenceNo not found");
+    }
+
+    return this.createMany({
+      createdById: input.createdById,
+      referenceNo,
+      entries: input.entries,
+    });
+  }
+
   async list(params: ListTempJournalTransfersParams = {}): Promise<{
     tempJournalTransfers: Array<
       Prisma.TempJournalTransferGetPayload<{ include: typeof tempJournalTransferInclude }>
@@ -298,6 +380,10 @@ export class TempJournalTransferService {
     if (params.accountId !== undefined) where.accountId = params.accountId;
     if (params.batchStatus !== undefined) where.batchStatus = params.batchStatus;
     if (params.projectId !== undefined) where.projectId = params.projectId;
+    if (params.referenceNo !== undefined) where.referenceNo = { contains: params.referenceNo };
+    if (params.manualReferenceNo !== undefined) {
+      where.manualReferenceNo = { contains: params.manualReferenceNo };
+    }
 
     if (params.status === undefined) {
       where.status = Status.Active;
@@ -327,6 +413,120 @@ export class TempJournalTransferService {
         totalPages: Math.max(1, Math.ceil(total / limit)),
       },
     };
+  }
+
+  async listGroupedByReferenceNo(
+    params: ListTempJournalTransfersGroupedByReferenceParams = {},
+  ): Promise<
+    Array<{
+      referenceNo: string;
+      batchStatus: BatchStatus;
+      totalDebit: Prisma.Decimal;
+      totalCredit: Prisma.Decimal;
+      count: number;
+      latestTransactionDate: Date | null;
+      manualReferenceNos: string[];
+      postedBy: Array<{ id: string; name: string | null }>;
+    }>
+  > {
+    const where: Prisma.TempJournalTransferWhereInput = {
+      referenceNo: { not: null },
+    };
+    if (params.batchStatus !== undefined) {
+      where.batchStatus = params.batchStatus;
+    }
+    if (params.status === undefined) {
+      where.status = Status.Active;
+    } else if (params.status !== "All") {
+      where.status = params.status;
+    }
+
+    const rows = await this.prisma.tempJournalTransfer.groupBy({
+      by: ["referenceNo", "batchStatus"],
+      where,
+      _sum: { debit: true, credit: true },
+      _count: { _all: true },
+      _max: { transactionDate: true },
+      orderBy: [{ _max: { transactionDate: "desc" } }, { referenceNo: "asc" }],
+    });
+
+    const referenceNos = [
+      ...new Set(rows.map((row) => row.referenceNo).filter((referenceNo): referenceNo is string => !!referenceNo)),
+    ];
+
+    const detailsByGroup = new Map<
+      string,
+      { manualReferenceNos: Set<string>; postedByIds: Set<string> }
+    >();
+
+    if (referenceNos.length > 0) {
+      const detailRows = await this.prisma.tempJournalTransfer.findMany({
+        where: {
+          ...where,
+          referenceNo: { in: referenceNos },
+        },
+        select: {
+          referenceNo: true,
+          batchStatus: true,
+          manualReferenceNo: true,
+          postedBy: true,
+        },
+      });
+
+      for (const row of detailRows) {
+        if (!row.referenceNo) continue;
+        const key = `${row.referenceNo}::${row.batchStatus}`;
+        const existing = detailsByGroup.get(key) ?? {
+          manualReferenceNos: new Set<string>(),
+          postedByIds: new Set<string>(),
+        };
+        if (row.manualReferenceNo && row.manualReferenceNo.trim()) {
+          existing.manualReferenceNos.add(row.manualReferenceNo.trim());
+        }
+        if (row.postedBy && row.postedBy.trim()) {
+          existing.postedByIds.add(row.postedBy.trim());
+        }
+        detailsByGroup.set(key, existing);
+      }
+    }
+
+    const allPostedByIds = [
+      ...new Set(
+        Array.from(detailsByGroup.values()).flatMap((value) => Array.from(value.postedByIds)),
+      ),
+    ];
+    const usersById = new Map<string, { id: string; firstName: string | null; lastName: string | null }>();
+    if (allPostedByIds.length > 0) {
+      const users = await this.prisma.user.findMany({
+        where: { id: { in: allPostedByIds } },
+        select: { id: true, firstName: true, lastName: true },
+      });
+      for (const user of users) {
+        usersById.set(user.id, user);
+      }
+    }
+
+    return rows.map((row) => ({
+      referenceNo: row.referenceNo ?? "",
+      batchStatus: row.batchStatus,
+      totalDebit: row._sum.debit ?? new Prisma.Decimal(0),
+      totalCredit: row._sum.credit ?? new Prisma.Decimal(0),
+      count: row._count._all,
+      latestTransactionDate: row._max.transactionDate ?? null,
+      manualReferenceNos: Array.from(
+        detailsByGroup.get(`${row.referenceNo ?? ""}::${row.batchStatus}`)?.manualReferenceNos ?? [],
+      ),
+      postedBy: Array.from(
+        detailsByGroup.get(`${row.referenceNo ?? ""}::${row.batchStatus}`)?.postedByIds ?? [],
+      ).map((id) => {
+        const user = usersById.get(id);
+        const name = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : "";
+        return {
+          id,
+          name: name || null,
+        };
+      }),
+    }));
   }
 
   async getById(id: number): Promise<TempJournalTransferRow | null> {
@@ -398,6 +598,14 @@ export class TempJournalTransferService {
 
   async delete(id: number): Promise<TempJournalTransferRow> {
     return this.prisma.tempJournalTransfer.delete({ where: { id } });
+  }
+
+  async deleteByReferenceNo(referenceNo: string): Promise<{ count: number }> {
+    const normalizedReferenceNo = this.normalizeRequiredReferenceNo(referenceNo);
+    const deleted = await this.prisma.tempJournalTransfer.deleteMany({
+      where: { referenceNo: normalizedReferenceNo },
+    });
+    return { count: deleted.count };
   }
 }
 
