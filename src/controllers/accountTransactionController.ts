@@ -95,6 +95,7 @@ export const accountTransactionController = {
         manualRef: String(body.manualRef ?? ""),
         transactionDate: String(body.transactionDate ?? ""),
         postedBy: String(postedByRaw ?? ""),
+        remarks: String(body.remarks ?? ""),
         ...(body.projectId !== undefined ? { projectId: String(body.projectId) } : {}),
         ...(body.accountSub !== undefined ? { accountSub: String(body.accountSub) } : {}),
       });
@@ -143,6 +144,7 @@ export const accountTransactionController = {
         manualRef: String(body.manualRef ?? ""),
         transactionDate: String(body.transactionDate ?? ""),
         postedBy: String(postedByRaw ?? ""),
+        remarks: String(body.remarks ?? ""),
         ...(body.projectId !== undefined ? { projectId: String(body.projectId) } : {}),
         ...(body.accountSub !== undefined ? { accountSub: String(body.accountSub) } : {}),
       });

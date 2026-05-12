@@ -464,6 +464,7 @@ model Student {
   subClass              SubClass?              @relation(fields: [subClassId], references: [id])
   subClassId            String?                @db.Char(36)
   inventoryTransactions InventoryTransaction[]
+  studentBillings       StudentBilling[]
 
   @@index([classId])
   @@index([createdById])
@@ -890,6 +891,7 @@ model ClassDefaultBilling {
 model StudentBilling {
   id         Int                  @id @default(autoincrement())
   studentId  String               @map("student_id") @db.Char(36)
+  student    Student?             @relation(fields: [studentId], references: [id], onDelete: Restrict)
   classId    String               @map("class_id") @db.Char(36)
   subclassId String?              @map("subclass_id") @db.Char(36)
   session    String               @map("session") @db.Char(36)

@@ -12,7 +12,13 @@ type EntryInput = {
   postedBy: string;
   projectId?: string;
   accountSub?: string;
+  remarks: string;
 };
+
+type DbClient = Pick<
+  Prisma.TransactionClient,
+  "accountChart" | "project" | "accountTransaction"
+>;
 
 export class AccountTransactionService {
   private prisma = prisma;
@@ -30,13 +36,17 @@ export class AccountTransactionService {
     return { count: deleted.count };
   }
 
-  private async resolveAccount(accountIdRaw: string) {
+  private getDbClient(db?: DbClient): DbClient {
+    return db ?? this.prisma;
+  }
+
+  private async resolveAccount(db: DbClient, accountIdRaw: string) {
     const accountId = Number.parseInt(accountIdRaw, 10);
     if (!Number.isFinite(accountId) || accountId < 1) {
       throw new Error("accountId must be a positive integer");
     }
 
-    const account = await this.prisma.accountChart.findUnique({
+    const account = await db.accountChart.findUnique({
       where: { id: accountId },
       select: {
         id: true,
@@ -61,13 +71,13 @@ export class AccountTransactionService {
     return d;
   }
 
-  private async validateProjectId(projectId?: string): Promise<void> {
+  private async validateProjectId(db: DbClient, projectId?: string): Promise<void> {
     if (projectId === undefined) return;
     const p = projectId.trim();
     if (!p) {
       throw new Error("projectId cannot be empty when provided");
     }
-    const project = await this.prisma.project.findUnique({
+    const project = await db.project.findUnique({
       where: { id: p },
       select: { id: true },
     });
@@ -79,6 +89,7 @@ export class AccountTransactionService {
   private async postEntry(
     type: "debit" | "credit",
     input: EntryInput,
+    db?: DbClient
   ): Promise<AccountTransactionRow> {
     if (!Number.isFinite(input.amount) || input.amount <= 0) {
       throw new Error("amount must be a positive number");
@@ -93,14 +104,15 @@ export class AccountTransactionService {
       throw new Error("postedBy is required");
     }
 
-    const account = await this.resolveAccount(input.accountId);
-    await this.validateProjectId(input.projectId);
+    const dbClient = this.getDbClient(db);
+    const account = await this.resolveAccount(dbClient, input.accountId);
+    await this.validateProjectId(dbClient, input.projectId);
     const transactionDate = this.parseDateOrThrow(input.transactionDate);
 
     const accountCode = account.accountNo?.trim() || String(account.id);
     const accountSub = input.accountSub?.trim() || account.accountDescription;
 
-    return this.prisma.accountTransaction.create({
+    return dbClient.accountTransaction.create({
       data: {
         groupId: account.groupId,
         headId: account.headId,
@@ -115,16 +127,17 @@ export class AccountTransactionService {
         transactionDate,
         postedBy: input.postedBy.trim(),
         ...(input.projectId !== undefined ? { projectId: input.projectId.trim() } : {}),
+        remarks: input.remarks.trim(),
       },
     });
   }
 
-  async debitAccount(input: EntryInput): Promise<AccountTransactionRow> {
-    return this.postEntry("debit", input);
+  async debitAccount(input: EntryInput, db?: DbClient): Promise<AccountTransactionRow> {
+    return this.postEntry("debit", input, db);
   }
 
-  async creditAccount(input: EntryInput): Promise<AccountTransactionRow> {
-    return this.postEntry("credit", input);
+  async creditAccount(input: EntryInput, db?: DbClient): Promise<AccountTransactionRow> {
+    return this.postEntry("credit", input, db);
   }
 }
 

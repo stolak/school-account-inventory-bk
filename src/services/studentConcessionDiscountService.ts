@@ -1,6 +1,7 @@
 import { Prisma, StudentBillingStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { randomUUID } from "crypto";
+import { accountTransactionService } from "./accountTransactionService";
 
 export type StudentConcessionDiscountRow = Prisma.StudentConcessionDiscountGetPayload<
   Record<string, never>
@@ -361,16 +362,117 @@ export class StudentConcessionDiscountService {
       throw new Error("Only APPROVED records can be posted");
     }
 
-    return this.prisma.studentConcessionDiscount.updateMany({
-      where: {
-        id: { in: ids },
-        isPosted: false,
-      },
-      data: {
-        isPosted: true,
-        postedBy: actedBy,
-        postedAt: new Date(),
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const toPost = await tx.studentConcessionDiscount.findMany({
+        where: {
+          id: { in: ids },
+          isPosted: false,
+        },
+        select: {
+          id: true,
+          studentId: true,
+          concessionDiscountId: true,
+          amount: true,
+          referentId: true,
+          concessionDiscount: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (toPost.length === 0) {
+        return { count: 0 };
+      }
+
+      const students = await tx.student.findMany({
+        where: {
+          id: { in: [...new Set(toPost.map((row) => row.studentId))] },
+        },
+        select: {
+          id: true,
+          accountId: true,
+        },
+      });
+      const studentAccountById = new Map(students.map((s) => [s.id, s.accountId]));
+
+      const discounts = await tx.concessionDiscount.findMany({
+        where: {
+          id: { in: [...new Set(toPost.map((row) => row.concessionDiscountId))] },
+        },
+        select: {
+          id: true,
+          accountId: true,
+        },
+      });
+      const discountAccountById = new Map(discounts.map((d) => [d.id, d.accountId]));
+
+      const postedAt = new Date();
+
+      for (const row of toPost) {
+        const studentAccountId = studentAccountById.get(row.studentId);
+        if (!studentAccountId) {
+          throw new Error(`Student account chart is required before posting discount ID ${row.id}`);
+        }
+
+        const discountAccountId = discountAccountById.get(row.concessionDiscountId);
+        if (!discountAccountId) {
+          throw new Error(
+            `Concession discount account chart is required before posting discount ID ${row.id}`
+          );
+        }
+
+        const amount = Number(row.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          throw new Error(
+            `Discount amount must be a positive number for discount ID ${row.id} - ${row.concessionDiscount?.name}`
+          );
+        }
+
+        const reference = row.referentId?.trim() || `SCD-${row.id}`;
+        const manualReference = `SCD-${row.id}`;
+        const transactionDate = postedAt.toISOString();
+        const remarks = `Student concession/discount for ${row.concessionDiscount?.name || row.concessionDiscountId}`;
+
+        await accountTransactionService.debitAccount(
+          {
+            accountId: String(discountAccountId),
+            amount,
+            ref: reference,
+            manualRef: manualReference,
+            transactionDate,
+            postedBy: actedBy,
+            remarks,
+          },
+          tx
+        );
+
+        await accountTransactionService.creditAccount(
+          {
+            accountId: String(studentAccountId),
+            amount,
+            ref: reference,
+            manualRef: manualReference,
+            transactionDate,
+            postedBy: actedBy,
+            remarks,
+          },
+          tx
+        );
+      }
+
+      return tx.studentConcessionDiscount.updateMany({
+        where: {
+          id: { in: toPost.map((row) => row.id) },
+          isPosted: false,
+        },
+        data: {
+          isPosted: true,
+          postedBy: actedBy,
+          postedAt,
+        },
+      });
     });
   }
 

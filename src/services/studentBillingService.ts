@@ -1,6 +1,7 @@
 import { Prisma, StudentBillingStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { randomUUID } from "crypto";
+import { accountTransactionService } from "./accountTransactionService";
 
 export type StudentBillingRow = Prisma.StudentBillingGetPayload<Record<string, never>>;
 
@@ -294,7 +295,10 @@ export class StudentBillingService {
     if (!Array.isArray(input.ids) || input.ids.length === 0) {
       throw new Error("ids must be a non-empty array");
     }
-    if (input.status !== StudentBillingStatus.DRAFT && input.status !== StudentBillingStatus.APPROVED) {
+    if (
+      input.status !== StudentBillingStatus.DRAFT &&
+      input.status !== StudentBillingStatus.APPROVED
+    ) {
       throw new Error("status must be APPROVED or DRAFT");
     }
 
@@ -355,16 +359,117 @@ export class StudentBillingService {
       throw new Error("Only APPROVED records can be posted");
     }
 
-    return this.prisma.studentBilling.updateMany({
-      where: {
-        id: { in: ids },
-        isPosted: false,
-      },
-      data: {
-        isPosted: true,
-        postedBy: actedBy,
-        postedAt: new Date(),
-      },
+    return this.prisma.$transaction(async (tx) => {
+      const toPost = await tx.studentBilling.findMany({
+        where: {
+          id: { in: ids },
+          isPosted: false,
+        },
+        select: {
+          id: true,
+          studentId: true,
+          billingId: true,
+          amount: true,
+          referentId: true,
+          billing: {
+            select: {
+              name: true,
+            },
+          },
+        },
+      });
+
+      if (toPost.length === 0) {
+        return { count: 0 };
+      }
+
+      const students = await tx.student.findMany({
+        where: {
+          id: { in: [...new Set(toPost.map((row) => row.studentId))] },
+        },
+        select: {
+          id: true,
+          accountId: true,
+        },
+      });
+      const studentAccountById = new Map(students.map((s) => [s.id, s.accountId]));
+
+      const billingItems = await tx.billingItem.findMany({
+        where: {
+          id: { in: [...new Set(toPost.map((row) => row.billingId))] },
+        },
+        select: {
+          id: true,
+          accountId: true,
+        },
+      });
+      const billingAccountById = new Map(billingItems.map((b) => [b.id, b.accountId]));
+
+      const postedAt = new Date();
+
+      for (const row of toPost) {
+        const studentAccountId = studentAccountById.get(row.studentId);
+        if (!studentAccountId) {
+          throw new Error(`Student account chart is required before posting billing ID ${row.id}`);
+        }
+
+        const billingAccountId = billingAccountById.get(row.billingId);
+        if (!billingAccountId) {
+          throw new Error(
+            `Billing item account chart is required before posting billing ID ${row.id}`
+          );
+        }
+
+        const amount = Number(row.amount);
+        if (!Number.isFinite(amount) || amount <= 0) {
+          throw new Error(
+            `Billing amount must be a positive number for billing ID ${row.id} - ${row.billing?.name}`
+          );
+        }
+
+        const reference = row.referentId?.trim() || `STB-${row.id}`;
+        const manualReference = `STB-${row.id}`;
+        const transactionDate = postedAt.toISOString();
+        const remarks = `Student billing for ${row?.billing?.name || row.billingId}`;
+
+        await accountTransactionService.debitAccount(
+          {
+            accountId: String(studentAccountId),
+            amount,
+            ref: reference,
+            manualRef: manualReference,
+            transactionDate,
+            postedBy: actedBy,
+            remarks,
+          },
+          tx
+        );
+
+        await accountTransactionService.creditAccount(
+          {
+            accountId: String(billingAccountId),
+            amount,
+            ref: reference,
+            manualRef: manualReference,
+            transactionDate,
+            postedBy: actedBy,
+            remarks,
+          },
+          tx
+        );
+      }
+
+      return tx.studentBilling.updateMany({
+        where: {
+          id: { in: toPost.map((row) => row.id) },
+          isPosted: false,
+        },
+        data: {
+          isPosted: true,
+          postedBy: actedBy,
+          postedAt,
+        },
+      });
     });
   }
 
