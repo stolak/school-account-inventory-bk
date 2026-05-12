@@ -70,6 +70,14 @@ const options: swaggerJSDoc.Options = {
         description: "Default class billing rows (CRUD + bulk create by billingId/amount pairs)",
       },
       {
+        name: "StudentBillings",
+        description: "Student billing rows (CRUD + bulk create with shared referentId)",
+      },
+      {
+        name: "StudentConcessionDiscounts",
+        description: "Student concession discount rows (CRUD + bulk create with shared referentId)",
+      },
+      {
         name: "ConcessionDiscounts",
         description: "Concessions/discounts with appliesTo billing items (CRUD)",
       },

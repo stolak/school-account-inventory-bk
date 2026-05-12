@@ -14,6 +14,8 @@ import defaultAccountSettingsRouter from "./defaultAccountSettings";
 import billingItemRouter from "./billingItem";
 import concessionDiscountRouter from "./concessionDiscount";
 import classDefaultBillingRouter from "./classDefaultBilling";
+import studentBillingRouter from "./studentBilling";
+import studentConcessionDiscountRouter from "./studentConcessionDiscount";
 import tempJournalTransferRouter from "./tempJournalTransfer";
 
 import uploadRouter from "./upload";
@@ -54,6 +56,8 @@ router.use("/default-account-settings", defaultAccountSettingsRouter);
 router.use("/billing-items", billingItemRouter);
 router.use("/concession-discounts", concessionDiscountRouter);
 router.use("/class-default-billings", classDefaultBillingRouter);
+router.use("/student-billings", studentBillingRouter);
+router.use("/student-concession-discounts", studentConcessionDiscountRouter);
 router.use("/temp-journal-transfers", tempJournalTransferRouter);
 router.use("/categories", categoryRouter);
 router.use("/sub-categories", subCategoryRouter);

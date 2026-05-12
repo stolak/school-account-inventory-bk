@@ -814,17 +814,18 @@ enum BillingItemCategory {
 }
 
 model BillingItem {
-  id          Int                  @id @default(autoincrement())
-  code        String               @unique
-  name        String
-  category    BillingItemCategory
-  optional    Boolean              @default(false)
-  status      Status               @default(Active)
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
-  concessions ConcessionDiscount[]
-  accountId   Int?                 @map("account_id")
-  account     AccountChart?        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  id              Int                  @id @default(autoincrement())
+  code            String               @unique
+  name            String
+  category        BillingItemCategory
+  optional        Boolean              @default(false)
+  status          Status               @default(Active)
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  concessions     ConcessionDiscount[]
+  accountId       Int?                 @map("account_id")
+  account         AccountChart?        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  studentBillings StudentBilling[]
 
   @@index([code])
   @@index([category])
@@ -843,17 +844,18 @@ enum ConcessionDiscountCalculationType {
 }
 
 model ConcessionDiscount {
-  id              Int                               @id @default(autoincrement())
-  code            String                            @unique
-  name            String
-  type            ConcessionDiscountType
-  calculationType ConcessionDiscountCalculationType @map("calculation_type")
-  value           Decimal                           @db.Decimal(14, 2)
-  appliesTo       BillingItem[]
-  maxLimit        Decimal?                          @map("max_limit") @db.Decimal(14, 2)
-  status          Status                            @default(Active)
-  accountId       Int?                              @map("account_id")
-  account         AccountChart?                     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  id                         Int                               @id @default(autoincrement())
+  code                       String                            @unique
+  name                       String
+  type                       ConcessionDiscountType
+  calculationType            ConcessionDiscountCalculationType @map("calculation_type")
+  value                      Decimal                           @db.Decimal(14, 2)
+  appliesTo                  BillingItem[]
+  maxLimit                   Decimal?                          @map("max_limit") @db.Decimal(14, 2)
+  status                     Status                            @default(Active)
+  accountId                  Int?                              @map("account_id")
+  account                    AccountChart?                     @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  studentConcessionDiscounts StudentConcessionDiscount[]
 
   @@index([code])
   @@index([type])
@@ -893,14 +895,18 @@ model StudentBilling {
   session    String               @map("session") @db.Char(36)
   term       String               @map("term") @db.Char(36)
   billingId  Int                  @map("billing_id")
+  billing    BillingItem?         @relation(fields: [billingId], references: [id], onDelete: Restrict)
   amount     Decimal              @db.Decimal(14, 2)
   referentId String?              @map("referent_id")
+  isPosted   Boolean              @default(false)
   status     StudentBillingStatus @default(DRAFT)
   createdAt  DateTime             @default(now()) @map("created_at")
   updatedAt  DateTime             @updatedAt @map("updated_at")
   approvedAt DateTime?            @map("approved_at")
   approvedBy String?              @map("approved_by") @db.Char(36)
   createdBy  String?              @map("created_by") @db.Char(36)
+  postedAt   DateTime?            @map("posted_at")
+  postedBy   String?              @map("posted_by") @db.Char(36)
 
   @@index([studentId])
   @@index([classId])
@@ -922,6 +928,7 @@ model StudentConcessionDiscount {
   session              String               @map("session") @db.Char(36)
   term                 String               @map("term") @db.Char(36)
   concessionDiscountId Int                  @map("concession_discount_id")
+  concessionDiscount   ConcessionDiscount?  @relation(fields: [concessionDiscountId], references: [id], onDelete: Restrict)
   amount               Decimal              @db.Decimal(14, 2)
   referentId           String?              @map("referent_id")
   status               StudentBillingStatus @default(DRAFT)
@@ -930,6 +937,9 @@ model StudentConcessionDiscount {
   approvedAt           DateTime?            @map("approved_at")
   approvedBy           String?              @map("approved_by") @db.Char(36)
   createdBy            String?              @map("created_by") @db.Char(36)
+  isPosted             Boolean              @default(false)
+  postedAt             DateTime?            @map("posted_at")
+  postedBy             String?              @map("posted_by") @db.Char(36)
 
   @@index([studentId])
   @@index([classId])
