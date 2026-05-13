@@ -19,6 +19,36 @@ export interface ListStudentBillingsParams {
   limit?: number;
 }
 
+export interface StudentBillingDiscountReportParams {
+  session?: string;
+  term?: string;
+  classId?: string;
+  subclassId?: string;
+}
+
+export interface StudentBillingDiscountReportRow {
+  studentId: string;
+  session: string;
+  term: string;
+  classId: string | null;
+  subclassId: string | null;
+  student: {
+    id: string;
+    admissionNumber: string;
+    firstName: string;
+    middleName: string | null;
+    lastName: string;
+  } | null;
+  sessionInfo: { id: string; name: string } | null;
+  termInfo: { id: string; name: string } | null;
+  classInfo: { id: string; name: string } | null;
+  subclassInfo: { id: string; name: string } | null;
+  approvedBillingTotal: number;
+  draftBillingTotal: number;
+  approvedDiscountTotal: number;
+  draftDiscountTotal: number;
+}
+
 type CreateStudentBillingInput = {
   studentId: string;
   classId: string;
@@ -81,6 +111,19 @@ function generateReferentId(): string {
 
 export class StudentBillingService {
   private prisma = prisma;
+
+  private toNumber(value: unknown): number {
+    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+    if (typeof value === "string") {
+      const n = Number.parseFloat(value);
+      return Number.isFinite(n) ? n : 0;
+    }
+    if (typeof value === "object" && value !== null && "toString" in value) {
+      const n = Number.parseFloat(String(value));
+      return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+  }
 
   private normalizeRequiredString(value: string, fieldName: string): string {
     const trimmed = value.trim();
@@ -244,6 +287,147 @@ export class StudentBillingService {
 
   async getById(id: number): Promise<StudentBillingRow | null> {
     return this.prisma.studentBilling.findUnique({ where: { id } });
+  }
+
+  async billingDiscountReport(
+    params: StudentBillingDiscountReportParams = {}
+  ): Promise<StudentBillingDiscountReportRow[]> {
+    const session = params.session?.trim();
+    const term = params.term?.trim();
+    const classId = params.classId?.trim();
+    const subclassId = params.subclassId?.trim();
+
+    const buildWhere = (alias: string): Prisma.Sql => {
+      const clauses: Prisma.Sql[] = [];
+      if (session) clauses.push(Prisma.sql`${Prisma.raw(`${alias}.session`)} = ${session}`);
+      if (term) clauses.push(Prisma.sql`${Prisma.raw(`${alias}.term`)} = ${term}`);
+      if (classId) clauses.push(Prisma.sql`${Prisma.raw(`${alias}.class_id`)} = ${classId}`);
+      if (subclassId) clauses.push(Prisma.sql`${Prisma.raw(`${alias}.subclass_id`)} = ${subclassId}`);
+      if (clauses.length === 0) return Prisma.empty;
+      return Prisma.sql`WHERE ${Prisma.join(clauses, " AND ")}`;
+    };
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        student_id: string;
+        session_id: string;
+        term_id: string;
+        class_id: string | null;
+        subclass_id: string | null;
+        admission_number: string | null;
+        first_name: string | null;
+        middle_name: string | null;
+        last_name: string | null;
+        session_name: string | null;
+        term_name: string | null;
+        class_name: string | null;
+        subclass_name: string | null;
+        approved_billing_total: unknown;
+        draft_billing_total: unknown;
+        approved_discount_total: unknown;
+        draft_discount_total: unknown;
+      }>
+    >(Prisma.sql`
+      SELECT
+        k.student_id,
+        k.session AS session_id,
+        k.term AS term_id,
+        k.class_id,
+        k.subclass_id,
+        st.admission_number,
+        st.first_name,
+        st.middle_name,
+        st.last_name,
+        se.name AS session_name,
+        te.name AS term_name,
+        sc.name AS class_name,
+        sbc.name AS subclass_name,
+        COALESCE(b.approved_billing_total, 0) AS approved_billing_total,
+        COALESCE(b.draft_billing_total, 0) AS draft_billing_total,
+        COALESCE(d.approved_discount_total, 0) AS approved_discount_total,
+        COALESCE(d.draft_discount_total, 0) AS draft_discount_total
+      FROM (
+        SELECT
+          x.student_id,
+          x.session,
+          x.term,
+          MIN(x.class_id) AS class_id,
+          MIN(x.subclass_id) AS subclass_id
+        FROM (
+          SELECT sb.student_id, sb.session, sb.term, sb.class_id, sb.subclass_id
+          FROM student_billings sb
+          ${buildWhere("sb")}
+
+          UNION ALL
+
+          SELECT sd.student_id, sd.session, sd.term, sd.class_id, sd.subclass_id
+          FROM student_concession_discounts sd
+          ${buildWhere("sd")}
+        ) x
+        GROUP BY x.student_id, x.session, x.term
+      ) k
+      LEFT JOIN (
+        SELECT
+          sb.student_id,
+          sb.session,
+          sb.term,
+          SUM(CASE WHEN sb.status = 'APPROVED' THEN sb.amount ELSE 0 END) AS approved_billing_total,
+          SUM(CASE WHEN sb.status = 'DRAFT' THEN sb.amount ELSE 0 END) AS draft_billing_total
+        FROM student_billings sb
+        ${buildWhere("sb")}
+        GROUP BY sb.student_id, sb.session, sb.term
+      ) b
+        ON b.student_id = k.student_id
+       AND b.session = k.session
+       AND b.term = k.term
+      LEFT JOIN (
+        SELECT
+          sd.student_id,
+          sd.session,
+          sd.term,
+          SUM(CASE WHEN sd.status = 'APPROVED' THEN sd.amount ELSE 0 END) AS approved_discount_total,
+          SUM(CASE WHEN sd.status = 'DRAFT' THEN sd.amount ELSE 0 END) AS draft_discount_total
+        FROM student_concession_discounts sd
+        ${buildWhere("sd")}
+        GROUP BY sd.student_id, sd.session, sd.term
+      ) d
+        ON d.student_id = k.student_id
+       AND d.session = k.session
+       AND d.term = k.term
+      LEFT JOIN students st ON st.id = k.student_id
+      LEFT JOIN sessions se ON se.id = k.session
+      LEFT JOIN terms te ON te.id = k.term
+      LEFT JOIN school_classes sc ON sc.id = k.class_id
+      LEFT JOIN sub_classes sbc ON sbc.id = k.subclass_id
+      ORDER BY k.session ASC, k.term ASC, k.class_id ASC, k.subclass_id ASC, k.student_id ASC
+    `);
+
+    return rows.map((r) => ({
+      studentId: r.student_id,
+      session: r.session_id,
+      term: r.term_id,
+      classId: r.class_id,
+      subclassId: r.subclass_id,
+      student:
+        r.admission_number && r.first_name && r.last_name
+          ? {
+              id: r.student_id,
+              admissionNumber: r.admission_number,
+              firstName: r.first_name,
+              middleName: r.middle_name,
+              lastName: r.last_name,
+            }
+          : null,
+      sessionInfo: r.session_name ? { id: r.session_id, name: r.session_name } : null,
+      termInfo: r.term_name ? { id: r.term_id, name: r.term_name } : null,
+      classInfo: r.class_id && r.class_name ? { id: r.class_id, name: r.class_name } : null,
+      subclassInfo:
+        r.subclass_id && r.subclass_name ? { id: r.subclass_id, name: r.subclass_name } : null,
+      approvedBillingTotal: this.toNumber(r.approved_billing_total),
+      draftBillingTotal: this.toNumber(r.draft_billing_total),
+      approvedDiscountTotal: this.toNumber(r.approved_discount_total),
+      draftDiscountTotal: this.toNumber(r.draft_discount_total),
+    }));
   }
 
   async update(id: number, input: UpdateStudentBillingInput): Promise<StudentBillingRow> {

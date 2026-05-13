@@ -189,6 +189,29 @@ function getAuthenticatedUserId(req: Request): string | undefined {
  *       401: { description: Unauthorized }
  *       500: { description: Server error }
  */
+/**
+ * @openapi
+ * /api/v1/student-billings/report/summary:
+ *   get:
+ *     summary: Student billing/discount summary report
+ *     tags: [StudentBillings]
+ *     parameters:
+ *       - in: query
+ *         name: session
+ *         schema: { type: string }
+ *       - in: query
+ *         name: term
+ *         schema: { type: string }
+ *       - in: query
+ *         name: classId
+ *         schema: { type: string }
+ *       - in: query
+ *         name: subclassId
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Report rows }
+ *       500: { description: Server error }
+ */
 export const studentBillingController = {
   create: async (req: Request, res: Response) => {
     try {
@@ -479,6 +502,44 @@ export const studentBillingController = {
       return res.status(500).json({
         success: false,
         message: "Failed to retrieve student billings",
+        error: error?.message,
+      });
+    }
+  },
+
+  reportSummary: async (req: Request, res: Response) => {
+    try {
+      const session = typeof req.query.session === "string" ? req.query.session : undefined;
+      const term = typeof req.query.term === "string" ? req.query.term : undefined;
+      const classId =
+        typeof req.query.classId === "string"
+          ? req.query.classId
+          : typeof req.query.class === "string"
+            ? req.query.class
+            : undefined;
+      const subclassId =
+        typeof req.query.subclassId === "string"
+          ? req.query.subclassId
+          : typeof req.query.subclass === "string"
+            ? req.query.subclass
+            : undefined;
+
+      const rows = await studentBillingService.billingDiscountReport({
+        session,
+        term,
+        classId,
+        subclassId,
+      });
+
+      return res.json({
+        success: true,
+        message: "Student billing/discount report retrieved successfully",
+        data: rows,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve student billing/discount report",
         error: error?.message,
       });
     }
