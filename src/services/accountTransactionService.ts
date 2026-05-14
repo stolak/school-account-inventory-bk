@@ -35,6 +35,26 @@ export interface AccountTransactionLogParams {
   transactionDateTo?: Date;
 }
 
+export interface AccountBalanceAsAtDateParams {
+  accountId: string;
+  asAtDate?: Date;
+}
+
+export interface AccountBalanceAsAtDateResult {
+  account: {
+    id: number;
+    accountNo: string | null;
+    accountRef: string | null;
+    accountDescription: string;
+    group: { id: number; name: string };
+    head: { id: number; name: string };
+    subhead: { id: number; name: string };
+  };
+  asAtDate: Date;
+  /** Sum(credit) − sum(debit) for rows with transactionDate <= asAtDate. */
+  balanceAsAtDate: string;
+}
+
 export type AccountTransactionLogRow = {
   id: number;
   debit: string;
@@ -127,6 +147,55 @@ type DbClient = Pick<Prisma.TransactionClient, "accountChart" | "project" | "acc
 
 export class AccountTransactionService {
   private prisma = prisma;
+
+  /**
+   * Account balance as at a date: sum(credit) − sum(debit) from inception through the selected date (inclusive).
+   */
+  async getAccountBalanceAsAtDate(
+    params: AccountBalanceAsAtDateParams
+  ): Promise<AccountBalanceAsAtDateResult> {
+    const accountIdRaw = params.accountId.trim();
+    if (!accountIdRaw) throw new Error("accountId is required");
+
+    const accountId = Number.parseInt(accountIdRaw, 10);
+    if (!Number.isFinite(accountId) || accountId < 1) {
+      throw new Error("accountId must be a positive integer");
+    }
+
+    const account = await this.prisma.accountChart.findUnique({
+      where: { id: accountId },
+      select: {
+        id: true,
+        accountNo: true,
+        accountRef: true,
+        accountDescription: true,
+        group: { select: { id: true, name: true } },
+        head: { select: { id: true, name: true } },
+        subhead: { select: { id: true, name: true } },
+      },
+    });
+    if (!account) throw new Error("Account not found for accountId");
+
+    const asAtDate = params.asAtDate ?? endOfUtcDay(new Date());
+
+    const agg = await this.prisma.accountTransaction.aggregate({
+      where: {
+        accountId,
+        transactionDate: { lte: asAtDate },
+      },
+      _sum: { credit: true, debit: true },
+    });
+
+    const sumCredit = agg._sum.credit ?? null;
+    const sumDebit = agg._sum.debit ?? null;
+    const balanceAsAtDate = decimalNetBalance(sumDebit, sumCredit);
+
+    return {
+      account,
+      asAtDate,
+      balanceAsAtDate,
+    };
+  }
 
   /**
    * Grouped report by accountId: sum(credit) − sum(debit), optionally filtered by transaction date range.

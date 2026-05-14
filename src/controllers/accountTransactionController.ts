@@ -154,8 +154,74 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         description: Invalid date parameters or date range
  *       500:
  *         description: Server error
+ *
+ * /api/v1/account-transactions/balance-as-at:
+ *   get:
+ *     summary: Account balance as at a selected date
+ *     description: |
+ *       Returns balance for one account from inception through the selected date (inclusive):
+ *       `sum(credit) - sum(debit)` for rows where `transactionDate <= asAtDate`.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: accountId
+ *         required: true
+ *         schema: { type: integer, minimum: 1 }
+ *       - in: query
+ *         name: asAtDate
+ *         required: false
+ *         schema: { type: string, format: date }
+ *         description: Date or date-time. If omitted, defaults to end of today UTC. Date-only values are treated as end of that UTC day.
+ *     responses:
+ *       200:
+ *         description: Account details and balance as at the selected date
+ *       400:
+ *         description: Invalid accountId or asAtDate
+ *       404:
+ *         description: Account not found
+ *       500:
+ *         description: Server error
  */
 export const accountTransactionController = {
+  getAccountBalanceAsAtDate: async (req: Request, res: Response) => {
+    try {
+      const accountIdRaw = typeof req.query.accountId === "string" ? req.query.accountId.trim() : "";
+      if (!accountIdRaw) {
+        return res.status(400).json({ success: false, message: "accountId is required" });
+      }
+
+      const asAtDateRaw = parseQueryDateEndInclusive(req.query.asAtDate);
+      if (asAtDateRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "asAtDate is invalid" });
+      }
+
+      const data = await accountTransactionService.getAccountBalanceAsAtDate({
+        accountId: accountIdRaw,
+        ...(asAtDateRaw === "missing" ? {} : { asAtDate: asAtDateRaw }),
+      });
+
+      return res.json({
+        success: true,
+        message: "Account balance as at date retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve account balance as at date";
+      const code =
+        message === "Account not found for accountId"
+          ? 404
+          : message === "accountId is required" || message === "accountId must be a positive integer"
+            ? 400
+            : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
   getAccountTransactionByAccountReport: async (req: Request, res: Response) => {
     try {
       const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
