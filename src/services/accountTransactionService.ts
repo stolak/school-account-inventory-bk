@@ -96,6 +96,21 @@ export interface AccountTransactionByAccountReportResult {
   rows: AccountTransactionByAccountReportRow[];
 }
 
+export type AccountTransactionHeadSubheadRow = {
+  name: string;
+  headcode: number | string;
+  subheads: Array<{
+    id: number;
+    name: string;
+    balance: number;
+  }>;
+};
+
+export type AccountTransactionByHeadSubheadReportResult = Record<
+  string,
+  AccountTransactionHeadSubheadRow
+>;
+
 type EntryInput = {
   accountId: string;
   amount: number;
@@ -213,13 +228,90 @@ export class AccountTransactionService {
   }
 
   /**
-   * Account transactions in a date window. Defaults to current UTC month through today.
-   * Opening balance uses rows strictly before the window start.
+   * Grouped report by subheadId: sum(credit) − sum(debit), optionally filtered by transaction date range.
+   * Response is grouped by AccountHead as `headcodeXX` with nested `subheads`.
    */
+  async getAccountTransactionByHeadSubheadReport(
+    params: AccountTransactionByAccountReportParams = {}
+  ): Promise<AccountTransactionByHeadSubheadReportResult> {
+    const from = params.transactionDateFrom;
+    const to = params.transactionDateTo;
+
+    if (from && to && from.getTime() > to.getTime()) {
+      throw new Error("transactionDateFrom must be before or equal to transactionDateTo");
+    }
+
+    const dateWhere =
+      from || to
+        ? {
+            transactionDate: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {};
+
+    const grouped = await this.prisma.accountTransaction.groupBy({
+      by: ["headId", "subheadId"],
+      ...(Object.keys(dateWhere).length ? { where: dateWhere } : {}),
+      _sum: { credit: true, debit: true },
+    });
+
+    const balanceByHeadSubhead = new Map<string, number>();
+    for (const row of grouped) {
+      const credit = row._sum.credit ?? new Prisma.Decimal(0);
+      const debit = row._sum.debit ?? new Prisma.Decimal(0);
+      balanceByHeadSubhead.set(`${row.headId}:${row.subheadId}`, Number(credit.minus(debit).toString()));
+    }
+
+    const heads = await this.prisma.accountHead.findMany({
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        rank: true,
+        subHeads: {
+          select: { id: true, name: true, rank: true },
+        },
+      },
+      orderBy: [{ rank: "asc" }, { id: "asc" }],
+    });
+
+    const data: AccountTransactionByHeadSubheadReportResult = {};
+    for (const head of heads) {
+      const key = `headcode${head.code}`;
+      const parsed = Number.parseInt(head.code, 10);
+
+      if (!data[key]) {
+        data[key] = {
+          name: head.name,
+          headcode: Number.isNaN(parsed) ? head.code : parsed,
+          subheads: [],
+        };
+      }
+
+      const sortedSubheads = [...head.subHeads].sort((a, b) => {
+        const byRank = a.rank - b.rank;
+        if (byRank !== 0) return byRank;
+        return a.id - b.id;
+      });
+
+      for (const subhead of sortedSubheads) {
+        const balance = balanceByHeadSubhead.get(`${head.id}:${subhead.id}`) ?? 0;
+        data[key].subheads.push({
+          id: subhead.id,
+          name: subhead.name,
+          balance,
+        });
+      }
+    }
+
+    return data;
+  }
+
   async getAccountTransactionLog(
     params: AccountTransactionLogParams
   ): Promise<AccountTransactionLogResult> {
-    console.log("params", params);
     const accountIdRaw = params.accountId.trim();
     if (!accountIdRaw) throw new Error("accountId is required");
 

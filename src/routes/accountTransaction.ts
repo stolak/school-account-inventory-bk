@@ -4,6 +4,10 @@ import { accountTransactionController } from "../controllers/accountTransactionC
 const router = Router();
 
 router.get("/report-by-account", accountTransactionController.getAccountTransactionByAccountReport);
+router.get(
+  "/report-by-head-subhead",
+  accountTransactionController.getAccountTransactionByHeadSubheadReport
+);
 router.get("/transaction-log", accountTransactionController.getAccountTransactionLog);
 router.post("/debit", accountTransactionController.debitAccount);
 router.post("/credit", accountTransactionController.creditAccount);

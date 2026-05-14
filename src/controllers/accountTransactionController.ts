@@ -130,6 +130,30 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         description: Invalid date parameters or date range
  *       500:
  *         description: Server error
+ *
+ * /api/v1/account-transactions/report-by-head-subhead:
+ *   get:
+ *     summary: Grouped account report by head and subhead
+ *     description: |
+ *       Returns an object keyed as `headcode{head.code}` from `AccountHead`.
+ *       Each key contains the head details and `subheads` from `AccountSubhead`, where
+ *       each subhead `balance` is sum(credit) − sum(debit) from `AccountTransaction`
+ *       grouped by `(headId, subheadId)` for the optional date window.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: transactionDateFrom
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: transactionDateTo
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Object of headcode buckets with nested subhead balances
+ *       400:
+ *         description: Invalid date parameters or date range
+ *       500:
+ *         description: Server error
  */
 export const accountTransactionController = {
   getAccountTransactionByAccountReport: async (req: Request, res: Response) => {
@@ -159,6 +183,44 @@ export const accountTransactionController = {
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to retrieve account report by account";
+      const code =
+        message === "transactionDateFrom must be before or equal to transactionDateTo" ? 400 : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getAccountTransactionByHeadSubheadReport: async (req: Request, res: Response) => {
+    try {
+      const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
+      const toRaw = parseQueryDateEndInclusive(req.query.transactionDateTo);
+
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+
+      const data = await accountTransactionService.getAccountTransactionByHeadSubheadReport({
+        ...(transactionDateFrom !== undefined ? { transactionDateFrom } : {}),
+        ...(transactionDateTo !== undefined ? { transactionDateTo } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Account report by head/subhead retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve account report by head/subhead";
       const code =
         message === "transactionDateFrom must be before or equal to transactionDateTo" ? 400 : 500;
 
