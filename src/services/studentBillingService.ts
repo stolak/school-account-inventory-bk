@@ -49,6 +49,20 @@ export interface StudentBillingDiscountReportRow {
   draftDiscountTotal: number;
 }
 
+export interface StudentWithoutBillingReportRow {
+  studentId: string;
+  admissionNumber: string;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  classId: string | null;
+  subclassId: string | null;
+  classInfo: { id: string; name: string } | null;
+  subclassInfo: { id: string; name: string } | null;
+  session: string | null;
+  term: string | null;
+}
+
 type CreateStudentBillingInput = {
   studentId: string;
   classId: string;
@@ -302,7 +316,8 @@ export class StudentBillingService {
       if (session) clauses.push(Prisma.sql`${Prisma.raw(`${alias}.session`)} = ${session}`);
       if (term) clauses.push(Prisma.sql`${Prisma.raw(`${alias}.term`)} = ${term}`);
       if (classId) clauses.push(Prisma.sql`${Prisma.raw(`${alias}.class_id`)} = ${classId}`);
-      if (subclassId) clauses.push(Prisma.sql`${Prisma.raw(`${alias}.subclass_id`)} = ${subclassId}`);
+      if (subclassId)
+        clauses.push(Prisma.sql`${Prisma.raw(`${alias}.subclass_id`)} = ${subclassId}`);
       if (clauses.length === 0) return Prisma.empty;
       return Prisma.sql`WHERE ${Prisma.join(clauses, " AND ")}`;
     };
@@ -427,6 +442,64 @@ export class StudentBillingService {
       draftBillingTotal: this.toNumber(r.draft_billing_total),
       approvedDiscountTotal: this.toNumber(r.approved_discount_total),
       draftDiscountTotal: this.toNumber(r.draft_discount_total),
+    }));
+  }
+  // TODO: Implement this function
+  async studentsWithoutBillingReport(
+    params: StudentBillingDiscountReportParams = {}
+  ): Promise<StudentWithoutBillingReportRow[]> {
+    const session = params.session?.trim() || undefined;
+    const term = params.term?.trim() || undefined;
+    const classId = params.classId?.trim() || undefined;
+    const subclassId = params.subclassId?.trim() || undefined;
+
+    const where: Prisma.StudentWhereInput = {};
+    if (classId) where.classId = classId;
+    if (subclassId) where.subClassId = subclassId;
+
+    const billingWhere: Prisma.StudentBillingWhereInput = {};
+    if (session) billingWhere.session = session;
+    if (term) billingWhere.term = term;
+    where.studentBillings = { none: billingWhere };
+
+    const rows = await this.prisma.student.findMany({
+      where,
+      select: {
+        id: true,
+        admissionNumber: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        classId: true,
+        subClassId: true,
+        class: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        subClass: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: [{ classId: "asc" }, { subClassId: "asc" }, { admissionNumber: "asc" }],
+    });
+
+    return rows.map((row) => ({
+      studentId: row.id,
+      admissionNumber: row.admissionNumber,
+      firstName: row.firstName,
+      middleName: row.middleName,
+      lastName: row.lastName,
+      classId: row.classId,
+      subclassId: row.subClassId,
+      classInfo: row.class ? { id: row.class.id, name: row.class.name } : null,
+      subclassInfo: row.subClass ? { id: row.subClass.id, name: row.subClass.name } : null,
+      session: session ?? null,
+      term: term ?? null,
     }));
   }
 

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { accountTransactionService } from "../services/accountTransactionService";
+import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 /**
  * @openapi
@@ -75,8 +76,150 @@ import { accountTransactionService } from "../services/accountTransactionService
  *         description: Invalid ref
  *       500:
  *         description: Server error
+ *
+ * /api/v1/account-transactions/transaction-log:
+ *   get:
+ *     summary: Account transaction log for one account
+ *     description: |
+ *       Lists `AccountTransaction` rows for one `accountId` between `transactionDateFrom` and `transactionDateTo` (inclusive).
+ *       If both dates are omitted, the window is the current UTC calendar month from the 1st through end of today.
+ *       If only `transactionDateFrom` is set, `transactionDateTo` defaults to end of today UTC.
+ *       If only `transactionDateTo` is set, `transactionDateFrom` defaults to the first day of that date's UTC month.
+ *       `balanceBeforeFromDate` is sum(debit) − sum(credit) for rows strictly before the window start.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: accountId
+ *         required: true
+ *         schema: { type: integer, minimum: 1 }
+ *       - in: query
+ *         name: transactionDateFrom
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: transactionDateTo
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Account summary, date window, opening balance, and transactions
+ *       400:
+ *         description: Invalid parameters or date range
+ *       404:
+ *         description: Account not found
+ *       500:
+ *         description: Server error
+ *
+ * /api/v1/account-transactions/report-by-account:
+ *   get:
+ *     summary: Grouped account transaction report by accountId
+ *     description: |
+ *       Groups `AccountTransaction` by `accountId` and returns `sumCreditMinusDebit` = sum(credit) − sum(debit).
+ *       Supports optional date window filters; if omitted, aggregation is all-time.
+ *       Rows are ordered by headId, subhead rank, subheadId, account chart rank, then accountId.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: transactionDateFrom
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: transactionDateTo
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Grouped rows with account chart details and sum(credit - debit)
+ *       400:
+ *         description: Invalid date parameters or date range
+ *       500:
+ *         description: Server error
  */
 export const accountTransactionController = {
+  getAccountTransactionByAccountReport: async (req: Request, res: Response) => {
+    try {
+      const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
+      const toRaw = parseQueryDateEndInclusive(req.query.transactionDateTo);
+
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+
+      const data = await accountTransactionService.getAccountTransactionByAccountReport({
+        ...(transactionDateFrom !== undefined ? { transactionDateFrom } : {}),
+        ...(transactionDateTo !== undefined ? { transactionDateTo } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Account report by account retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve account report by account";
+      const code =
+        message === "transactionDateFrom must be before or equal to transactionDateTo" ? 400 : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getAccountTransactionLog: async (req: Request, res: Response) => {
+    try {
+      const accountIdRaw = typeof req.query.accountId === "string" ? req.query.accountId.trim() : "";
+      if (!accountIdRaw) {
+        return res.status(400).json({ success: false, message: "accountId is required" });
+      }
+
+      const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
+      const toRaw = parseQueryDateEndInclusive(req.query.transactionDateTo);
+
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+
+      const data = await accountTransactionService.getAccountTransactionLog({
+        accountId: accountIdRaw,
+        ...(transactionDateFrom !== undefined ? { transactionDateFrom } : {}),
+        ...(transactionDateTo !== undefined ? { transactionDateTo } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Account transaction log retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve account transaction log";
+      const code =
+        message === "Account not found for accountId"
+          ? 404
+          : message === "accountId is required" ||
+              message === "accountId must be a positive integer" ||
+              message === "transactionDateFrom must be before or equal to transactionDateTo"
+            ? 400
+            : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
   debitAccount: async (req: Request, res: Response) => {
     try {
       const body = req.body ?? {};
