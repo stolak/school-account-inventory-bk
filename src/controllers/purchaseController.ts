@@ -126,6 +126,97 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
 export const purchaseController = {
   /**
    * @openapi
+   * /api/v1/purchases/grouped:
+   *   get:
+   *     summary: List purchases grouped by referenceNo
+   *     tags: [Purchases]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: supplierId
+   *         schema: { type: string }
+   *       - in: query
+   *         name: storeId
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: transactionDateFrom
+   *         schema: { type: string, format: date }
+   *       - in: query
+   *         name: transactionDateTo
+   *         schema: { type: string, format: date }
+   *       - in: query
+   *         name: page
+   *         schema: { type: integer, minimum: 1, default: 1 }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+   *     responses:
+   *       200:
+   *         description: Grouped purchases list
+   *       400:
+   *         description: Invalid date range
+   *       500:
+   *         description: Server error
+   */
+  listGroupedPurchases: async (req: Request, res: Response) => {
+    try {
+      const supplierId =
+        typeof req.query.supplierId === "string" && req.query.supplierId.trim()
+          ? req.query.supplierId.trim()
+          : undefined;
+      const storeId =
+        typeof req.query.storeId === "string" && req.query.storeId.trim()
+          ? req.query.storeId.trim()
+          : undefined;
+      const page = parseIntOrUndefined(req.query.page);
+      const limit = parseIntOrUndefined(req.query.limit);
+
+      const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
+      const toRaw = parseQueryDateEndInclusive(req.query.transactionDateTo);
+
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+      if (
+        transactionDateFrom !== undefined &&
+        transactionDateTo !== undefined &&
+        transactionDateFrom.getTime() > transactionDateTo.getTime()
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "transactionDateFrom must be before or equal to transactionDateTo",
+        });
+      }
+
+      const result = await purchaseService.listGroupedPurchases({
+        supplierId,
+        storeId,
+        transactionDateFrom,
+        transactionDateTo,
+        page,
+        limit,
+      });
+      return res.json({
+        success: true,
+        message: "Group Purchases retrieved successfully",
+        data: result,
+      });
+    } catch (error: any) {
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to retrieve grouped purchases", error: error?.message });
+    }
+  },
+
+  /**
+   * @openapi
    * /api/v1/purchases/bulk:
    *   post:
    *     summary: Create multiple purchase transactions (bulk)

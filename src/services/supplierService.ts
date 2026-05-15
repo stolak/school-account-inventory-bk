@@ -79,9 +79,8 @@ export class SupplierService {
 
       try {
         const defaultSubhead = await defaulSubheadSettingsService.getBySettingsId(
-          SupplierService.SUPPLIER_SUBHEAD_SETTINGS_ID,
+          SupplierService.SUPPLIER_SUBHEAD_SETTINGS_ID
         );
-
         if (defaultSubhead?.subheadId) {
           await accountChartService.create({
             subheadId: defaultSubhead.subheadId,
@@ -96,7 +95,7 @@ export class SupplierService {
 
       return created;
     } catch (e) {
-      if (isPrismaKnownErrorWithCode(e) && e.code === 'P2002') {
+      if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
         throw new Error("Supplier name already exists");
       }
       throw e;
@@ -216,7 +215,7 @@ export class SupplierService {
         include: { createdBy: { select: { firstName: true, lastName: true } } },
       });
     } catch (e) {
-      if (isPrismaKnownErrorWithCode(e) && e.code === 'P2002') {
+      if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
         throw new Error("Supplier name already exists");
       }
       throw e;
@@ -232,4 +231,3 @@ export class SupplierService {
 }
 
 export const supplierService = new SupplierService();
-

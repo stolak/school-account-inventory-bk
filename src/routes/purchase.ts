@@ -6,6 +6,7 @@ const router = Router();
 
 router.use(authenticateJWT);
 
+router.get("/grouped", purchaseController.listGroupedPurchases);
 router.post("/bulk", purchaseController.createBulkPurchases);
 router.post("/", purchaseController.createPurchase);
 router.get("/", purchaseController.listPurchases);
