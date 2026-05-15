@@ -8,6 +8,12 @@ export interface CategoryData {
   status: Status;
   createdAt: Date;
   updatedAt: Date;
+  consumableAccountId?: number | null;
+  consumableAccount?: {
+    id: number;
+    accountNo: string | null;
+    accountDescription: string;
+  } | null;
 }
 
 export interface ListCategoriesParams {
@@ -28,18 +34,46 @@ function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
 export class CategoryService {
   private prisma = prisma;
 
+  private categoryInclude = {
+    consumableAccount: {
+      select: {
+        id: true,
+        accountNo: true,
+        accountDescription: true,
+      },
+    },
+  } as const;
+
+  private async ensureConsumableAccountExists(consumableAccountId?: number | null): Promise<void> {
+    if (consumableAccountId === undefined || consumableAccountId === null) return;
+    const account = await this.prisma.accountChart.findUnique({
+      where: { id: consumableAccountId },
+      select: { id: true },
+    });
+    if (!account) {
+      throw new Error("Invalid consumableAccountId: account chart not found");
+    }
+  }
+
   async createCategory(input: {
     name: string;
     description?: string | null;
     status?: Status;
+    consumableAccountId?: number | null;
   }): Promise<CategoryData> {
     try {
+      await this.ensureConsumableAccountExists(input.consumableAccountId);
+
       const created = await this.prisma.category.create({
         data: {
           name: input.name,
           description: input.description ?? null,
           ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.consumableAccountId === undefined || input.consumableAccountId === null
+            ? {}
+            : { consumableAccount: { connect: { id: input.consumableAccountId } } }),
         },
+        include: this.categoryInclude,
       });
 
       return created;
@@ -81,6 +115,7 @@ export class CategoryService {
         orderBy: { name: "asc" },
         skip,
         take: limit,
+        include: this.categoryInclude,
       }),
     ]);
 
@@ -98,22 +133,35 @@ export class CategoryService {
   }
 
   async getCategoryById(id: string): Promise<CategoryData | null> {
-    return await this.prisma.category.findUnique({ where: { id } });
+    return await this.prisma.category.findUnique({ where: { id }, include: this.categoryInclude });
   }
 
   async updateCategory(
     id: string,
-    input: { name?: string; description?: string | null; status?: Status }
+    input: {
+      name?: string;
+      description?: string | null;
+      status?: Status;
+      consumableAccountId?: number | null;
+    }
   ): Promise<CategoryData> {
     try {
+      await this.ensureConsumableAccountExists(input.consumableAccountId);
+
       return await this.prisma.category.update({
         where: { id },
         data: {
           ...(input.name !== undefined ? { name: input.name } : {}),
           ...(input.description !== undefined ? { description: input.description } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.consumableAccountId === undefined
+            ? {}
+            : input.consumableAccountId === null
+              ? { consumableAccount: { disconnect: true } }
+              : { consumableAccount: { connect: { id: input.consumableAccountId } } }),
           updatedAt: new Date(),
         },
+        include: this.categoryInclude,
       });
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
@@ -124,7 +172,7 @@ export class CategoryService {
   }
 
   async deleteCategory(id: string): Promise<CategoryData> {
-    return await this.prisma.category.delete({ where: { id } });
+    return await this.prisma.category.delete({ where: { id }, include: this.categoryInclude });
   }
 }
 

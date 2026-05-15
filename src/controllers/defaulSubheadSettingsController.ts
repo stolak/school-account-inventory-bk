@@ -35,6 +35,29 @@ import { defaulSubheadSettingsService } from "../services/defaulSubheadSettingsS
  *       500:
  *         description: Server error
  *
+ * /api/v1/default-subhead-settings/{settingsId}/account-charts:
+ *   get:
+ *     summary: List account charts using subhead from settingsId
+ *     description: |
+ *       Resolves `subheadId` from `DefaulSubheadSettings.settingsId`, then returns account charts where
+ *       `AccountChart.subheadId` matches the resolved subhead.
+ *     tags: [DefaultSubheadSettings]
+ *     parameters:
+ *       - in: path
+ *         name: settingsId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Retrieved successfully
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Settings row not found or subheadId is not configured
+ *       500:
+ *         description: Server error
+ *
  *   patch:
  *     summary: Update default subhead settings (partial)
  *     description: Update-only endpoint — no create/list/delete. Identifies the row by `settingsId`.
@@ -120,6 +143,37 @@ export const defaulSubheadSettingsController = {
       return res.status(500).json({
         success: false,
         message: "Failed to retrieve default subhead settings",
+        error: message,
+      });
+    }
+  },
+
+  getAccountChartsBySettingsId: async (req: Request, res: Response) => {
+    try {
+      const settingsId =
+        typeof req.params.settingsId === "string" ? req.params.settingsId : "";
+      if (!settingsId.trim()) {
+        return res.status(400).json({ success: false, message: "settingsId is required" });
+      }
+
+      const result = await defaulSubheadSettingsService.listAccountChartsBySettingsId(settingsId);
+      return res.json({
+        success: true,
+        message: "Account charts retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      if (message.includes("required")) {
+        return res.status(400).json({ success: false, message });
+      }
+      if (message.includes("not found") || message.includes("no subheadId")) {
+        return res.status(404).json({ success: false, message });
+      }
+      console.error("Error retrieving account charts by default subhead settings:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve account charts",
         error: message,
       });
     }

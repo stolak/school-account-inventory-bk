@@ -4,6 +4,13 @@ import prisma from "../utils/prisma";
 export type DefaulSubheadSettingsRow = Prisma.DefaulSubheadSettingsGetPayload<
   Record<string, never>
 >;
+export type AccountChartBySettingsIdRow = Prisma.AccountChartGetPayload<{
+  include: {
+    group: true;
+    head: true;
+    subhead: true;
+  };
+}>;
 
 export class DefaulSubheadSettingsService {
   private prisma = prisma;
@@ -38,6 +45,53 @@ export class DefaulSubheadSettingsService {
         },
       },
     });
+  }
+
+  /**
+   * Resolve `subheadId` from default subhead settings, then list account charts for that subhead.
+   */
+  async listAccountChartsBySettingsId(settingsId: string): Promise<{
+    settingsId: string;
+    subheadId: number;
+    accountCharts: AccountChartBySettingsIdRow[];
+  }> {
+    const trimmedId = settingsId.trim();
+    if (!trimmedId) {
+      throw new Error("settingsId is required");
+    }
+
+    const row = await this.prisma.defaulSubheadSettings.findUnique({
+      where: { settingsId: trimmedId },
+      select: { settingsId: true, subheadId: true },
+    });
+    if (!row) {
+      throw new Error("Default subhead settings not found");
+    }
+    if (!row.subheadId) {
+      throw new Error("Default subhead settings has no subheadId configured");
+    }
+
+    const accountCharts = await this.prisma.accountChart.findMany({
+      where: { subheadId: row.subheadId },
+      include: {
+        group: true,
+        head: true,
+        subhead: true,
+      },
+      orderBy: [
+        { headId: "asc" },
+        { subheadId: "asc" },
+        { rank: "asc" },
+        { accountNo: "asc" },
+        { accountDescription: "asc" },
+      ],
+    });
+
+    return {
+      settingsId: row.settingsId,
+      subheadId: row.subheadId,
+      accountCharts,
+    };
   }
 
   /**

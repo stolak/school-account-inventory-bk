@@ -444,7 +444,7 @@ export class StudentBillingService {
       draftDiscountTotal: this.toNumber(r.draft_discount_total),
     }));
   }
-  // TODO: Implement this function
+  // TODO: Implement this function and fix the type errors
   async studentsWithoutBillingReport(
     params: StudentBillingDiscountReportParams = {}
   ): Promise<StudentWithoutBillingReportRow[]> {

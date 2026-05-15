@@ -146,6 +146,11 @@ async function main() {
         settings: "Default subhead for collection postings",
         subheadId: null,
       },
+      {
+        settingsId: "COMSUMABLE_EXPENSE_SUBHEAD",
+        settings: "Default subhead for consumable expense postings",
+        subheadId: null,
+      },
     ];
 
     for (const s of defaultSubheadSettings) {
@@ -159,6 +164,47 @@ async function main() {
       });
     }
     console.log(`   ✓ ${defaultSubheadSettings.length} default subhead settings`);
+
+    // UOMs
+    console.log("📏 Seeding UOMs...");
+    const uoms = [
+      {
+        id: "5b15389c-3d56-4ec1-b848-43c76d435f35",
+        name: "Piece",
+        symbol: "pcs",
+        status: "Active",
+      },
+      {
+        id: "f331e6b0-e5d3-4c3a-a6af-c46858c3396b",
+        name: "Carton",
+        symbol: "ctn",
+        status: "Active",
+      },
+      {
+        id: "1c152b2e-bd60-418f-b312-08c1b001134a",
+        name: "Kilogram",
+        symbol: "kg",
+        status: "Active",
+      },
+      {
+        id: "7e0ebb54-6fc7-46f0-8853-27e23b2693af",
+        name: "Liter",
+        symbol: "ltr",
+        status: "Active",
+      },
+    ];
+
+    for (const u of uoms) {
+      await prisma.uom.upsert({
+        where: { id: u.id },
+        update: {
+          symbol: u.symbol,
+          status: u.status,
+        },
+        create: u,
+      });
+    }
+    console.log(`   ✓ ${uoms.length} UOMs`);
 
     // Create merchant users for each merchant
   } catch (error) {

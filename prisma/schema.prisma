@@ -202,14 +202,16 @@ enum StaffRole {
 }
 
 model Category {
-  id             String          @id @default(uuid()) @db.Char(36)
-  name           String          @unique
-  description    String?
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @default(now()) @map("updated_at")
-  status         Status          @default(Active)
-  subCategories  SubCategory[]
-  inventoryItems InventoryItem[]
+  id                  String          @id @default(uuid()) @db.Char(36)
+  name                String          @unique
+  description         String?
+  createdAt           DateTime        @default(now()) @map("created_at")
+  updatedAt           DateTime        @default(now()) @map("updated_at")
+  status              Status          @default(Active)
+  consumableAccountId Int?            @map("consumable_account_id")
+  consumableAccount   AccountChart?   @relation(fields: [consumableAccountId], references: [id])
+  subCategories       SubCategory[]
+  inventoryItems      InventoryItem[]
 
   @@map("categories")
 }
@@ -722,6 +724,7 @@ model AccountChart {
   concessionDiscounts    ConcessionDiscount[]
   billingItems           BillingItem[]
   students               Student[]
+  categories             Category[]
 
   @@index([groupId])
   @@index([headId])

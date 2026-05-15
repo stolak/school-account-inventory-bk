@@ -3,6 +3,26 @@ import { categoryService } from "../services/categoryService";
 import { Status } from "@prisma/client";
 import { parseIntOrUndefined } from "../utils/request";
 
+function parseConsumableAccountIdInput(
+  value: unknown
+): { ok: true; value: number | null | undefined } | { ok: false; message: string } {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (value === null) return { ok: true, value: null };
+
+  const parsed =
+    typeof value === "number" && Number.isInteger(value)
+      ? value
+      : typeof value === "string"
+        ? Number.parseInt(value, 10)
+        : NaN;
+
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return { ok: false, message: "consumableAccountId must be a positive integer, null, or omitted" };
+  }
+
+  return { ok: true, value: parsed };
+}
+
 /**
  * @openapi
  * /api/v1/categories:
@@ -28,6 +48,10 @@ import { parseIntOrUndefined } from "../utils/request";
  *                 type: string
  *                 enum: [Active, Inactive]
  *                 description: Optional status (defaults to Active)
+ *               consumableAccountId:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: Optional linked account chart for consumable inventory
  *     responses:
  *       201:
  *         description: Category created
@@ -59,6 +83,9 @@ import { parseIntOrUndefined } from "../utils/request";
  *                     updatedAt:
  *                       type: string
  *                       format: date-time
+ *                     consumableAccountId:
+ *                       type: integer
+ *                       nullable: true
  *       400:
  *         description: Validation error
  *       409:
@@ -131,6 +158,9 @@ import { parseIntOrUndefined } from "../utils/request";
  *                           updatedAt:
  *                             type: string
  *                             format: date-time
+ *                           consumableAccountId:
+ *                             type: integer
+ *                             nullable: true
  *                     pagination:
  *                       type: object
  *                       properties:
@@ -148,7 +178,7 @@ import { parseIntOrUndefined } from "../utils/request";
 export const categoryController = {
   createCategory: async (req: Request, res: Response) => {
     try {
-      const { name, description, status } = req.body ?? {};
+      const { name, description, status, consumableAccountId } = req.body ?? {};
 
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({
@@ -171,10 +201,21 @@ export const categoryController = {
         });
       }
 
+      const parsedConsumable = parseConsumableAccountIdInput(consumableAccountId);
+      if (!parsedConsumable.ok) {
+        return res.status(400).json({
+          success: false,
+          message: parsedConsumable.message,
+        });
+      }
+
       const category = await categoryService.createCategory({
         name: name.trim(),
         description: description === undefined ? null : description,
         ...(status !== undefined ? { status } : {}),
+        ...(parsedConsumable.value !== undefined
+          ? { consumableAccountId: parsedConsumable.value }
+          : {}),
       });
 
       return res.status(201).json({
@@ -184,7 +225,8 @@ export const categoryController = {
       });
     } catch (error: any) {
       const message = error?.message ?? "Failed to create category";
-      const status = message.includes("already exists") ? 409 : 500;
+      const status =
+        message.includes("already exists") ? 409 : message.includes("Invalid consumableAccountId") ? 404 : 500;
 
       return res.status(status).json({
         success: false,
@@ -341,7 +383,7 @@ export const categoryController = {
   updateCategory: async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { name, description, status } = req.body ?? {};
+      const { name, description, status, consumableAccountId } = req.body ?? {};
 
       if (!id) {
         return res.status(400).json({
@@ -371,6 +413,14 @@ export const categoryController = {
         });
       }
 
+      const parsedConsumable = parseConsumableAccountIdInput(consumableAccountId);
+      if (!parsedConsumable.ok) {
+        return res.status(400).json({
+          success: false,
+          message: parsedConsumable.message,
+        });
+      }
+
       const existing = await categoryService.getCategoryById(id);
       if (!existing) {
         return res.status(404).json({
@@ -383,6 +433,9 @@ export const categoryController = {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(status !== undefined ? { status } : {}),
+        ...(parsedConsumable.value !== undefined
+          ? { consumableAccountId: parsedConsumable.value }
+          : {}),
       });
 
       return res.json({
@@ -392,7 +445,8 @@ export const categoryController = {
       });
     } catch (error: any) {
       const message = error?.message ?? "Failed to update category";
-      const status = message.includes("already exists") ? 409 : 500;
+      const status =
+        message.includes("already exists") ? 409 : message.includes("Invalid consumableAccountId") ? 404 : 500;
       return res.status(status).json({ success: false, message });
     }
   },
