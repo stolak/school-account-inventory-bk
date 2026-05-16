@@ -214,6 +214,45 @@ function getAuthenticatedUserId(req: Request): string | undefined {
  */
 /**
  * @openapi
+ * /api/v1/student-billings/notify/parent:
+ *   post:
+ *     summary: Send student period bill notification to parent email
+ *     tags: [StudentBillings]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [studentId, classId, sessionId, termId]
+ *             properties:
+ *               studentId:
+ *                 type: string
+ *                 description: Student ID (preferred)
+ *               studendId:
+ *                 type: string
+ *                 description: Backward-compatible alias for studentId
+ *               classId:
+ *                 type: string
+ *               subclassId:
+ *                 type: string
+ *                 nullable: true
+ *               sessionId:
+ *                 type: string
+ *               termId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Email sent successfully, or skipped with reason
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Student not found
+ *       500:
+ *         description: Server error
+ */
+/**
+ * @openapi
  * /api/v1/student-billings/report/no-billing:
  *   get:
  *     summary: Students with no billing for the filter scope
@@ -236,6 +275,53 @@ function getAuthenticatedUserId(req: Request): string | undefined {
  *       500: { description: Server error }
  */
 export const studentBillingController = {
+  notifyParentPeriodBill: async (req: Request, res: Response) => {
+    try {
+      const body = req.body ?? {};
+      const studentId = asTrimmedString(body.studentId) ?? asTrimmedString(body.studendId);
+      const classId = asTrimmedString(body.classId);
+      const subclassId =
+        body.subclassId === undefined ? undefined : asStringOrNullOrUndefined(body.subclassId);
+      const sessionId = asTrimmedString(body.sessionId);
+      const termId = asTrimmedString(body.termId);
+
+      if (!studentId) return res.status(400).json({ success: false, message: "studentId is required" });
+      if (!classId) return res.status(400).json({ success: false, message: "classId is required" });
+      if (!sessionId) return res.status(400).json({ success: false, message: "sessionId is required" });
+      if (!termId) return res.status(400).json({ success: false, message: "termId is required" });
+      if (subclassId === undefined && body.subclassId !== undefined) {
+        return res
+          .status(400)
+          .json({ success: false, message: "subclassId must be a string, null, or omitted" });
+      }
+
+      const result = await studentBillingService.notifyParentPeriodBill({
+        studentId,
+        classId,
+        ...(subclassId !== undefined && subclassId !== null ? { subclassId } : {}),
+        sessionId,
+        termId,
+      });
+
+      return res.json({
+        success: true,
+        message: result.sent
+          ? "Parent period bill notification sent successfully"
+          : "Parent period bill notification skipped",
+        data: result,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to send parent period bill notification";
+      const status =
+        message.includes("required") || message.includes("must be")
+          ? 400
+          : message.includes("not found")
+            ? 404
+            : 500;
+      return res.status(status).json({ success: false, message });
+    }
+  },
+
   create: async (req: Request, res: Response) => {
     try {
       const createdBy = getAuthenticatedUserId(req);

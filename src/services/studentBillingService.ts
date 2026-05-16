@@ -2,6 +2,7 @@ import { Prisma, StudentBillingStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { randomUUID } from "crypto";
 import { accountTransactionService } from "./accountTransactionService";
+import { emailService } from "./emailService";
 
 export type StudentBillingRow = Prisma.StudentBillingGetPayload<Record<string, never>>;
 
@@ -111,6 +112,33 @@ type BulkPostStudentBillingInput = {
   actedBy: string;
 };
 
+export type ParentPeriodBillNotificationInput = {
+  studentId: string;
+  classId: string;
+  subclassId?: string;
+  sessionId: string;
+  termId: string;
+};
+
+export type ParentPeriodBillNotificationResult = {
+  studentId: string;
+  guardianEmail: string | null;
+  sent: boolean;
+  reason?: string;
+  messageId?: string;
+  summary: {
+    sessionId: string;
+    termId: string;
+    classId: string;
+    subclassId: string | null;
+    billingCount: number;
+    discountCount: number;
+    totalBilling: number;
+    totalDiscount: number;
+    netPayable: number;
+  };
+};
+
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -172,6 +200,11 @@ export class StudentBillingService {
     if (!Number.isFinite(amount) || amount < 0) {
       throw new Error("amount must be a valid number greater than or equal to 0");
     }
+  }
+
+  private isValidEmail(email: string): boolean {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   }
 
   async create(input: CreateStudentBillingInput): Promise<StudentBillingRow> {
@@ -709,7 +742,7 @@ export class StudentBillingService {
             amount,
             ref: reference,
             manualRef: manualReference,
-            accountSub: row?.studentId,
+            // accountSub: row?.studentId,
             transactionDate,
             postedBy: actedBy,
             remarks,
@@ -730,6 +763,187 @@ export class StudentBillingService {
         },
       });
     });
+  }
+
+  async notifyParentPeriodBill(
+    input: ParentPeriodBillNotificationInput
+  ): Promise<ParentPeriodBillNotificationResult> {
+    const studentId = this.normalizeRequiredString(input.studentId, "studentId");
+    const classId = this.normalizeRequiredString(input.classId, "classId");
+    const sessionId = this.normalizeRequiredString(input.sessionId, "sessionId");
+    const termId = this.normalizeRequiredString(input.termId, "termId");
+    const subclassId =
+      input.subclassId === undefined ? undefined : this.normalizeOptionalString(input.subclassId) ?? undefined;
+
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: {
+        id: true,
+        admissionNumber: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        guardianEmail: true,
+      },
+    });
+    if (!student) {
+      throw new Error("Student not found");
+    }
+
+    const whereBase: Prisma.StudentBillingWhereInput = {
+      studentId,
+      classId,
+      session: sessionId,
+      term: termId,
+      ...(subclassId !== undefined ? { subclassId } : {}),
+    };
+
+    const [billings, discounts, session, term, schoolClass, subClass] = await Promise.all([
+      this.prisma.studentBilling.findMany({
+        where: whereBase,
+        select: {
+          id: true,
+          amount: true,
+          billing: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.studentConcessionDiscount.findMany({
+        where: {
+          studentId,
+          classId,
+          session: sessionId,
+          term: termId,
+          ...(subclassId !== undefined ? { subclassId } : {}),
+        },
+        select: {
+          id: true,
+          amount: true,
+          concessionDiscount: { select: { name: true, code: true } },
+        },
+      }),
+      this.prisma.session.findUnique({ where: { id: sessionId }, select: { id: true, name: true } }),
+      this.prisma.term.findUnique({ where: { id: termId }, select: { id: true, name: true } }),
+      this.prisma.schoolClass.findUnique({ where: { id: classId }, select: { id: true, name: true } }),
+      subclassId
+        ? this.prisma.subClass.findUnique({ where: { id: subclassId }, select: { id: true, name: true } })
+        : Promise.resolve(null),
+    ]);
+
+    const totalBilling = billings.reduce((sum, row) => sum + this.toNumber(row.amount), 0);
+    const totalDiscount = discounts.reduce((sum, row) => sum + this.toNumber(row.amount), 0);
+    const netPayable = totalBilling - totalDiscount;
+
+    const summary: ParentPeriodBillNotificationResult["summary"] = {
+      sessionId,
+      termId,
+      classId,
+      subclassId: subclassId ?? null,
+      billingCount: billings.length,
+      discountCount: discounts.length,
+      totalBilling,
+      totalDiscount,
+      netPayable,
+    };
+
+    if (billings.length === 0 && discounts.length === 0) {
+      return {
+        studentId,
+        guardianEmail: student.guardianEmail,
+        sent: false,
+        reason: "No student billing or discount records found for the selected period",
+        summary,
+      };
+    }
+
+    const guardianEmail = student.guardianEmail?.trim() || null;
+    if (!guardianEmail) {
+      return {
+        studentId,
+        guardianEmail: null,
+        sent: false,
+        reason: "Parent email is not set for this student",
+        summary,
+      };
+    }
+
+    if (!this.isValidEmail(guardianEmail)) {
+      return {
+        studentId,
+        guardianEmail,
+        sent: false,
+        reason: "Parent email is invalid",
+        summary,
+      };
+    }
+
+    const studentName = [student.firstName, student.middleName, student.lastName]
+      .filter((v) => typeof v === "string" && v.trim().length > 0)
+      .join(" ");
+
+    const billingRowsHtml =
+      billings.length === 0
+        ? "<li>No billing rows found.</li>"
+        : billings
+            .map((row) => {
+              const label = row.billing?.name || row.billing?.code || `Billing #${row.id}`;
+              return `<li>${label}: ${this.toNumber(row.amount).toFixed(2)}</li>`;
+            })
+            .join("");
+
+    const discountRowsHtml =
+      discounts.length === 0
+        ? "<li>No discount rows found.</li>"
+        : discounts
+            .map((row) => {
+              const label =
+                row.concessionDiscount?.name ||
+                row.concessionDiscount?.code ||
+                `Discount #${row.id}`;
+              return `<li>${label}: ${this.toNumber(row.amount).toFixed(2)}</li>`;
+            })
+            .join("");
+
+    const subject = `Student Bill Notification - ${session?.name || sessionId} / ${term?.name || termId}`;
+    const html = `
+      <div style="font-family: Arial, sans-serif; color: #222;">
+        <h2>Student Bill Notification</h2>
+        <p>Dear Parent/Guardian,</p>
+        <p>This is the bill summary for your child for the selected period.</p>
+        <ul>
+          <li><strong>Student:</strong> ${studentName} (${student.admissionNumber})</li>
+          <li><strong>Class:</strong> ${schoolClass?.name || classId}</li>
+          <li><strong>SubClass:</strong> ${subClass?.name || subclassId || "N/A"}</li>
+          <li><strong>Session:</strong> ${session?.name || sessionId}</li>
+          <li><strong>Term:</strong> ${term?.name || termId}</li>
+        </ul>
+        <h3>Billing Items</h3>
+        <ul>${billingRowsHtml}</ul>
+        <h3>Discount Items</h3>
+        <ul>${discountRowsHtml}</ul>
+        <hr />
+        <p><strong>Total Billing:</strong> ${totalBilling.toFixed(2)}</p>
+        <p><strong>Total Discount:</strong> ${totalDiscount.toFixed(2)}</p>
+        <p><strong>Net Payable:</strong> ${netPayable.toFixed(2)}</p>
+      </div>
+    `;
+
+    const sendResult = await emailService.sendEmail({
+      to: guardianEmail,
+      subject,
+      html,
+    });
+
+    if (!sendResult.success) {
+      throw new Error(sendResult.error || "Failed to send parent bill notification email");
+    }
+
+    return {
+      studentId,
+      guardianEmail,
+      sent: true,
+      messageId: sendResult.messageId,
+      summary,
+    };
   }
 
   async delete(id: number): Promise<StudentBillingRow> {

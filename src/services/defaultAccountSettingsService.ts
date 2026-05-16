@@ -4,6 +4,13 @@ import prisma from "../utils/prisma";
 export type DefaultAccountSettingsRow = Prisma.DefaultAccountSettingsGetPayload<
   Record<string, never>
 >;
+export type AccountChartBySettingsIdRow = Prisma.AccountChartGetPayload<{
+  include: {
+    group: true;
+    head: true;
+    subhead: true;
+  };
+}>;
 
 export class DefaultAccountSettingsService {
   private prisma = prisma;
@@ -12,6 +19,49 @@ export class DefaultAccountSettingsService {
     return this.prisma.defaultAccountSettings.findMany({
       orderBy: { settingsId: "asc" },
     });
+  }
+
+  /**
+   * Resolve `accountId` from default account settings, then return the account chart row.
+   */
+  async getAccountChartBySettingsId(settingsId: string): Promise<{
+    settingsId: string;
+    accountId: number;
+    accountChart: AccountChartBySettingsIdRow;
+  }> {
+    const trimmedId = settingsId.trim();
+    if (!trimmedId) {
+      throw new Error("settingsId is required");
+    }
+
+    const row = await this.prisma.defaultAccountSettings.findUnique({
+      where: { settingsId: trimmedId },
+      select: { settingsId: true, accountId: true },
+    });
+    if (!row) {
+      throw new Error("Default account settings not found");
+    }
+    if (!row.accountId) {
+      throw new Error("Default account settings has no accountId configured");
+    }
+
+    const accountChart = await this.prisma.accountChart.findUnique({
+      where: { id: row.accountId },
+      include: {
+        group: true,
+        head: true,
+        subhead: true,
+      },
+    });
+    if (!accountChart) {
+      throw new Error("Account chart not found for configured accountId");
+    }
+
+    return {
+      settingsId: row.settingsId,
+      accountId: row.accountId,
+      accountChart,
+    };
   }
 
   /**

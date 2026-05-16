@@ -7,6 +7,7 @@ router.use(authenticateJWT);
 
 router.post("/", studentBillingController.create);
 router.post("/bulk", studentBillingController.createBulk);
+router.post("/notify/parent", studentBillingController.notifyParentPeriodBill);
 router.patch("/status/bulk", studentBillingController.updateStatusBulk);
 router.patch("/post/bulk", studentBillingController.postBulk);
 router.get("/report/summary", studentBillingController.reportSummary);

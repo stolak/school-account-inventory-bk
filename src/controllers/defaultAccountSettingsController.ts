@@ -14,6 +14,28 @@ import { defaultAccountSettingsService } from "../services/defaultAccountSetting
  *       500:
  *         description: Server error
  *
+ * /api/v1/default-account-settings/{settingsId}/account-chart:
+ *   get:
+ *     summary: Get account chart using accountId from settingsId
+ *     description: |
+ *       Resolves `accountId` from `DefaultAccountSettings.settingsId`, then returns the linked account chart row.
+ *     tags: [DefaultAccountSettings]
+ *     parameters:
+ *       - in: path
+ *         name: settingsId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Retrieved successfully
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Settings row not found or accountId is not configured
+ *       500:
+ *         description: Server error
+ *
  * /api/v1/default-account-settings/{settingsId}:
  *   patch:
  *     summary: Update default account settings (partial)
@@ -65,6 +87,37 @@ export const defaultAccountSettingsController = {
       return res.status(500).json({
         success: false,
         message: "Failed to retrieve default account settings",
+        error: message,
+      });
+    }
+  },
+
+  getAccountChartBySettingsId: async (req: Request, res: Response) => {
+    try {
+      const settingsId =
+        typeof req.params.settingsId === "string" ? req.params.settingsId : "";
+      if (!settingsId.trim()) {
+        return res.status(400).json({ success: false, message: "settingsId is required" });
+      }
+
+      const result = await defaultAccountSettingsService.getAccountChartBySettingsId(settingsId);
+      return res.json({
+        success: true,
+        message: "Account chart retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      if (message.includes("required")) {
+        return res.status(400).json({ success: false, message });
+      }
+      if (message.includes("not found") || message.includes("no accountId")) {
+        return res.status(404).json({ success: false, message });
+      }
+      console.error("Error retrieving account chart by default account settings:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve account chart",
         error: message,
       });
     }
