@@ -823,10 +823,12 @@ export const studentBillingController = {
         data: deleted,
       });
     } catch (error: any) {
-      return res.status(500).json({
+      const message = error?.message ?? "Failed to delete student billing";
+      const status = message.includes("Cannot delete") ? 409 : 500;
+      return res.status(status).json({
         success: false,
-        message: "Failed to delete student billing",
-        error: error?.message,
+        message,
+        error: message,
       });
     }
   },

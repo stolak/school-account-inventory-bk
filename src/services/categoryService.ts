@@ -172,6 +172,15 @@ export class CategoryService {
   }
 
   async deleteCategory(id: string): Promise<CategoryData> {
+    const [subCategoryCount, inventoryItemCount] = await Promise.all([
+      this.prisma.subCategory.count({ where: { categoryId: id } }),
+      this.prisma.inventoryItem.count({ where: { categoryId: id } }),
+    ]);
+
+    if (subCategoryCount > 0 || inventoryItemCount > 0) {
+      throw new Error("Cannot delete category because it is referenced by subcategories or inventory items");
+    }
+
     return await this.prisma.category.delete({ where: { id }, include: this.categoryInclude });
   }
 }

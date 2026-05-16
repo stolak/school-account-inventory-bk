@@ -271,7 +271,11 @@ export const termController = {
       return res.json({ success: true, message: "Term deleted successfully", data: deleted });
     } catch (error: any) {
       const message = error?.message ?? "Failed to delete term";
-      const statusCode = message.includes("Record to delete does not exist") ? 404 : 500;
+      const statusCode = message.includes("Record to delete does not exist")
+        ? 404
+        : message.includes("Cannot delete")
+          ? 409
+          : 500;
       return res.status(statusCode).json({ success: false, message });
     }
   },

@@ -153,17 +153,59 @@ async function main() {
       },
     ];
 
-    for (const s of defaultSubheadSettings) {
-      await prisma.defaulSubheadSettings.upsert({
+    // for (const s of defaultSubheadSettings) {
+    //   await prisma.defaulSubheadSettings.upsert({
+    //     where: { settingsId: s.settingsId },
+    //     update: {
+    //       settings: s.settings,
+    //       subheadId: s.subheadId,
+    //     },
+    //     create: s,
+    //   });
+    // }
+    console.log(`   ✓ ${defaultSubheadSettings.length} default subhead settings`);
+
+    // Default account settings (seed placeholders; API PATCH can bind real accountId later)
+    console.log("🏦 Seeding default account settings...");
+    const defaultAccountSettings = [
+      {
+        settingsId: "STUDENT_ACCOUNT",
+        settings: "Default account for student account receivable",
+        accountId: null,
+      },
+      {
+        settingsId: "SUPPLIER_ACCOUNT",
+        settings: "Default account for direct market Suppliers",
+        accountId: null,
+      },
+      {
+        settingsId: "DISCOUNT_ACCOUNT",
+        settings: "Default account for discount/concession postings",
+        accountId: null,
+      },
+      {
+        settingsId: "COLLECTION_ACCOUNT",
+        settings: "Default account for collection postings",
+        accountId: null,
+      },
+      {
+        settingsId: "COMSUMABLE_EXPENSE_ACCOUNT",
+        settings: "Default account for consumable expense postings",
+        accountId: null,
+      },
+    ];
+
+    for (const s of defaultAccountSettings) {
+      await prisma.defaultAccountSettings.upsert({
         where: { settingsId: s.settingsId },
         update: {
           settings: s.settings,
-          subheadId: s.subheadId,
+          accountId: s.accountId,
         },
         create: s,
       });
     }
-    console.log(`   ✓ ${defaultSubheadSettings.length} default subhead settings`);
+    console.log(`   ✓ ${defaultAccountSettings.length} default account settings`);
 
     // UOMs
     console.log("📏 Seeding UOMs...");

@@ -109,6 +109,34 @@ export class TermService {
   }
 
   async deleteTerm(id: string): Promise<TermData> {
+    const [activePeriodCount, defaultBillingPeriodCount, inventoryTransactionCount, studentBillingCount, studentDiscountCount] =
+      await Promise.all([
+        this.prisma.activePeriod.count({ where: { termId: id } }),
+        this.prisma.defaultBillingPeriod.count({ where: { termId: id } }),
+        this.prisma.inventoryTransaction.count({ where: { termId: id } }),
+        this.prisma.studentBilling.count({ where: { term: id } }),
+        this.prisma.studentConcessionDiscount.count({ where: { term: id } }),
+      ]);
+
+    if (
+      activePeriodCount > 0 ||
+      defaultBillingPeriodCount > 0 ||
+      inventoryTransactionCount > 0 ||
+      studentBillingCount > 0 ||
+      studentDiscountCount > 0
+    ) {
+      const blockers: string[] = [];
+      if (activePeriodCount > 0) blockers.push(`active periods (${activePeriodCount})`);
+      if (defaultBillingPeriodCount > 0)
+        blockers.push(`default billing periods (${defaultBillingPeriodCount})`);
+      if (inventoryTransactionCount > 0)
+        blockers.push(`inventory transactions (${inventoryTransactionCount})`);
+      if (studentBillingCount > 0) blockers.push(`student billings (${studentBillingCount})`);
+      if (studentDiscountCount > 0) blockers.push(`student discounts (${studentDiscountCount})`);
+
+      throw new Error(`Cannot delete term because it is referenced by: ${blockers.join(", ")}`);
+    }
+
     try {
       return await this.prisma.term.delete({ where: { id } });
     } catch (e) {

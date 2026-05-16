@@ -145,6 +145,30 @@ export class SubClassService {
   }
 
   async deleteSubClass(id: string): Promise<SubClassData> {
+    const [studentCount, inventoryTransactionCount, studentBillingCount, studentDiscountCount] =
+      await Promise.all([
+        this.prisma.student.count({ where: { subClassId: id } }),
+        this.prisma.inventoryTransaction.count({ where: { subclassId: id } }),
+        this.prisma.studentBilling.count({ where: { subclassId: id } }),
+        this.prisma.studentConcessionDiscount.count({ where: { subclassId: id } }),
+      ]);
+
+    if (
+      studentCount > 0 ||
+      inventoryTransactionCount > 0 ||
+      studentBillingCount > 0 ||
+      studentDiscountCount > 0
+    ) {
+      const blockers: string[] = [];
+      if (studentCount > 0) blockers.push(`students (${studentCount})`);
+      if (inventoryTransactionCount > 0)
+        blockers.push(`inventory transactions (${inventoryTransactionCount})`);
+      if (studentBillingCount > 0) blockers.push(`student billings (${studentBillingCount})`);
+      if (studentDiscountCount > 0) blockers.push(`student discounts (${studentDiscountCount})`);
+
+      throw new Error(`Cannot delete subclass because it is referenced by: ${blockers.join(", ")}`);
+    }
+
     try {
       return await this.prisma.subClass.delete({
         where: { id },

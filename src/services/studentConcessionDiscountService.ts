@@ -301,7 +301,10 @@ export class StudentConcessionDiscountService {
     if (!Array.isArray(input.ids) || input.ids.length === 0) {
       throw new Error("ids must be a non-empty array");
     }
-    if (input.status !== StudentBillingStatus.DRAFT && input.status !== StudentBillingStatus.APPROVED) {
+    if (
+      input.status !== StudentBillingStatus.DRAFT &&
+      input.status !== StudentBillingStatus.APPROVED
+    ) {
       throw new Error("status must be APPROVED or DRAFT");
     }
 
@@ -455,6 +458,7 @@ export class StudentConcessionDiscountService {
             ref: reference,
             manualRef: manualReference,
             transactionDate,
+            accountSub: row?.studentId,
             postedBy: actedBy,
             remarks,
           },
@@ -477,6 +481,15 @@ export class StudentConcessionDiscountService {
   }
 
   async delete(id: number): Promise<StudentConcessionDiscountRow> {
+    const row = await this.prisma.studentConcessionDiscount.findUnique({
+      where: { id },
+      select: { isPosted: true },
+    });
+
+    if (row?.isPosted) {
+      throw new Error("Cannot delete student concession discount because it is already posted");
+    }
+
     return this.prisma.studentConcessionDiscount.delete({ where: { id } });
   }
 }

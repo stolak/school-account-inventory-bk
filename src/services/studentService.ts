@@ -312,6 +312,22 @@ export class StudentService {
   }
 
   async deleteStudent(id: string): Promise<StudentData> {
+    const [studentBillingCount, studentDiscountCount, inventoryTransactionCount] = await Promise.all([
+      this.prisma.studentBilling.count({ where: { studentId: id } }),
+      this.prisma.studentConcessionDiscount.count({ where: { studentId: id } }),
+      this.prisma.inventoryTransaction.count({ where: { studentId: id } }),
+    ]);
+
+    if (studentBillingCount > 0 || studentDiscountCount > 0 || inventoryTransactionCount > 0) {
+      const blockers: string[] = [];
+      if (studentBillingCount > 0) blockers.push(`student billings (${studentBillingCount})`);
+      if (studentDiscountCount > 0) blockers.push(`student discounts (${studentDiscountCount})`);
+      if (inventoryTransactionCount > 0)
+        blockers.push(`inventory transactions (${inventoryTransactionCount})`);
+
+      throw new Error(`Cannot delete student because it is referenced by: ${blockers.join(", ")}`);
+    }
+
     try {
       return await this.prisma.student.delete({
         where: { id },

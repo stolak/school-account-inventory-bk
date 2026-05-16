@@ -126,6 +126,33 @@ export class SchoolClassService {
   }
 
   async deleteSchoolClass(id: string): Promise<SchoolClassData> {
+    const [subClassCount, studentCount, inventoryTransactionCount, studentBillingCount, studentDiscountCount] =
+      await Promise.all([
+        this.prisma.subClass.count({ where: { classId: id } }),
+        this.prisma.student.count({ where: { classId: id } }),
+        this.prisma.inventoryTransaction.count({ where: { classId: id } }),
+        this.prisma.studentBilling.count({ where: { classId: id } }),
+        this.prisma.studentConcessionDiscount.count({ where: { classId: id } }),
+      ]);
+
+    if (
+      subClassCount > 0 ||
+      studentCount > 0 ||
+      inventoryTransactionCount > 0 ||
+      studentBillingCount > 0 ||
+      studentDiscountCount > 0
+    ) {
+      const blockers: string[] = [];
+      if (subClassCount > 0) blockers.push(`subclasses (${subClassCount})`);
+      if (studentCount > 0) blockers.push(`students (${studentCount})`);
+      if (inventoryTransactionCount > 0)
+        blockers.push(`inventory transactions (${inventoryTransactionCount})`);
+      if (studentBillingCount > 0) blockers.push(`student billings (${studentBillingCount})`);
+      if (studentDiscountCount > 0) blockers.push(`student discounts (${studentDiscountCount})`);
+
+      throw new Error(`Cannot delete school class because it is referenced by: ${blockers.join(", ")}`);
+    }
+
     return await this.prisma.schoolClass.delete({
       where: { id },
       include: { createdBy: { select: { firstName: true, lastName: true } } },

@@ -103,7 +103,6 @@ export class SubCategoryService {
       }),
     ]);
 
-
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
     // Keep behavior predictable if MySQL collation differs.
@@ -149,9 +148,17 @@ export class SubCategoryService {
   }
 
   async deleteSubCategory(id: string): Promise<SubCategoryData> {
+    console.log("deleteSubCategory", id);
+    const inventoryItemCount = await this.prisma.inventoryItem.count({
+      where: { subCategoryId: id },
+    });
+
+    if (inventoryItemCount > 0) {
+      throw new Error("Cannot delete subcategory because it is referenced by inventory items");
+    }
+
     return await this.prisma.subCategory.delete({ where: { id } });
   }
 }
 
 export const subCategoryService = new SubCategoryService();
-

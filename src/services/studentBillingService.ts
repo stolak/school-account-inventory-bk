@@ -695,6 +695,7 @@ export class StudentBillingService {
             amount,
             ref: reference,
             manualRef: manualReference,
+            accountSub: row?.studentId,
             transactionDate,
             postedBy: actedBy,
             remarks,
@@ -708,6 +709,7 @@ export class StudentBillingService {
             amount,
             ref: reference,
             manualRef: manualReference,
+            accountSub: row?.studentId,
             transactionDate,
             postedBy: actedBy,
             remarks,
@@ -731,6 +733,15 @@ export class StudentBillingService {
   }
 
   async delete(id: number): Promise<StudentBillingRow> {
+    const row = await this.prisma.studentBilling.findUnique({
+      where: { id },
+      select: { isPosted: true },
+    });
+
+    if (row?.isPosted) {
+      throw new Error("Cannot delete student billing because it is already posted");
+    }
+
     return this.prisma.studentBilling.delete({ where: { id } });
   }
 }

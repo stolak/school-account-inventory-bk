@@ -314,7 +314,11 @@ export const schoolClassController = {
       return res.json({ success: true, message: "School class deleted successfully", data: deleted });
     } catch (error: any) {
       const message = error?.message ?? "Failed to delete school class";
-      const statusCode = message.includes("Record to delete does not exist") ? 404 : 500;
+      const statusCode = message.includes("Record to delete does not exist")
+        ? 404
+        : message.includes("Cannot delete")
+          ? 409
+          : 500;
       return res.status(statusCode).json({ success: false, message });
     }
   },
