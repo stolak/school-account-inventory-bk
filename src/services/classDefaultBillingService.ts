@@ -130,8 +130,8 @@ export class ClassDefaultBillingService {
             billingId: item.billingId,
             amount: item.amount,
           },
-        }),
-      ),
+        })
+      )
     );
 
     return { count: rows.length, rows };
@@ -167,6 +167,14 @@ export class ClassDefaultBillingService {
         { billingId: "asc" },
         { id: "asc" },
       ],
+      include: {
+        billing: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
     });
   }
 
@@ -196,9 +204,6 @@ export class ClassDefaultBillingService {
     }
     if (input.term !== undefined) {
       data.term = this.normalizeStringRequired(input.term, "term");
-    }
-    if (input.billingId !== undefined) {
-      data.billingId = input.billingId;
     }
     if (input.amount !== undefined) {
       data.amount = input.amount;

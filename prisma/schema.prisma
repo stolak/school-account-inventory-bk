@@ -833,18 +833,19 @@ enum BillingItemCategory {
 }
 
 model BillingItem {
-  id              Int                  @id @default(autoincrement())
-  code            String               @unique
-  name            String
-  category        BillingItemCategory
-  optional        Boolean              @default(false)
-  status          Status               @default(Active)
-  createdAt       DateTime             @default(now()) @map("created_at")
-  updatedAt       DateTime             @updatedAt @map("updated_at")
-  concessions     ConcessionDiscount[]
-  accountId       Int?                 @map("account_id")
-  account         AccountChart?        @relation(fields: [accountId], references: [id], onDelete: Restrict)
-  studentBillings StudentBilling[]
+  id                   Int                   @id @default(autoincrement())
+  code                 String                @unique
+  name                 String
+  category             BillingItemCategory
+  optional             Boolean               @default(false)
+  status               Status                @default(Active)
+  createdAt            DateTime              @default(now()) @map("created_at")
+  updatedAt            DateTime              @updatedAt @map("updated_at")
+  concessions          ConcessionDiscount[]
+  accountId            Int?                  @map("account_id")
+  account              AccountChart?         @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  studentBillings      StudentBilling[]
+  classDefaultBillings ClassDefaultBilling[]
 
   @@index([code])
   @@index([category])
@@ -890,13 +891,14 @@ enum StudentBillingStatus {
 }
 
 model ClassDefaultBilling {
-  id         Int     @id @default(autoincrement())
-  classId    String  @map("class_id") @db.Char(36)
-  subclassId String? @map("subclass_id") @db.Char(36)
-  session    String  @map("session") @db.Char(36)
-  term       String  @map("term") @db.Char(36)
-  billingId  Int     @map("billing_id")
-  amount     Decimal @db.Decimal(14, 2)
+  id         Int          @id @default(autoincrement())
+  classId    String       @map("class_id") @db.Char(36)
+  subclassId String?      @map("subclass_id") @db.Char(36)
+  session    String       @map("session") @db.Char(36)
+  term       String       @map("term") @db.Char(36)
+  billingId  Int          @map("billing_id")
+  billing    BillingItem? @relation(fields: [billingId], references: [id], onDelete: Restrict)
+  amount     Decimal      @db.Decimal(14, 2)
 
   @@index([classId])
   @@index([subclassId])
