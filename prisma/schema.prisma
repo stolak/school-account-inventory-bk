@@ -470,6 +470,7 @@ model Student {
 
   @@index([classId])
   @@index([createdById])
+  @@index([status, classId, subClassId])
   @@map("students")
 }
 
@@ -763,6 +764,7 @@ model AccountTransaction {
   @@index([accountId])
   @@index([projectId])
   @@index([transactionDate])
+  @@index([accountSub])
   @@map("account_transactions")
 }
 

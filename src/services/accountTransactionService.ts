@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, StudentStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
 
 export type AccountTransactionRow = Prisma.AccountTransactionGetPayload<Record<string, never>>;
@@ -53,6 +53,63 @@ export interface AccountBalanceAsAtDateResult {
   asAtDate: Date;
   /** Sum(credit) − sum(debit) for rows with transactionDate <= asAtDate. */
   balanceAsAtDate: string;
+}
+
+export interface StudentAccountBalanceAsAtDateParams {
+  studentId: string;
+  asAtDate?: Date;
+}
+
+export interface StudentAccountBalanceAsAtDateResult {
+  studentId: string;
+  asAtDate: Date;
+  /** Sum(credit) − sum(debit) for rows with transactionDate <= asAtDate and accountSub = studentId. */
+  balanceAsAtDate: string;
+  sumCredit: string;
+  sumDebit: string;
+}
+
+function clampInt(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+export interface ListStudentBalancesParams {
+  asAtDate?: Date;
+  status?: StudentStatus;
+  orderBy?: "classId" | "balance";
+  orderDirection?: "asc" | "desc";
+  page?: number;
+  limit?: number;
+}
+
+export interface StudentBalanceRow {
+  studentId: string;
+  admissionNumber: string;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  status: StudentStatus;
+  classId: string | null;
+  subclassId: string | null;
+  classInfo: { id: string; name: string } | null;
+  subclassInfo: { id: string; name: string } | null;
+  sumCredit: string;
+  sumDebit: string;
+  balance: string;
+}
+
+export interface ListStudentBalancesResult {
+  asAtDate: Date;
+  status: StudentStatus | "All";
+  orderBy: "classId" | "balance";
+  orderDirection: "asc" | "desc";
+  rows: StudentBalanceRow[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 export type AccountTransactionLogRow = {
@@ -147,6 +204,188 @@ type DbClient = Pick<Prisma.TransactionClient, "accountChart" | "project" | "acc
 
 export class AccountTransactionService {
   private prisma = prisma;
+
+  async listStudentBalances(params: ListStudentBalancesParams = {}): Promise<ListStudentBalancesResult> {
+    const asAtDate = params.asAtDate ?? endOfUtcDay(new Date());
+    const page = clampInt(params.page ?? 1, 1, 1_000_000);
+    const limit = clampInt(params.limit ?? 20, 1, 100);
+    const orderDirection = params.orderDirection ?? "asc";
+    const orderBy = params.orderBy ?? "classId";
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.StudentWhereInput = {
+      ...(params.status !== undefined ? { status: params.status } : {}),
+    };
+
+    const total = await this.prisma.student.count({ where });
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    if (total === 0) {
+      return {
+        asAtDate,
+        status: params.status ?? "All",
+        orderBy,
+        orderDirection,
+        rows: [],
+        pagination: { page, limit, total, totalPages },
+      };
+    }
+
+    const studentSelect = Prisma.validator<Prisma.StudentSelect>()({
+      id: true,
+      admissionNumber: true,
+      firstName: true,
+      middleName: true,
+      lastName: true,
+      status: true,
+      classId: true,
+      subClassId: true,
+      class: { select: { id: true, name: true } },
+      subClass: { select: { id: true, name: true } },
+    });
+
+    // If sorting by balance, compute globally before pagination.
+    const students =
+      orderBy === "balance"
+        ? await this.prisma.student.findMany({
+            where,
+            select: studentSelect,
+          })
+        : await this.prisma.student.findMany({
+            where,
+            skip,
+            take: limit,
+            orderBy: [
+              { classId: orderDirection },
+              { subClassId: orderDirection },
+              { id: "asc" },
+            ],
+            select: studentSelect,
+          });
+
+    const studentIds = students.map((x) => x.id);
+
+    const balances =
+      studentIds.length === 0
+        ? []
+        : await this.prisma.accountTransaction.groupBy({
+            by: ["accountSub"],
+            where: {
+              accountSub: { in: studentIds },
+              transactionDate: { lte: asAtDate },
+            },
+            _sum: { credit: true, debit: true },
+          });
+
+    const balanceMap = new Map<
+      string,
+      { credit: Prisma.Decimal; debit: Prisma.Decimal; balance: Prisma.Decimal }
+    >();
+
+    for (const row of balances) {
+      if (!row.accountSub) continue;
+      const credit = row._sum.credit ?? new Prisma.Decimal(0);
+      const debit = row._sum.debit ?? new Prisma.Decimal(0);
+      balanceMap.set(row.accountSub, {
+        credit,
+        debit,
+        balance: credit.minus(debit),
+      });
+    }
+
+    const rows: StudentBalanceRow[] = students.map((student) => {
+      const sums = balanceMap.get(student.id) ?? {
+        credit: new Prisma.Decimal(0),
+        debit: new Prisma.Decimal(0),
+        balance: new Prisma.Decimal(0),
+      };
+
+      return {
+        studentId: student.id,
+        admissionNumber: student.admissionNumber,
+        firstName: student.firstName,
+        middleName: student.middleName,
+        lastName: student.lastName,
+        status: student.status,
+        classId: student.classId,
+        subclassId: student.subClassId,
+        classInfo: student.class ? { id: student.class.id, name: student.class.name } : null,
+        subclassInfo: student.subClass
+          ? { id: student.subClass.id, name: student.subClass.name }
+          : null,
+        sumCredit: sums.credit.toString(),
+        sumDebit: sums.debit.toString(),
+        balance: sums.balance.toString(),
+      };
+    });
+
+    // Correct global balance sorting.
+    if (orderBy === "balance") {
+      rows.sort((a, b) => {
+        const balanceCmp = new Prisma.Decimal(a.balance).comparedTo(new Prisma.Decimal(b.balance));
+
+        if (balanceCmp !== 0) {
+          return orderDirection === "asc" ? balanceCmp : -balanceCmp;
+        }
+
+        const classCmp = (a.classId ?? "").localeCompare(b.classId ?? "");
+        if (classCmp !== 0) {
+          return classCmp;
+        }
+
+        const subClassCmp = (a.subclassId ?? "").localeCompare(b.subclassId ?? "");
+        if (subClassCmp !== 0) {
+          return subClassCmp;
+        }
+
+        return a.studentId.localeCompare(b.studentId);
+      });
+    }
+
+    const pagedRows = orderBy === "balance" ? rows.slice(skip, skip + limit) : rows;
+
+    return {
+      asAtDate,
+      status: params.status ?? "All",
+      orderBy,
+      orderDirection,
+      rows: pagedRows,
+      pagination: { page, limit, total, totalPages },
+    };
+  }
+
+  /**
+   * Student account balance as at a date: sum(credit) − sum(debit) from inception through the selected date (inclusive),
+   * filtered by `accountSub = studentId`.
+   */
+  async getStudentAccountBalanceAsAtDate(
+    params: StudentAccountBalanceAsAtDateParams
+  ): Promise<StudentAccountBalanceAsAtDateResult> {
+    const studentId = params.studentId.trim();
+    if (!studentId) throw new Error("studentId is required");
+
+    const asAtDate = params.asAtDate ?? endOfUtcDay(new Date());
+
+    const agg = await this.prisma.accountTransaction.aggregate({
+      where: {
+        accountSub: studentId,
+        transactionDate: { lte: asAtDate },
+      },
+      _sum: { credit: true, debit: true },
+    });
+
+    const sumCredit = agg._sum.credit ?? new Prisma.Decimal(0);
+    const sumDebit = agg._sum.debit ?? new Prisma.Decimal(0);
+    const balanceAsAtDate = sumCredit.minus(sumDebit).toString();
+
+    return {
+      studentId,
+      asAtDate,
+      balanceAsAtDate,
+      sumCredit: sumCredit.toString(),
+      sumDebit: sumDebit.toString(),
+    };
+  }
 
   /**
    * Account balance as at a date: sum(credit) − sum(debit) from inception through the selected date (inclusive).
@@ -557,7 +796,7 @@ export class AccountTransactionService {
     const transactionDate = this.parseDateOrThrow(input.transactionDate);
 
     const accountCode = account.accountNo?.trim() || String(account.id);
-    const accountSub = input.accountSub?.trim() || account.accountDescription;
+    const accountSub = input.accountSub?.trim() || account.accountDescription.trim();
 
     return dbClient.accountTransaction.create({
       data: {
@@ -566,7 +805,7 @@ export class AccountTransactionService {
         subheadId: account.subheadId,
         accountId: account.id,
         accountCode,
-        accountSub,
+        ...(accountSub ? { accountSub } : {}),
         debit: type === "debit" ? input.amount : 0,
         credit: type === "credit" ? input.amount : 0,
         ref: input.ref.trim(),

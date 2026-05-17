@@ -1,5 +1,7 @@
 import { Request, Response } from "express";
+import { StudentStatus } from "@prisma/client";
 import { accountTransactionService } from "../services/accountTransactionService";
+import { parseIntOrUndefined } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 /**
@@ -181,8 +183,180 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         description: Account not found
  *       500:
  *         description: Server error
+ *
+ * /api/v1/account-transactions/student-balance:
+ *   get:
+ *     summary: Student account balance as at a selected date
+ *     description: |
+ *       Returns student balance from inception through the selected date (inclusive):
+ *       `sum(credit) - sum(debit)` for rows where `accountSub = studentId` and `transactionDate <= asAtDate`.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: studentId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: asAtDate
+ *         required: false
+ *         schema: { type: string, format: date }
+ *         description: Date or date-time. If omitted, defaults to end of today UTC. Date-only values are treated as end of that UTC day.
+ *     responses:
+ *       200:
+ *         description: Student balance as at the selected date
+ *       400:
+ *         description: Invalid studentId or asAtDate
+ *       500:
+ *         description: Server error
+ *
+ * /api/v1/account-transactions/student-balances:
+ *   get:
+ *     summary: List student balances with filtering, sorting and pagination
+ *     description: |
+ *       Returns student balances up to `asAtDate` (inclusive), where balance = `sum(credit) - sum(debit)`
+ *       from inception for transactions matched by `accountSub = studentId`.
+ *       Supports optional student `status`, dynamic ordering, and pagination.
+ *       Default order is `classId -> subclassId -> balance`.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: asAtDate
+ *         required: false
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema: { type: string, enum: [Active, Inactive, Graduated, Transferred, Suspended, Archived] }
+ *       - in: query
+ *         name: orderBy
+ *         required: false
+ *         schema: { type: string, enum: [classId, balance] }
+ *       - in: query
+ *         name: orderDirection
+ *         required: false
+ *         schema: { type: string, enum: [asc, desc], default: asc }
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Student balances retrieved successfully
+ *       400:
+ *         description: Invalid query parameters
+ *       500:
+ *         description: Server error
  */
 export const accountTransactionController = {
+  getStudentBalances: async (req: Request, res: Response) => {
+    try {
+      const asAtDateRaw = parseQueryDateEndInclusive(req.query.asAtDate);
+      if (asAtDateRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "asAtDate is invalid" });
+      }
+
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw !== undefined && Object.values(StudentStatus).includes(statusRaw as StudentStatus)
+          ? (statusRaw as StudentStatus)
+          : undefined;
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be one of Active, Inactive, Graduated, Transferred, Suspended, Archived",
+        });
+      }
+
+      const orderByRaw = typeof req.query.orderBy === "string" ? req.query.orderBy : undefined;
+      const orderBy = orderByRaw === "classId" || orderByRaw === "balance" ? orderByRaw : undefined;
+      if (orderByRaw !== undefined && orderBy === undefined) {
+        return res.status(400).json({ success: false, message: "orderBy must be classId or balance" });
+      }
+
+      const orderDirectionRaw =
+        typeof req.query.orderDirection === "string" ? req.query.orderDirection : undefined;
+      const orderDirection =
+        orderDirectionRaw === undefined
+          ? undefined
+          : orderDirectionRaw === "asc" || orderDirectionRaw === "desc"
+            ? orderDirectionRaw
+            : undefined;
+      if (orderDirectionRaw !== undefined && orderDirection === undefined) {
+        return res.status(400).json({ success: false, message: "orderDirection must be asc or desc" });
+      }
+
+      const page = parseIntOrUndefined(req.query.page);
+      const limit = parseIntOrUndefined(req.query.limit);
+      if (page !== undefined && page < 1) {
+        return res.status(400).json({ success: false, message: "page must be >= 1" });
+      }
+      if (limit !== undefined && (limit < 1 || limit > 100)) {
+        return res.status(400).json({ success: false, message: "limit must be between 1 and 100" });
+      }
+
+      const data = await accountTransactionService.listStudentBalances({
+        ...(asAtDateRaw === "missing" ? {} : { asAtDate: asAtDateRaw }),
+        ...(status !== undefined ? { status } : {}),
+        ...(orderBy !== undefined ? { orderBy } : {}),
+        ...(orderDirection !== undefined ? { orderDirection } : {}),
+        ...(page !== undefined ? { page } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Student balances retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve student balances";
+      return res.status(500).json({
+        success: false,
+        message,
+        ...(error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getStudentAccountBalanceAsAtDate: async (req: Request, res: Response) => {
+    try {
+      const studentIdRaw = typeof req.query.studentId === "string" ? req.query.studentId.trim() : "";
+      if (!studentIdRaw) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+
+      const asAtDateRaw = parseQueryDateEndInclusive(req.query.asAtDate);
+      if (asAtDateRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "asAtDate is invalid" });
+      }
+
+      const data = await accountTransactionService.getStudentAccountBalanceAsAtDate({
+        studentId: studentIdRaw,
+        ...(asAtDateRaw === "missing" ? {} : { asAtDate: asAtDateRaw }),
+      });
+
+      return res.json({
+        success: true,
+        message: "Student account balance as at date retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to retrieve student account balance as at date";
+      const code = message === "studentId is required" ? 400 : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
   getAccountBalanceAsAtDate: async (req: Request, res: Response) => {
     try {
       const accountIdRaw = typeof req.query.accountId === "string" ? req.query.accountId.trim() : "";
