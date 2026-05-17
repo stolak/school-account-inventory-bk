@@ -260,6 +260,7 @@ export interface StudentJournalTransferRecordItem {
     id: number;
     name: string;
   };
+  transactionType: "Debit" | "Credit";
   amount: number;
   remarks: string | null;
 }
@@ -1111,6 +1112,7 @@ export class AccountTransactionService {
         transactionDate: Date;
         accountId: number;
         accountName: string;
+        transactionType: "Debit" | "Credit";
         debit: unknown;
         credit: unknown;
         remarks: string | null;
@@ -1124,6 +1126,7 @@ export class AccountTransactionService {
         sjt.transaction_date AS transactionDate,
         sjt.accountid AS accountId,
         ac.account_description AS accountName,
+        sjt.transaction_type AS transactionType,
         sjt.debit AS debit,
         sjt.credit AS credit,
         sjt.remarks AS remarks
@@ -1157,6 +1160,7 @@ export class AccountTransactionService {
           id: row.accountId,
           name: row.accountName,
         },
+        transactionType: row.transactionType,
         amount,
         remarks: row.remarks,
       };
