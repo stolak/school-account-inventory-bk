@@ -1,5 +1,7 @@
-import { Prisma, StudentStatus } from "@prisma/client";
+import { BatchStatus, JournalTransferType, Prisma, Status, StudentStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
+import { defaultAccountSettingsService } from "./defaultAccountSettingsService";
+import { randomUUID } from "crypto";
 
 export type AccountTransactionRow = Prisma.AccountTransactionGetPayload<Record<string, never>>;
 
@@ -224,29 +226,77 @@ type EntryInput = {
   remarks: string;
 };
 
+export type StudentJournalTransferEntryInput = {
+  amount: number;
+  accountId: string;
+  transactionType: "credit" | "debit";
+  remarks?: string;
+};
+
+export interface StudentJournalTransferInput {
+  studentId: string;
+  manualRef: string;
+  transactionDate: Date;
+  postedBy: string;
+  entries: StudentJournalTransferEntryInput[];
+}
+
+export interface StudentJournalTransferResult {
+  studentId: string;
+  ref: string;
+  manualRef: string;
+  transactionDate: Date;
+  postedCount: number;
+}
+
+export interface ListStudentJournalTransfersParams {
+  studentId?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+}
+
+export interface StudentJournalTransferRecordItem {
+  account: {
+    id: number;
+    name: string;
+  };
+  amount: number;
+  remarks: string | null;
+}
+
+export interface StudentJournalTransferGroupedResult {
+  studentId: string;
+  ref: string;
+  manualRef: string;
+  transactionDate: Date;
+  record: StudentJournalTransferRecordItem[];
+}
+
 type DbClient = Pick<Prisma.TransactionClient, "accountChart" | "project" | "accountTransaction">;
 
 export class AccountTransactionService {
   private prisma = prisma;
 
+  private generateStudentJournalTransferRef(): string {
+    const d = new Date();
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `SJT-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  }
+
   private defaultYearIntervalToToday(): { from: Date; to: Date } {
     const now = new Date();
     const to = endOfUtcDay(now);
     const from = new Date(
-      Date.UTC(
-        now.getUTCFullYear() - 1,
-        now.getUTCMonth(),
-        now.getUTCDate(),
-        0,
-        0,
-        0,
-        0
-      )
+      Date.UTC(now.getUTCFullYear() - 1, now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)
     );
     return { from, to };
   }
 
-  async listStudentBalances(params: ListStudentBalancesParams = {}): Promise<ListStudentBalancesResult> {
+  async listStudentBalances(
+    params: ListStudentBalancesParams = {}
+  ): Promise<ListStudentBalancesResult> {
     const asAtDate = params.asAtDate ?? endOfUtcDay(new Date());
     const page = clampInt(params.page ?? 1, 1, 1_000_000);
     const limit = clampInt(params.limit ?? 20, 1, 100);
@@ -297,11 +347,7 @@ export class AccountTransactionService {
             where,
             skip,
             take: limit,
-            orderBy: [
-              { classId: orderDirection },
-              { subClassId: orderDirection },
-              { id: "asc" },
-            ],
+            orderBy: [{ classId: orderDirection }, { subClassId: orderDirection }, { id: "asc" }],
             select: studentSelect,
           });
 
@@ -611,7 +657,10 @@ export class AccountTransactionService {
     for (const row of grouped) {
       const credit = row._sum.credit ?? new Prisma.Decimal(0);
       const debit = row._sum.debit ?? new Prisma.Decimal(0);
-      balanceByHeadSubhead.set(`${row.headId}:${row.subheadId}`, Number(credit.minus(debit).toString()));
+      balanceByHeadSubhead.set(
+        `${row.headId}:${row.subheadId}`,
+        Number(credit.minus(debit).toString())
+      );
     }
 
     const heads = await this.prisma.accountHead.findMany({
@@ -782,15 +831,7 @@ export class AccountTransactionService {
     } else if (params.transactionDateTo !== undefined) {
       to = params.transactionDateTo;
       from = new Date(
-        Date.UTC(
-          to.getUTCFullYear() - 1,
-          to.getUTCMonth(),
-          to.getUTCDate(),
-          0,
-          0,
-          0,
-          0
-        )
+        Date.UTC(to.getUTCFullYear() - 1, to.getUTCMonth(), to.getUTCDate(), 0, 0, 0, 0)
       );
     } else {
       ({ from, to } = this.defaultYearIntervalToToday());
@@ -844,6 +885,296 @@ export class AccountTransactionService {
       balanceBeforeDateFrom,
       transactions,
     };
+  }
+
+  async postStudentJournalTransfer(
+    input: StudentJournalTransferInput
+  ): Promise<StudentJournalTransferResult> {
+    const studentId = input.studentId.trim();
+    if (!studentId) {
+      throw new Error("studentId is required");
+    }
+
+    const manualRef = input.manualRef.trim();
+    if (!manualRef) {
+      throw new Error("manualRef is required");
+    }
+
+    if (!(input.transactionDate instanceof Date) || Number.isNaN(input.transactionDate.getTime())) {
+      throw new Error("transactionDate must be a valid date");
+    }
+
+    const postedBy = input.postedBy.trim();
+    if (!postedBy) {
+      throw new Error("postedBy is required");
+    }
+
+    if (!Array.isArray(input.entries) || input.entries.length === 0) {
+      throw new Error("entries must be a non-empty array");
+    }
+
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { id: true },
+    });
+    if (!student) {
+      throw new Error("Student not found for studentId");
+    }
+
+    const studentAccount =
+      await defaultAccountSettingsService.getAccountChartBySettingsId("STUDENT_ACCOUNT");
+    const studentAccountId = String(studentAccount.accountId);
+    const txDate = input.transactionDate.toISOString();
+    const ref = this.generateStudentJournalTransferRef();
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const postedAt = new Date();
+        for (const entry of input.entries) {
+          const amount = entry.amount;
+          if (!Number.isFinite(amount) || amount <= 0) {
+            throw new Error("Each entry amount must be a positive number");
+          }
+
+          const accountId = entry.accountId.trim();
+          if (!accountId) {
+            throw new Error("Each entry accountId is required");
+          }
+          const parsedAccountId = Number.parseInt(accountId, 10);
+          if (!Number.isFinite(parsedAccountId) || parsedAccountId < 1) {
+            throw new Error("Each entry accountId must be a positive integer");
+          }
+
+          if (entry.transactionType !== "credit" && entry.transactionType !== "debit") {
+            throw new Error("Each entry transactionType must be credit or debit");
+          }
+
+          const remarks = entry.remarks?.trim() || "";
+          const studentLegRemarks = remarks
+            ? `Student journal transfer - ${remarks}`
+            : "Student journal transfer";
+          const transType =
+            entry.transactionType === "debit"
+              ? JournalTransferType.Debit
+              : JournalTransferType.Credit;
+          const debitAmount = entry.transactionType === "debit" ? amount : 0;
+          const creditAmount = entry.transactionType === "credit" ? amount : 0;
+
+          // Track each source leg in student_journal_transfer.
+          await tx.$executeRaw(Prisma.sql`
+            INSERT INTO student_journal_transfer
+              (
+                transaction_type,
+                student_id,
+                accountid,
+                debit,
+                credit,
+                status,
+                batch_status,
+                reference_no,
+                manual_reference_no,
+                transaction_date,
+                posted_at,
+                posted_by,
+                remarks,
+                final_posted_at,
+                final_posted_by
+              )
+            VALUES
+              (
+                ${transType},
+                ${studentId},
+                ${parsedAccountId},
+                ${debitAmount},
+                ${creditAmount},
+                ${Status.Active},
+                ${BatchStatus.Processed},
+                ${ref},
+                ${manualRef},
+                ${input.transactionDate},
+                ${postedAt},
+                ${postedBy},
+                ${remarks || null},
+                ${postedAt},
+                ${postedBy}
+              )
+          `);
+
+          // First leg: post to provided account and direction.
+          if (entry.transactionType === "debit") {
+            await this.debitAccount(
+              {
+                accountId,
+                amount,
+                ref,
+                manualRef,
+                transactionDate: txDate,
+                postedBy,
+                remarks,
+              },
+              tx
+            );
+          } else {
+            await this.creditAccount(
+              {
+                accountId,
+                amount,
+                ref,
+                manualRef,
+                transactionDate: txDate,
+                postedBy,
+                remarks,
+              },
+              tx
+            );
+          }
+
+          // Second leg: opposite direction to STUDENT_ACCOUNT, with accountSub = studentId.
+          if (entry.transactionType === "debit") {
+            await this.creditAccount(
+              {
+                accountId: studentAccountId,
+                amount,
+                ref,
+                manualRef,
+                transactionDate: txDate,
+                postedBy,
+                accountSub: studentId,
+                remarks: studentLegRemarks,
+              },
+              tx
+            );
+          } else {
+            await this.debitAccount(
+              {
+                accountId: studentAccountId,
+                amount,
+                ref,
+                manualRef,
+                transactionDate: txDate,
+                postedBy,
+                accountSub: studentId,
+                remarks: studentLegRemarks,
+              },
+              tx
+            );
+          }
+        }
+      });
+    } catch (error) {
+      // Safety cleanup in case any rows were written before failure.
+      await this.rollBack(ref).catch(() => ({ count: 0 }));
+
+      const reason = error instanceof Error ? error.message : "Unknown error";
+      throw new Error(`Student journal transfer could not be completed: ${reason}`);
+    }
+
+    return {
+      studentId,
+      ref,
+      manualRef,
+      transactionDate: input.transactionDate,
+      postedCount: input.entries.length * 2,
+    };
+  }
+
+  async listStudentJournalTransfers(
+    params: ListStudentJournalTransfersParams = {}
+  ): Promise<StudentJournalTransferGroupedResult[]> {
+    const clauses: Prisma.Sql[] = [Prisma.sql`sjt.reference_no IS NOT NULL`];
+
+    if (params.studentId !== undefined) {
+      const studentId = params.studentId.trim();
+      if (!studentId) {
+        throw new Error("studentId cannot be empty");
+      }
+      clauses.push(Prisma.sql`sjt.student_id = ${studentId}`);
+    }
+
+    if (params.dateFrom !== undefined) {
+      clauses.push(Prisma.sql`sjt.transaction_date >= ${params.dateFrom}`);
+    }
+    if (params.dateTo !== undefined) {
+      clauses.push(Prisma.sql`sjt.transaction_date <= ${params.dateTo}`);
+    }
+
+    const whereSql = clauses.length
+      ? Prisma.sql`WHERE ${Prisma.join(clauses, " AND ")}`
+      : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: number;
+        studentId: string;
+        ref: string;
+        manualRef: string | null;
+        transactionDate: Date;
+        accountId: number;
+        accountName: string;
+        debit: unknown;
+        credit: unknown;
+        remarks: string | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        sjt.id AS id,
+        sjt.student_id AS studentId,
+        sjt.reference_no AS ref,
+        sjt.manual_reference_no AS manualRef,
+        sjt.transaction_date AS transactionDate,
+        sjt.accountid AS accountId,
+        ac.account_description AS accountName,
+        sjt.debit AS debit,
+        sjt.credit AS credit,
+        sjt.remarks AS remarks
+      FROM student_journal_transfer sjt
+      INNER JOIN account_charts ac ON ac.id = sjt.accountid
+      ${whereSql}
+      ORDER BY sjt.transaction_date DESC, sjt.reference_no DESC, sjt.id ASC
+    `);
+
+    const grouped = new Map<string, StudentJournalTransferGroupedResult>();
+
+    const toNumber = (value: unknown): number => {
+      if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+      if (typeof value === "string") {
+        const n = Number.parseFloat(value);
+        return Number.isFinite(n) ? n : 0;
+      }
+      if (typeof value === "object" && value !== null && "toString" in value) {
+        const n = Number.parseFloat(String(value));
+        return Number.isFinite(n) ? n : 0;
+      }
+      return 0;
+    };
+
+    for (const row of rows) {
+      const key = `${row.studentId}::${row.ref}::${row.manualRef ?? ""}`;
+      const existing = grouped.get(key);
+      const amount = toNumber(row.debit) > 0 ? toNumber(row.debit) : toNumber(row.credit);
+      const child: StudentJournalTransferRecordItem = {
+        account: {
+          id: row.accountId,
+          name: row.accountName,
+        },
+        amount,
+        remarks: row.remarks,
+      };
+
+      if (!existing) {
+        grouped.set(key, {
+          studentId: row.studentId,
+          ref: row.ref,
+          manualRef: row.manualRef ?? "",
+          transactionDate: new Date(row.transactionDate),
+          record: [child],
+        });
+      } else {
+        existing.record.push(child);
+      }
+    }
+
+    return Array.from(grouped.values());
   }
 
   async rollBack(ref: string): Promise<{ count: number }> {

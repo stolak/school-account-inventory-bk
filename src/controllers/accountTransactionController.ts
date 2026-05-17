@@ -286,8 +286,227 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         description: Student not found
  *       500:
  *         description: Server error
+ *
+ * /api/v1/account-transactions/student-journal-transfer:
+ *   get:
+ *     summary: Query student journal transfers
+ *     description: |
+ *       Returns grouped student journal transfer summaries.
+ *       Optional filters: `studentId`, `dateFrom`, `dateTo`.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: studentId
+ *         required: false
+ *         schema: { type: string }
+ *       - in: query
+ *         name: dateFrom
+ *         required: false
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: dateTo
+ *         required: false
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Student journal transfers retrieved successfully
+ *       400:
+ *         description: Invalid query parameters
+ *       500:
+ *         description: Server error
+ *   post:
+ *     summary: Post student journal transfer (double entry)
+ *     description: |
+ *       Accepts global `studentId`, `manualRef`, `transactionDate` and an `entries` array.
+ *       For each entry:
+ *       1) First leg posts to the entry account using `transactionType` (`credit` or `debit`)
+ *       2) Second leg posts opposite side to account from `STUDENT_ACCOUNT` setting,
+ *          with `accountSub = studentId`.
+ *     tags: [AccountTransactions]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [studentId, manualRef, transactionDate, entries]
+ *             properties:
+ *               studentId: { type: string }
+ *               manualRef: { type: string }
+ *               transactionDate: { type: string, format: date-time }
+ *               entries:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required: [amount, accountId, transactionType]
+ *                   properties:
+ *                     amount: { type: number, minimum: 0.01 }
+ *                     accountId: { type: string }
+ *                     transactionType: { type: string, enum: [credit, debit] }
+ *                     remarks: { type: string, nullable: true }
+ *     responses:
+ *       201:
+ *         description: Student journal transfer posted successfully
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Student or configured STUDENT_ACCOUNT not found
+ *       500:
+ *         description: Server error
  */
 export const accountTransactionController = {
+  listStudentJournalTransfer: async (req: Request, res: Response) => {
+    try {
+      const studentIdRaw = typeof req.query.studentId === "string" ? req.query.studentId.trim() : undefined;
+      if (typeof req.query.studentId === "string" && !studentIdRaw) {
+        return res.status(400).json({ success: false, message: "studentId cannot be empty" });
+      }
+
+      const fromSource =
+        req.query.dateFrom !== undefined
+          ? req.query.dateFrom
+          : req.query.datefrom !== undefined
+            ? req.query.datefrom
+            : req.query.transactionDateFrom;
+      const toSource =
+        req.query.dateTo !== undefined ? req.query.dateTo : req.query.transactionDateTo;
+
+      const fromRaw = parseQueryDateStart(fromSource);
+      const toRaw = parseQueryDateEndInclusive(toSource);
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "dateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "dateTo is invalid" });
+      }
+
+      const data = await accountTransactionService.listStudentJournalTransfers({
+        ...(studentIdRaw !== undefined ? { studentId: studentIdRaw } : {}),
+        ...(fromRaw === "missing" ? {} : { dateFrom: fromRaw }),
+        ...(toRaw === "missing" ? {} : { dateTo: toRaw }),
+      });
+
+      return res.json({
+        success: true,
+        message: "Student journal transfer retrived successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve student journal transfer";
+      const code = message.includes("empty") || message.includes("invalid") ? 400 : 500;
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  postStudentJournalTransfer: async (req: Request, res: Response) => {
+    try {
+      const body = req.body ?? {};
+      const studentId = typeof body.studentId === "string" ? body.studentId.trim() : "";
+      const manualRef = typeof body.manualRef === "string" ? body.manualRef.trim() : "";
+      const transactionDate =
+        typeof body.transactionDate === "string" || body.transactionDate instanceof Date
+          ? new Date(body.transactionDate)
+          : new Date(NaN);
+
+      if (!studentId) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+      if (!manualRef) {
+        return res.status(400).json({ success: false, message: "manualRef is required" });
+      }
+      if (Number.isNaN(transactionDate.getTime())) {
+        return res.status(400).json({ success: false, message: "transactionDate must be a valid date" });
+      }
+      if (!Array.isArray(body.entries) || body.entries.length === 0) {
+        return res.status(400).json({ success: false, message: "entries must be a non-empty array" });
+      }
+
+      const entries: Array<{
+        amount: number;
+        accountId: string;
+        transactionType: unknown;
+        remarks?: string;
+      }> = body.entries.map((entry: any) => ({
+        amount:
+          typeof entry?.amount === "number"
+            ? entry.amount
+            : typeof entry?.amount === "string"
+              ? Number.parseFloat(entry.amount)
+              : Number.NaN,
+        accountId:
+          typeof entry?.accountId === "string"
+            ? entry.accountId.trim()
+            : typeof entry?.accountId === "number"
+              ? String(entry.accountId)
+              : "",
+        transactionType: entry?.transactionType,
+        remarks:
+          entry?.remarks === undefined || entry?.remarks === null
+            ? undefined
+            : typeof entry.remarks === "string"
+              ? entry.remarks
+              : undefined,
+      }));
+
+      const hasInvalid = entries.some(
+        (e) =>
+          !Number.isFinite(e.amount) ||
+          e.amount <= 0 ||
+          !e.accountId ||
+          (e.transactionType !== "credit" && e.transactionType !== "debit")
+      );
+      if (hasInvalid) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Each entry must include valid amount (>0), accountId, and transactionType (credit|debit)",
+        });
+      }
+
+      const postedByRaw = (req as { user?: { id?: unknown } }).user?.id;
+      const postedBy =
+        typeof postedByRaw === "string" && postedByRaw.trim() ? postedByRaw.trim() : "SYSTEM";
+
+      const data = await accountTransactionService.postStudentJournalTransfer({
+        studentId,
+        manualRef,
+        transactionDate,
+        postedBy,
+        entries: entries.map((e) => ({
+          amount: e.amount,
+          accountId: e.accountId,
+          transactionType: e.transactionType as "credit" | "debit",
+          ...(e.remarks !== undefined ? { remarks: e.remarks } : {}),
+        })),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Student journal transfer posted successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to post student journal transfer";
+      const code =
+        message.includes("required") || message.includes("must be") || message.includes("non-empty")
+          ? 400
+          : message.includes("not found")
+            ? 404
+            : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
   getStudentAccountTransactionLog: async (req: Request, res: Response) => {
     try {
       const studentIdRaw = typeof req.query.studentId === "string" ? req.query.studentId.trim() : "";

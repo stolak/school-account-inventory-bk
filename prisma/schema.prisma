@@ -109,13 +109,14 @@ model User {
   createdInventoryTransactions  InventoryTransaction[] @relation("InventoryTransactionCreatedBy")
   staffProfile                  Staff?                 @relation("StaffUser")
 
-  createdProjects      Project[]             @relation("ProjectCreatedBy")
-  managedStores        Store[]               @relation("StoreManager")
+  createdProjects         Project[]                @relation("ProjectCreatedBy")
+  managedStores           Store[]                  @relation("StoreManager")
   /**
    * Stores this user is granted access to (many-to-many; separate from primary manager role).
    */
-  storeAccesses        UserStore[]
-  tempJournalTransfers TempJournalTransfer[]
+  storeAccesses           UserStore[]
+  tempJournalTransfers    TempJournalTransfer[]
+  studentJournalTransfers StudentJournalTransfer[]
 
   @@map("users")
 }
@@ -463,10 +464,11 @@ model Student {
   class     SchoolClass? @relation(fields: [classId], references: [id], onDelete: SetNull)
   createdBy User         @relation("StudentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  subClass              SubClass?              @relation(fields: [subClassId], references: [id])
-  subClassId            String?                @db.Char(36)
-  inventoryTransactions InventoryTransaction[]
-  studentBillings       StudentBilling[]
+  subClass                SubClass?                @relation(fields: [subClassId], references: [id])
+  subClassId              String?                  @db.Char(36)
+  inventoryTransactions   InventoryTransaction[]
+  studentBillings         StudentBilling[]
+  studentJournalTransfers StudentJournalTransfer[]
 
   @@index([classId])
   @@index([createdById])
@@ -603,17 +605,18 @@ model InventoryTransaction {
 }
 
 model Project {
-  id                    String                 @id @default(uuid()) @db.Char(36)
-  name                  String
-  description           String?
-  status                Status                 @default(Active)
-  createdAt             DateTime               @default(now()) @map("created_at")
-  updatedAt             DateTime               @default(now()) @map("updated_at")
-  inventoryTransactions InventoryTransaction[] @relation("ProjectTransactions")
-  accountTransactions   AccountTransaction[]
-  tempJournalTransfers  TempJournalTransfer[]
-  CreatedBy             User?                  @relation("ProjectCreatedBy", fields: [createdById], references: [id])
-  createdById           String?                @map("created_by") @db.Char(36)
+  id                      String                   @id @default(uuid()) @db.Char(36)
+  name                    String
+  description             String?
+  status                  Status                   @default(Active)
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  updatedAt               DateTime                 @default(now()) @map("updated_at")
+  inventoryTransactions   InventoryTransaction[]   @relation("ProjectTransactions")
+  accountTransactions     AccountTransaction[]
+  tempJournalTransfers    TempJournalTransfer[]
+  CreatedBy               User?                    @relation("ProjectCreatedBy", fields: [createdById], references: [id])
+  createdById             String?                  @map("created_by") @db.Char(36)
+  studentJournalTransfers StudentJournalTransfer[]
 
   @@map("projects")
 }
@@ -716,16 +719,17 @@ model AccountChart {
   rank               Int
   createdAt          DateTime @default(now()) @map("created_at")
 
-  group                  AccountGroup             @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  head                   AccountHead              @relation(fields: [headId], references: [id], onDelete: Restrict)
-  subhead                AccountSubhead           @relation(fields: [subheadId], references: [id], onDelete: Restrict)
-  accountTransactions    AccountTransaction[]
-  tempJournalTransfers   TempJournalTransfer[]
-  defaultAccountSettings DefaultAccountSettings[]
-  concessionDiscounts    ConcessionDiscount[]
-  billingItems           BillingItem[]
-  students               Student[]
-  categories             Category[]
+  group                   AccountGroup             @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  head                    AccountHead              @relation(fields: [headId], references: [id], onDelete: Restrict)
+  subhead                 AccountSubhead           @relation(fields: [subheadId], references: [id], onDelete: Restrict)
+  accountTransactions     AccountTransaction[]
+  tempJournalTransfers    TempJournalTransfer[]
+  defaultAccountSettings  DefaultAccountSettings[]
+  concessionDiscounts     ConcessionDiscount[]
+  billingItems            BillingItem[]
+  students                Student[]
+  categories              Category[]
+  studentJournalTransfers StudentJournalTransfer[]
 
   @@index([groupId])
   @@index([headId])
@@ -799,6 +803,39 @@ model TempJournalTransfer {
   @@index([transactionDate])
   @@index([batchStatus])
   @@map("temp_journal_transfer")
+}
+
+model StudentJournalTransfer {
+  id                Int                 @id @default(autoincrement())
+  transType         JournalTransferType @map("transaction_type")
+  studentId         String              @map("student_id") @db.Char(36)
+  student           Student?            @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  accountId         Int                 @map("accountid")
+  debit             Decimal             @default(0) @db.Decimal(14, 2)
+  credit            Decimal             @default(0) @db.Decimal(14, 2)
+  status            Status              @default(Active)
+  batchStatus       BatchStatus         @default(Pending) @map("batch_status")
+  referenceNo       String?             @map("reference_no")
+  manualReferenceNo String?             @map("manual_reference_no")
+  transactionDate   DateTime            @map("transaction_date")
+  postedAt          DateTime?           @map("posted_at")
+  postedBy          String?             @map("posted_by")
+  remarks           String?             @map("remarks")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  finalPostedAt     DateTime?           @map("final_posted_at")
+  finalPostedBy     String?             @map("final_posted_by")
+  updatedAt         DateTime            @default(now()) @map("updated_at")
+  createdById       String?             @map("created_by") @db.Char(36)
+  createdBy         User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  account           AccountChart        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  project           Project?            @relation(fields: [projectId], references: [id])
+  projectId         String?             @db.Char(36)
+
+  @@index([studentId])
+  @@index([accountId])
+  @@index([transactionDate])
+  @@index([batchStatus])
+  @@map("student_journal_transfer")
 }
 
 model DefaulSubheadSettings {
