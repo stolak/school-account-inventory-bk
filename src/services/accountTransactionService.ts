@@ -35,6 +35,12 @@ export interface AccountTransactionLogParams {
   transactionDateTo?: Date;
 }
 
+export interface StudentAccountTransactionLogParams {
+  studentId: string;
+  transactionDateFrom?: Date;
+  transactionDateTo?: Date;
+}
+
 export interface AccountBalanceAsAtDateParams {
   accountId: string;
   asAtDate?: Date;
@@ -76,6 +82,7 @@ function clampInt(n: number, min: number, max: number) {
 export interface ListStudentBalancesParams {
   asAtDate?: Date;
   status?: StudentStatus;
+  classId?: string;
   orderBy?: "classId" | "balance";
   orderDirection?: "asc" | "desc";
   page?: number;
@@ -142,6 +149,23 @@ export interface AccountTransactionLogResult {
   transactions: AccountTransactionLogRow[];
 }
 
+export interface StudentAccountTransactionLogResult {
+  student: {
+    id: string;
+    admissionNumber: string;
+    firstName: string;
+    middleName: string | null;
+    lastName: string;
+    classId: string | null;
+    subClassId: string | null;
+  };
+  transactionDateFrom: Date;
+  transactionDateTo: Date;
+  /** Sum(credit) − sum(debit) with transactionDate strictly before `transactionDateFrom`. */
+  balanceBeforeDateFrom: string;
+  transactions: AccountTransactionLogRow[];
+}
+
 export interface AccountTransactionByAccountReportParams {
   transactionDateFrom?: Date;
   transactionDateTo?: Date;
@@ -205,6 +229,23 @@ type DbClient = Pick<Prisma.TransactionClient, "accountChart" | "project" | "acc
 export class AccountTransactionService {
   private prisma = prisma;
 
+  private defaultYearIntervalToToday(): { from: Date; to: Date } {
+    const now = new Date();
+    const to = endOfUtcDay(now);
+    const from = new Date(
+      Date.UTC(
+        now.getUTCFullYear() - 1,
+        now.getUTCMonth(),
+        now.getUTCDate(),
+        0,
+        0,
+        0,
+        0
+      )
+    );
+    return { from, to };
+  }
+
   async listStudentBalances(params: ListStudentBalancesParams = {}): Promise<ListStudentBalancesResult> {
     const asAtDate = params.asAtDate ?? endOfUtcDay(new Date());
     const page = clampInt(params.page ?? 1, 1, 1_000_000);
@@ -215,6 +256,7 @@ export class AccountTransactionService {
 
     const where: Prisma.StudentWhereInput = {
       ...(params.status !== undefined ? { status: params.status } : {}),
+      ...(params.classId !== undefined ? { classId: params.classId } : {}),
     };
 
     const total = await this.prisma.student.count({ where });
@@ -705,6 +747,101 @@ export class AccountTransactionService {
       transactionDateFrom: from,
       transactionDateTo: to,
       balanceBeforeFromDate,
+      transactions,
+    };
+  }
+
+  async getStudentAccountTransactionLog(
+    params: StudentAccountTransactionLogParams
+  ): Promise<StudentAccountTransactionLogResult> {
+    const studentId = params.studentId.trim();
+    if (!studentId) throw new Error("studentId is required");
+
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: {
+        id: true,
+        admissionNumber: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        classId: true,
+        subClassId: true,
+      },
+    });
+    if (!student) throw new Error("Student not found for studentId");
+
+    let from: Date;
+    let to: Date;
+    if (params.transactionDateFrom !== undefined && params.transactionDateTo !== undefined) {
+      from = params.transactionDateFrom;
+      to = params.transactionDateTo;
+    } else if (params.transactionDateFrom !== undefined) {
+      from = params.transactionDateFrom;
+      to = endOfUtcDay(new Date());
+    } else if (params.transactionDateTo !== undefined) {
+      to = params.transactionDateTo;
+      from = new Date(
+        Date.UTC(
+          to.getUTCFullYear() - 1,
+          to.getUTCMonth(),
+          to.getUTCDate(),
+          0,
+          0,
+          0,
+          0
+        )
+      );
+    } else {
+      ({ from, to } = this.defaultYearIntervalToToday());
+    }
+
+    if (from.getTime() > to.getTime()) {
+      throw new Error("transactionDateFrom must be before or equal to transactionDateTo");
+    }
+
+    const [balanceAgg, rows] = await Promise.all([
+      this.prisma.accountTransaction.aggregate({
+        where: {
+          accountSub: studentId,
+          transactionDate: { lt: from },
+        },
+        _sum: { credit: true, debit: true },
+      }),
+      this.prisma.accountTransaction.findMany({
+        where: {
+          accountSub: studentId,
+          transactionDate: { gte: from, lte: to },
+        },
+        orderBy: [{ transactionDate: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+        include: {
+          project: { select: { id: true, name: true } },
+        },
+      }),
+    ]);
+
+    const balanceBeforeDateFrom = (balanceAgg._sum.credit ?? new Prisma.Decimal(0))
+      .minus(balanceAgg._sum.debit ?? new Prisma.Decimal(0))
+      .toString();
+
+    const transactions: AccountTransactionLogRow[] = rows.map((row) => ({
+      id: row.id,
+      debit: row.debit.toString(),
+      credit: row.credit.toString(),
+      remarks: row.remarks,
+      ref: row.ref,
+      manualRef: row.manualRef,
+      transactionDate: row.transactionDate,
+      postedBy: row.postedBy,
+      createdAt: row.createdAt,
+      project: row.project,
+    }));
+
+    return {
+      student,
+      transactionDateFrom: from,
+      transactionDateTo: to,
+      balanceBeforeDateFrom,
       transactions,
     };
   }

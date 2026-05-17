@@ -228,6 +228,10 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         required: false
  *         schema: { type: string, enum: [Active, Inactive, Graduated, Transferred, Suspended, Archived] }
  *       - in: query
+ *         name: classId
+ *         required: false
+ *         schema: { type: string }
+ *       - in: query
  *         name: orderBy
  *         required: false
  *         schema: { type: string, enum: [classId, balance] }
@@ -250,13 +254,100 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         description: Invalid query parameters
  *       500:
  *         description: Server error
+ *
+ * /api/v1/account-transactions/student-transaction-log:
+ *   get:
+ *     summary: Student account transaction log
+ *     description: |
+ *       Returns account transactions for a student (`accountSub = studentId`) within a date window,
+ *       plus opening balance before `datefrom` computed as `sum(credit) - sum(debit)`.
+ *       `studentId` is required.
+ *       If no dates are provided, defaults to one year back from today through end of today UTC.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: studentId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: datefrom
+ *         required: false
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: dateTo
+ *         required: false
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Student opening balance and transactions in range
+ *       400:
+ *         description: Invalid query parameters
+ *       404:
+ *         description: Student not found
+ *       500:
+ *         description: Server error
  */
 export const accountTransactionController = {
+  getStudentAccountTransactionLog: async (req: Request, res: Response) => {
+    try {
+      const studentIdRaw = typeof req.query.studentId === "string" ? req.query.studentId.trim() : "";
+      if (!studentIdRaw) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+
+      const fromSource =
+        req.query.datefrom !== undefined ? req.query.datefrom : req.query.transactionDateFrom;
+      const toSource = req.query.dateTo !== undefined ? req.query.dateTo : req.query.transactionDateTo;
+
+      const fromRaw = parseQueryDateStart(fromSource);
+      const toRaw = parseQueryDateEndInclusive(toSource);
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "datefrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "dateTo is invalid" });
+      }
+
+      const data = await accountTransactionService.getStudentAccountTransactionLog({
+        studentId: studentIdRaw,
+        ...(fromRaw === "missing" ? {} : { transactionDateFrom: fromRaw }),
+        ...(toRaw === "missing" ? {} : { transactionDateTo: toRaw }),
+      });
+
+      return res.json({
+        success: true,
+        message: "Student account transaction log retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to retrieve student account transaction log";
+      const code =
+        message === "Student not found for studentId"
+          ? 404
+          : message === "studentId is required" ||
+              message === "transactionDateFrom must be before or equal to transactionDateTo"
+            ? 400
+            : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
   getStudentBalances: async (req: Request, res: Response) => {
     try {
       const asAtDateRaw = parseQueryDateEndInclusive(req.query.asAtDate);
       if (asAtDateRaw === "invalid") {
         return res.status(400).json({ success: false, message: "asAtDate is invalid" });
+      }
+
+      const classIdRaw = typeof req.query.classId === "string" ? req.query.classId.trim() : undefined;
+      if (typeof req.query.classId === "string" && !classIdRaw) {
+        return res.status(400).json({ success: false, message: "classId cannot be empty" });
       }
 
       const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
@@ -301,6 +392,7 @@ export const accountTransactionController = {
       const data = await accountTransactionService.listStudentBalances({
         ...(asAtDateRaw === "missing" ? {} : { asAtDate: asAtDateRaw }),
         ...(status !== undefined ? { status } : {}),
+        ...(classIdRaw !== undefined ? { classId: classIdRaw } : {}),
         ...(orderBy !== undefined ? { orderBy } : {}),
         ...(orderDirection !== undefined ? { orderDirection } : {}),
         ...(page !== undefined ? { page } : {}),

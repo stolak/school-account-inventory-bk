@@ -3,6 +3,7 @@ import { accountTransactionController } from "../controllers/accountTransactionC
 
 const router = Router();
 
+router.get("/student-transaction-log", accountTransactionController.getStudentAccountTransactionLog);
 router.get("/student-balances", accountTransactionController.getStudentBalances);
 router.get("/student-balance", accountTransactionController.getStudentAccountBalanceAsAtDate);
 router.get("/balance-as-at", accountTransactionController.getAccountBalanceAsAtDate);
