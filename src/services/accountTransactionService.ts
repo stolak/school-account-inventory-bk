@@ -971,7 +971,7 @@ export class AccountTransactionService {
                 debit,
                 credit,
                 status,
-                batch_status,
+                batchStatus,
                 reference_no,
                 manual_reference_no,
                 transaction_date,

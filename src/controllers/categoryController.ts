@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { categoryService } from "../services/categoryService";
-import { Status } from "@prisma/client";
+import { InventoryCategoryType, Status } from "@prisma/client";
 import { parseIntOrUndefined } from "../utils/request";
 
 function parseConsumableAccountIdInput(
@@ -23,12 +23,85 @@ function parseConsumableAccountIdInput(
   return { ok: true, value: parsed };
 }
 
+function parseCategoryTypeInput(
+  value: unknown
+): { ok: true; value: InventoryCategoryType | undefined } | { ok: false; message: string } {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (value === InventoryCategoryType.Consumable || value === "Consumable") {
+    return { ok: true, value: InventoryCategoryType.Consumable };
+  }
+  if (value === InventoryCategoryType.NonConsumable || value === "NonConsumable") {
+    return { ok: true, value: InventoryCategoryType.NonConsumable };
+  }
+  return { ok: false, message: "categoryType must be Consumable or NonConsumable" };
+}
+
+function httpStatusForCategoryMutation(message: string): number {
+  if (message === "Category not found" || message.includes("Invalid consumableAccountId")) return 404;
+  if (message.includes("already exists")) return 409;
+  if (
+    message === "name cannot be empty" ||
+    message === "name is required" ||
+    message.includes("consumableAccountId cannot be set")
+  ) {
+    return 400;
+  }
+  return 500;
+}
+
+/**
+ * @openapi
+ * components:
+ *   schemas:
+ *     CategoryType:
+ *       type: string
+ *       enum: [Consumable, NonConsumable]
+ *     Category:
+ *       type: object
+ *       properties:
+ *         id:
+ *           type: string
+ *           format: uuid
+ *         name:
+ *           type: string
+ *         description:
+ *           type: string
+ *           nullable: true
+ *         status:
+ *           type: string
+ *           enum: [Active, Inactive, Archived]
+ *         categoryType:
+ *           $ref: '#/components/schemas/CategoryType'
+ *         createdAt:
+ *           type: string
+ *           format: date-time
+ *         updatedAt:
+ *           type: string
+ *           format: date-time
+ *         consumableAccountId:
+ *           type: integer
+ *           nullable: true
+ *         consumableAccount:
+ *           type: object
+ *           nullable: true
+ *           properties:
+ *             id:
+ *               type: integer
+ *             accountNo:
+ *               type: string
+ *               nullable: true
+ *             accountDescription:
+ *               type: string
+ */
+
 /**
  * @openapi
  * /api/v1/categories:
  *   post:
  *     summary: Create a category
  *     tags: [Categories]
+ *     security:
+ *       - bearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -46,12 +119,15 @@ function parseConsumableAccountIdInput(
  *                 example: "Books, pens, paper, and related items"
  *               status:
  *                 type: string
- *                 enum: [Active, Inactive]
+ *                 enum: [Active, Inactive, Archived]
  *                 description: Optional status (defaults to Active)
+ *               categoryType:
+ *                 $ref: '#/components/schemas/CategoryType'
+ *                 description: Optional (defaults to Consumable). consumableAccountId is only allowed when Consumable.
  *               consumableAccountId:
  *                 type: integer
  *                 nullable: true
- *                 description: Optional linked account chart for consumable inventory
+ *                 description: Optional linked account chart (Consumable categories only)
  *     responses:
  *       201:
  *         description: Category created
@@ -65,29 +141,11 @@ function parseConsumableAccountIdInput(
  *                 message:
  *                   type: string
  *                 data:
- *                   type: object
- *                   properties:
- *                     id:
- *                       type: string
- *                     name:
- *                       type: string
- *                     description:
- *                       type: string
- *                       nullable: true
- *                     status:
- *                       type: string
- *                       enum: [Active, Inactive]
- *                     createdAt:
- *                       type: string
- *                       format: date-time
- *                     updatedAt:
- *                       type: string
- *                       format: date-time
- *                     consumableAccountId:
- *                       type: integer
- *                       nullable: true
+ *                   $ref: '#/components/schemas/Category'
  *       400:
- *         description: Validation error
+ *         description: Validation error (invalid categoryType or consumableAccountId with NonConsumable)
+ *       404:
+ *         description: Invalid consumableAccountId
  *       409:
  *         description: Duplicate category name
  *       500:
@@ -95,25 +153,31 @@ function parseConsumableAccountIdInput(
  *   get:
  *     summary: List categories
  *     tags: [Categories]
+ *     security:
+ *       - bearerAuth: []
  *     parameters:
  *       - in: query
  *         name: q
  *         schema:
  *           type: string
- *         description: Optional search query (matches category name)
+ *         description: Search category name or description (substring)
  *       - in: query
  *         name: status
  *         schema:
  *           type: string
- *           enum: [Active, Inactive, All]
- *         description: Defaults to Active only. Use All to include Active and Inactive.
+ *           enum: [Active, Inactive, Archived, All]
+ *         description: Defaults to Active only. Use All for every status.
+ *       - in: query
+ *         name: categoryType
+ *         schema:
+ *           $ref: '#/components/schemas/CategoryType'
+ *         description: Filter by inventory category type
  *       - in: query
  *         name: page
  *         schema:
  *           type: integer
  *           minimum: 1
  *           default: 1
- *         description: Page number for pagination
  *       - in: query
  *         name: limit
  *         schema:
@@ -121,10 +185,9 @@ function parseConsumableAccountIdInput(
  *           minimum: 1
  *           maximum: 100
  *           default: 20
- *         description: Items per page
  *     responses:
  *       200:
- *         description: Categories list
+ *         description: Paginated categories list
  *         content:
  *           application/json:
  *             schema:
@@ -140,27 +203,7 @@ function parseConsumableAccountIdInput(
  *                     categories:
  *                       type: array
  *                       items:
- *                         type: object
- *                         properties:
- *                           id:
- *                             type: string
- *                           name:
- *                             type: string
- *                           description:
- *                             type: string
- *                             nullable: true
- *                           status:
- *                             type: string
- *                             enum: [Active, Inactive]
- *                           createdAt:
- *                             type: string
- *                             format: date-time
- *                           updatedAt:
- *                             type: string
- *                             format: date-time
- *                           consumableAccountId:
- *                             type: integer
- *                             nullable: true
+ *                         $ref: '#/components/schemas/Category'
  *                     pagination:
  *                       type: object
  *                       properties:
@@ -172,13 +215,15 @@ function parseConsumableAccountIdInput(
  *                           type: integer
  *                         totalPages:
  *                           type: integer
+ *       400:
+ *         description: Invalid status or categoryType filter
  *       500:
  *         description: Server error
  */
 export const categoryController = {
   createCategory: async (req: Request, res: Response) => {
     try {
-      const { name, description, status, consumableAccountId } = req.body ?? {};
+      const { name, description, status, categoryType, consumableAccountId } = req.body ?? {};
 
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({
@@ -194,11 +239,21 @@ export const categoryController = {
         });
       }
 
-      if (status !== undefined && status !== Status.Active && status !== Status.Inactive) {
+      if (
+        status !== undefined &&
+        status !== Status.Active &&
+        status !== Status.Inactive &&
+        status !== Status.Archived
+      ) {
         return res.status(400).json({
           success: false,
-          message: "status must be Active or Inactive",
+          message: "status must be Active, Inactive, or Archived",
         });
+      }
+
+      const parsedCategoryType = parseCategoryTypeInput(categoryType);
+      if (!parsedCategoryType.ok) {
+        return res.status(400).json({ success: false, message: parsedCategoryType.message });
       }
 
       const parsedConsumable = parseConsumableAccountIdInput(consumableAccountId);
@@ -213,6 +268,7 @@ export const categoryController = {
         name: name.trim(),
         description: description === undefined ? null : description,
         ...(status !== undefined ? { status } : {}),
+        ...(parsedCategoryType.value !== undefined ? { categoryType: parsedCategoryType.value } : {}),
         ...(parsedConsumable.value !== undefined
           ? { consumableAccountId: parsedConsumable.value }
           : {}),
@@ -223,15 +279,9 @@ export const categoryController = {
         message: "Category created successfully",
         data: category,
       });
-    } catch (error: any) {
-      const message = error?.message ?? "Failed to create category";
-      const status =
-        message.includes("already exists") ? 409 : message.includes("Invalid consumableAccountId") ? 404 : 500;
-
-      return res.status(status).json({
-        success: false,
-        message,
-      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to create category";
+      return res.status(httpStatusForCategoryMutation(message)).json({ success: false, message });
     }
   },
 
@@ -248,29 +298,45 @@ export const categoryController = {
               ? Status.Active
               : statusRaw === "Inactive"
                 ? Status.Inactive
-                : undefined;
+                : statusRaw === "Archived"
+                  ? Status.Archived
+                  : undefined;
 
       if (statusRaw !== undefined && status === undefined) {
         return res.status(400).json({
           success: false,
-          message: "status must be Active, Inactive, or All",
+          message: "status must be Active, Inactive, Archived, or All",
         });
       }
+
+      const categoryTypeRaw =
+        typeof req.query.categoryType === "string" ? req.query.categoryType : undefined;
+      const parsedCategoryType = parseCategoryTypeInput(categoryTypeRaw);
+      if (!parsedCategoryType.ok) {
+        return res.status(400).json({ success: false, message: parsedCategoryType.message });
+      }
+
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
-      const result = await categoryService.listCategories({ q, status, page, limit });
+      const result = await categoryService.listCategories({
+        q,
+        status,
+        categoryType: parsedCategoryType.value,
+        page,
+        limit,
+      });
 
       return res.json({
         success: true,
         message: "Categories retrieved successfully",
         data: result,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       return res.status(500).json({
         success: false,
         message: "Failed to retrieve categories",
-        error: error?.message,
+        error: error instanceof Error ? error.message : undefined,
       });
     }
   },
@@ -281,16 +347,31 @@ export const categoryController = {
    *   get:
    *     summary: Get a category by ID
    *     tags: [Categories]
+   *     security:
+   *       - bearerAuth: []
    *     parameters:
    *       - in: path
    *         name: id
    *         required: true
    *         schema:
    *           type: string
-   *         description: Category ID
+   *           format: uuid
    *     responses:
    *       200:
    *         description: Category details
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *                 data:
+   *                   $ref: '#/components/schemas/Category'
+   *       400:
+   *         description: Missing id
    *       404:
    *         description: Category not found
    *       500:
@@ -298,13 +379,18 @@ export const categoryController = {
    *   put:
    *     summary: Update a category
    *     tags: [Categories]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       All body fields are optional. When categoryType is set to NonConsumable, any linked consumableAccount is cleared.
+   *       consumableAccountId cannot be set while categoryType is NonConsumable.
    *     parameters:
    *       - in: path
    *         name: id
    *         required: true
    *         schema:
    *           type: string
-   *         description: Category ID
+   *           format: uuid
    *     requestBody:
    *       required: true
    *       content:
@@ -317,13 +403,33 @@ export const categoryController = {
    *               description:
    *                 type: string
    *                 nullable: true
+   *               status:
+   *                 type: string
+   *                 enum: [Active, Inactive, Archived]
+   *               categoryType:
+   *                 $ref: '#/components/schemas/CategoryType'
+   *               consumableAccountId:
+   *                 type: integer
+   *                 nullable: true
+   *                 description: Pass null to disconnect. Only valid for Consumable categories.
    *     responses:
    *       200:
    *         description: Category updated
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *                 data:
+   *                   $ref: '#/components/schemas/Category'
    *       400:
    *         description: Validation error
    *       404:
-   *         description: Category not found
+   *         description: Category not found or invalid consumableAccountId
    *       409:
    *         description: Duplicate category name
    *       500:
@@ -331,18 +437,36 @@ export const categoryController = {
    *   delete:
    *     summary: Delete a category
    *     tags: [Categories]
+   *     security:
+   *       - bearerAuth: []
+   *     description: Fails with 409 when subcategories or inventory items reference this category.
    *     parameters:
    *       - in: path
    *         name: id
    *         required: true
    *         schema:
    *           type: string
-   *         description: Category ID
+   *           format: uuid
    *     responses:
    *       200:
-   *         description: Category deleted
+   *         description: Deleted category returned in data
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success:
+   *                   type: boolean
+   *                 message:
+   *                   type: string
+   *                 data:
+   *                   $ref: '#/components/schemas/Category'
+   *       400:
+   *         description: Missing id
    *       404:
    *         description: Category not found
+   *       409:
+   *         description: Referenced by subcategories or inventory items
    *       500:
    *         description: Server error
    */
@@ -371,11 +495,11 @@ export const categoryController = {
         message: "Category retrieved successfully",
         data: category,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       return res.status(500).json({
         success: false,
         message: "Failed to retrieve category",
-        error: error?.message,
+        error: error instanceof Error ? error.message : undefined,
       });
     }
   },
@@ -383,7 +507,7 @@ export const categoryController = {
   updateCategory: async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { name, description, status, consumableAccountId } = req.body ?? {};
+      const { name, description, status, categoryType, consumableAccountId } = req.body ?? {};
 
       if (!id) {
         return res.status(400).json({
@@ -406,11 +530,21 @@ export const categoryController = {
         });
       }
 
-      if (status !== undefined && status !== Status.Active && status !== Status.Inactive) {
+      if (
+        status !== undefined &&
+        status !== Status.Active &&
+        status !== Status.Inactive &&
+        status !== Status.Archived
+      ) {
         return res.status(400).json({
           success: false,
-          message: "status must be Active or Inactive",
+          message: "status must be Active, Inactive, or Archived",
         });
+      }
+
+      const parsedCategoryType = parseCategoryTypeInput(categoryType);
+      if (!parsedCategoryType.ok) {
+        return res.status(400).json({ success: false, message: parsedCategoryType.message });
       }
 
       const parsedConsumable = parseConsumableAccountIdInput(consumableAccountId);
@@ -421,18 +555,11 @@ export const categoryController = {
         });
       }
 
-      const existing = await categoryService.getCategoryById(id);
-      if (!existing) {
-        return res.status(404).json({
-          success: false,
-          message: "Category not found",
-        });
-      }
-
       const updated = await categoryService.updateCategory(id, {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(status !== undefined ? { status } : {}),
+        ...(parsedCategoryType.value !== undefined ? { categoryType: parsedCategoryType.value } : {}),
         ...(parsedConsumable.value !== undefined
           ? { consumableAccountId: parsedConsumable.value }
           : {}),
@@ -443,11 +570,9 @@ export const categoryController = {
         message: "Category updated successfully",
         data: updated,
       });
-    } catch (error: any) {
-      const message = error?.message ?? "Failed to update category";
-      const status =
-        message.includes("already exists") ? 409 : message.includes("Invalid consumableAccountId") ? 404 : 500;
-      return res.status(status).json({ success: false, message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to update category";
+      return res.status(httpStatusForCategoryMutation(message)).json({ success: false, message });
     }
   },
 
@@ -462,14 +587,6 @@ export const categoryController = {
         });
       }
 
-      const existing = await categoryService.getCategoryById(id);
-      if (!existing) {
-        return res.status(404).json({
-          success: false,
-          message: "Category not found",
-        });
-      }
-
       const deleted = await categoryService.deleteCategory(id);
 
       return res.json({
@@ -477,15 +594,14 @@ export const categoryController = {
         message: "Category deleted successfully",
         data: deleted,
       });
-    } catch (error: any) {
-      const message = error?.message ?? "Failed to delete category";
-      const status = message.includes("Cannot delete") ? 409 : 500;
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to delete category";
+      const status = message === "Category not found" ? 404 : message.includes("Cannot delete") ? 409 : 500;
       return res.status(status).json({
         success: false,
         message,
-        error: message,
+        ...(status === 500 ? { error: message } : {}),
       });
     }
   },
 };
-

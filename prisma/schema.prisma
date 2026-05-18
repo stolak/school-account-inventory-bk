@@ -62,6 +62,11 @@ enum BatchStatus {
   Failed
 }
 
+enum InventoryCategoryType {
+  Consumable
+  NonConsumable
+}
+
 model User {
   id              String   @id @default(uuid()) @db.Char(36)
   password        String
@@ -111,6 +116,7 @@ model User {
 
   createdProjects         Project[]                @relation("ProjectCreatedBy")
   managedStores           Store[]                  @relation("StoreManager")
+  createdFacility         Facility[]               @relation("FacilityCreatedBy")
   /**
    * Stores this user is granted access to (many-to-many; separate from primary manager role).
    */
@@ -173,12 +179,13 @@ enum InventoryTransactionType {
   departmental_collection
   staff_collection
   project_collection
+  facility_collection
 
   student_return
   hostel_return
   departmental_return
   staff_return
-
+  facility_return
   sales
   disposal
   store_transfer
@@ -203,14 +210,15 @@ enum StaffRole {
 }
 
 model Category {
-  id                  String          @id @default(uuid()) @db.Char(36)
-  name                String          @unique
+  id                  String                @id @default(uuid()) @db.Char(36)
+  name                String                @unique
   description         String?
-  createdAt           DateTime        @default(now()) @map("created_at")
-  updatedAt           DateTime        @default(now()) @map("updated_at")
-  status              Status          @default(Active)
-  consumableAccountId Int?            @map("consumable_account_id")
-  consumableAccount   AccountChart?   @relation(fields: [consumableAccountId], references: [id])
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @default(now()) @map("updated_at")
+  status              Status                @default(Active)
+  categoryType        InventoryCategoryType @default(Consumable)
+  consumableAccountId Int?                  @map("consumable_account_id")
+  consumableAccount   AccountChart?         @relation(fields: [consumableAccountId], references: [id])
   subCategories       SubCategory[]
   inventoryItems      InventoryItem[]
 
@@ -359,22 +367,23 @@ model InventoryItem {
 }
 
 model Supplier {
-  id          String   @id @default(uuid()) @db.Char(36)
-  name        String   @unique
-  contactName String?  @map("contact_name")
-  email       String?
-  phone       String?
-  address     String?
-  city        String?
-  state       String?
-  country     String?
-  website     String?
-  notes       String?
-  status      Status   @default(Active)
-  createdById String?  @map("created_by") @db.Char(36)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @default(now()) @map("updated_at")
-
+  id                    String                 @id @default(uuid()) @db.Char(36)
+  name                  String                 @unique
+  contactName           String?                @map("contact_name")
+  email                 String?
+  phone                 String?
+  address               String?
+  city                  String?
+  state                 String?
+  country               String?
+  website               String?
+  notes                 String?
+  status                Status                 @default(Active)
+  createdById           String?                @map("created_by") @db.Char(36)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @default(now()) @map("updated_at")
+  accountId             Int?                   @map("account_id")
+  account               AccountChart?          @relation(fields: [accountId], references: [id], onDelete: SetNull)
   createdBy             User?                  @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   inventoryTransactions InventoryTransaction[]
 
@@ -596,11 +605,15 @@ model InventoryTransaction {
   hostel       Hostel?       @relation(fields: [hostelId], references: [id], onDelete: SetNull)
   storeId      String?       @map("store_id") @db.Char(36)
   store        Store?        @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  facilityId   String?       @map("facility_id") @db.Char(36)
+  facility     Facility?     @relation(fields: [facilityId], references: [id], onDelete: SetNull)
 
   @@index([itemId])
   @@index([supplierId])
   @@index([receiverId])
   @@index([createdById])
+  @@index([facilityId])
+  @@index([projectId])
   @@map("inventory_transactions")
 }
 
@@ -619,6 +632,22 @@ model Project {
   studentJournalTransfers StudentJournalTransfer[]
 
   @@map("projects")
+}
+
+model Facility {
+  id          String   @id @default(uuid()) @db.Char(36)
+  name        String
+  description String?
+  status      Status   @default(Active)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @default(now()) @map("updated_at")
+  createdById String?  @map("created_by") @db.Char(36)
+  CreatedBy   User?    @relation("FacilityCreatedBy", fields: [createdById], references: [id])
+
+  inventoryTransactions InventoryTransaction[]
+
+  @@index([createdById])
+  @@map("facilities")
 }
 
 model Store {
@@ -730,6 +759,7 @@ model AccountChart {
   students                Student[]
   categories              Category[]
   studentJournalTransfers StudentJournalTransfer[]
+  suppliers               Supplier[]
 
   @@index([groupId])
   @@index([headId])

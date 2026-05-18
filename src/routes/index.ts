@@ -41,6 +41,8 @@ import projectRouter from "./project";
 import projectCollectionRouter from "./projectCollection";
 import storeRouter from "./store";
 import storeTransferRouter from "./storeTransfer";
+import facilityRouter from "./facility";
+import facilityCollectionRouter from "./facilityCollection";
 import userRouter from "./user";
 
 const router = Router();
@@ -82,6 +84,8 @@ router.use("/projects", projectRouter);
 router.use("/project-collections", projectCollectionRouter);
 router.use("/stores", storeRouter);
 router.use("/store-transfers", storeTransferRouter);
+router.use("/facilities", facilityRouter);
+router.use("/facility-collections", facilityCollectionRouter);
 router.use("/users", userRouter);
 
 router.use("/upload", uploadRouter);
