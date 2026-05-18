@@ -222,13 +222,14 @@ export class PurchaseService {
           })
         )
       );
-
+      console.log("createdRows", createdRows);
       // Post ledger entries only for completed purchases.
       if (status === InventoryTransactionStatus.completed) {
         if (!supplierId) {
+          console.log("supplierId is required for accounting posting on completed purchases");
           throw new Error("supplierId is required for accounting posting on completed purchases");
         }
-
+        console.log("supplierId", supplierId);
         const supplierAccount = await tx.accountChart.findFirst({
           where: { accountRef: supplierId },
           select: {
@@ -244,13 +245,17 @@ export class PurchaseService {
           throw new Error("Supplier account not found for supplierId");
         }
         const categoryAccountIds = new Set<number>();
+        // console.log("input.items", input.items);
         for (const it of input.items) {
+          console.log("it", it);
           const item = itemById.get(it.itemId);
+          console.log("item", item);
           if (!item) throw new Error(`Invalid itemId(s): ${it.itemId}`);
           if (!item.category) {
             throw new Error(`Category not configured for itemId ${it.itemId}`);
           }
           if (!item.category.consumableAccountId) {
+            console.log("item.category.consumableAccountId", item.category.consumableAccountId);
             throw new Error(`Category consumableAccountId not configured for itemId ${it.itemId}`);
           }
           categoryAccountIds.add(item.category.consumableAccountId);

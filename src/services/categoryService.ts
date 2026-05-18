@@ -57,19 +57,6 @@ export class CategoryService {
     }
   }
 
-  private assertConsumableAccountAllowed(
-    categoryType: InventoryCategoryType,
-    consumableAccountId?: number | null
-  ): void {
-    if (
-      categoryType === InventoryCategoryType.NonConsumable &&
-      consumableAccountId !== undefined &&
-      consumableAccountId !== null
-    ) {
-      throw new Error("consumableAccountId cannot be set when categoryType is NonConsumable");
-    }
-  }
-
   async createCategory(input: {
     name: string;
     description?: string | null;
@@ -81,7 +68,6 @@ export class CategoryService {
     if (!name) throw new Error("name is required");
 
     const categoryType = input.categoryType ?? InventoryCategoryType.Consumable;
-    this.assertConsumableAccountAllowed(categoryType, input.consumableAccountId);
     await this.ensureConsumableAccountExists(input.consumableAccountId);
 
     try {
@@ -172,25 +158,17 @@ export class CategoryService {
       throw new Error("name cannot be empty");
     }
 
-    const categoryType = input.categoryType ?? existing.categoryType;
-    const resolvedConsumableAccountId =
-      input.consumableAccountId !== undefined ? input.consumableAccountId : existing.consumableAccountId ?? null;
+    if (input.consumableAccountId !== undefined) {
+      await this.ensureConsumableAccountExists(input.consumableAccountId);
+    }
 
-    this.assertConsumableAccountAllowed(categoryType, resolvedConsumableAccountId);
-    await this.ensureConsumableAccountExists(resolvedConsumableAccountId);
-
-    const switchingToNonConsumable =
-      input.categoryType === InventoryCategoryType.NonConsumable &&
-      existing.categoryType !== InventoryCategoryType.NonConsumable;
     const consumableAccountRelation: Prisma.CategoryUpdateInput = {};
     if (input.consumableAccountId !== undefined) {
-      if (input.consumableAccountId === null || categoryType === InventoryCategoryType.NonConsumable) {
+      if (input.consumableAccountId === null) {
         consumableAccountRelation.consumableAccount = { disconnect: true };
       } else {
         consumableAccountRelation.consumableAccount = { connect: { id: input.consumableAccountId } };
       }
-    } else if (switchingToNonConsumable && existing.consumableAccountId != null) {
-      consumableAccountRelation.consumableAccount = { disconnect: true };
     }
 
     try {

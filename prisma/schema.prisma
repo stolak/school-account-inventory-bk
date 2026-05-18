@@ -382,8 +382,8 @@ model Supplier {
   createdById           String?                @map("created_by") @db.Char(36)
   createdAt             DateTime               @default(now()) @map("created_at")
   updatedAt             DateTime               @default(now()) @map("updated_at")
-  accountId             Int?                   @map("account_id")
-  account               AccountChart?          @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  // accountId             Int?                   @map("account_id")
+  // account               AccountChart?          @relation(fields: [accountId], references: [id], onDelete: SetNull)
   createdBy             User?                  @relation("SupplierCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   inventoryTransactions InventoryTransaction[]
 
@@ -759,7 +759,7 @@ model AccountChart {
   students                Student[]
   categories              Category[]
   studentJournalTransfers StudentJournalTransfer[]
-  suppliers               Supplier[]
+  // suppliers               Supplier[]
 
   @@index([groupId])
   @@index([headId])

@@ -39,11 +39,7 @@ function parseCategoryTypeInput(
 function httpStatusForCategoryMutation(message: string): number {
   if (message === "Category not found" || message.includes("Invalid consumableAccountId")) return 404;
   if (message.includes("already exists")) return 409;
-  if (
-    message === "name cannot be empty" ||
-    message === "name is required" ||
-    message.includes("consumableAccountId cannot be set")
-  ) {
+  if (message === "name cannot be empty" || message === "name is required") {
     return 400;
   }
   return 500;
@@ -123,11 +119,11 @@ function httpStatusForCategoryMutation(message: string): number {
  *                 description: Optional status (defaults to Active)
  *               categoryType:
  *                 $ref: '#/components/schemas/CategoryType'
- *                 description: Optional (defaults to Consumable). consumableAccountId is only allowed when Consumable.
+ *                 description: Optional (defaults to Consumable)
  *               consumableAccountId:
  *                 type: integer
  *                 nullable: true
- *                 description: Optional linked account chart (Consumable categories only)
+ *                 description: Optional linked account chart for category postings
  *     responses:
  *       201:
  *         description: Category created
@@ -143,7 +139,7 @@ function httpStatusForCategoryMutation(message: string): number {
  *                 data:
  *                   $ref: '#/components/schemas/Category'
  *       400:
- *         description: Validation error (invalid categoryType or consumableAccountId with NonConsumable)
+ *         description: Validation error (invalid categoryType or consumableAccountId)
  *       404:
  *         description: Invalid consumableAccountId
  *       409:
@@ -381,9 +377,7 @@ export const categoryController = {
    *     tags: [Categories]
    *     security:
    *       - bearerAuth: []
-   *     description: |
-   *       All body fields are optional. When categoryType is set to NonConsumable, any linked consumableAccount is cleared.
-   *       consumableAccountId cannot be set while categoryType is NonConsumable.
+ *     description: All body fields are optional.
    *     parameters:
    *       - in: path
    *         name: id
@@ -411,7 +405,7 @@ export const categoryController = {
    *               consumableAccountId:
    *                 type: integer
    *                 nullable: true
-   *                 description: Pass null to disconnect. Only valid for Consumable categories.
+   *                 description: Pass null to disconnect the linked account chart.
    *     responses:
    *       200:
    *         description: Category updated

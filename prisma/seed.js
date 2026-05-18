@@ -5,6 +5,170 @@ const path = require("path");
 
 const prisma = new PrismaClient();
 
+const SUPPLIER_SUBHEAD_SETTINGS_ID = "SUPPLIER_SUBHEAD";
+
+/** Mirror SupplierService.createSupplier — ledger under SUPPLIER_SUBHEAD (Accounts Payable). */
+async function ensureSupplierLedgerAccount(supplier) {
+  const defaultSubhead = await prisma.defaulSubheadSettings.findUnique({
+    where: { settingsId: SUPPLIER_SUBHEAD_SETTINGS_ID },
+    select: { subheadId: true },
+  });
+  if (!defaultSubhead?.subheadId) {
+    return null;
+  }
+
+  const subhead = await prisma.accountSubhead.findUnique({
+    where: { id: defaultSubhead.subheadId },
+    select: { id: true, groupId: true, headId: true },
+  });
+  if (!subhead) {
+    return null;
+  }
+
+  const accountDescription = supplier.name.trim();
+  const byRef = await prisma.accountChart.findFirst({
+    where: { subheadId: subhead.id, accountRef: supplier.id },
+    select: { id: true },
+  });
+
+  if (byRef) {
+    await prisma.accountChart.update({
+      where: { id: byRef.id },
+      data: {
+        accountDescription,
+        status: supplier.status,
+        groupId: subhead.groupId,
+        headId: subhead.headId,
+      },
+    });
+    return byRef.id;
+  }
+
+  const byDescription = await prisma.accountChart.findFirst({
+    where: { subheadId: subhead.id, accountDescription },
+    select: { id: true, accountRef: true },
+  });
+
+  if (byDescription) {
+    await prisma.accountChart.update({
+      where: { id: byDescription.id },
+      data: {
+        accountRef: supplier.id,
+        status: supplier.status,
+        groupId: subhead.groupId,
+        headId: subhead.headId,
+      },
+    });
+    return byDescription.id;
+  }
+
+  const maxRank = await prisma.accountChart.aggregate({
+    where: { subheadId: subhead.id },
+    _max: { rank: true },
+  });
+
+  const created = await prisma.accountChart.create({
+    data: {
+      groupId: subhead.groupId,
+      headId: subhead.headId,
+      subheadId: subhead.id,
+      accountDescription,
+      accountRef: supplier.id,
+      accountNo: null,
+      rank: (maxRank._max.rank ?? 0) + 1,
+      status: supplier.status,
+    },
+  });
+  return created.id;
+}
+
+const STUDENT_SUBHEAD_SETTINGS_ID = "STUDENT_SUBHEAD";
+
+/** Mirror StudentService.createStudent — ledger under STUDENT_SUBHEAD (Accounts Receivable). */
+async function ensureStudentLedgerAccount(student) {
+  const defaultSubhead = await prisma.defaulSubheadSettings.findUnique({
+    where: { settingsId: STUDENT_SUBHEAD_SETTINGS_ID },
+    select: { subheadId: true },
+  });
+  if (!defaultSubhead?.subheadId) {
+    return null;
+  }
+
+  const subhead = await prisma.accountSubhead.findUnique({
+    where: { id: defaultSubhead.subheadId },
+    select: { id: true, groupId: true, headId: true },
+  });
+  if (!subhead) {
+    return null;
+  }
+
+  const accountDescription = `${student.firstName} ${student.lastName} (${student.admissionNumber})`.trim();
+  const chartStatus = student.status === "Active" ? "Active" : "Inactive";
+
+  const byRef = await prisma.accountChart.findFirst({
+    where: { subheadId: subhead.id, accountRef: student.id },
+    select: { id: true },
+  });
+
+  let accountId;
+  if (byRef) {
+    await prisma.accountChart.update({
+      where: { id: byRef.id },
+      data: {
+        accountDescription,
+        status: chartStatus,
+        groupId: subhead.groupId,
+        headId: subhead.headId,
+      },
+    });
+    accountId = byRef.id;
+  } else {
+    const byDescription = await prisma.accountChart.findFirst({
+      where: { subheadId: subhead.id, accountDescription },
+      select: { id: true },
+    });
+
+    if (byDescription) {
+      await prisma.accountChart.update({
+        where: { id: byDescription.id },
+        data: {
+          accountRef: student.id,
+          status: chartStatus,
+          groupId: subhead.groupId,
+          headId: subhead.headId,
+        },
+      });
+      accountId = byDescription.id;
+    } else {
+      const maxRank = await prisma.accountChart.aggregate({
+        where: { subheadId: subhead.id },
+        _max: { rank: true },
+      });
+
+      const created = await prisma.accountChart.create({
+        data: {
+          groupId: subhead.groupId,
+          headId: subhead.headId,
+          subheadId: subhead.id,
+          accountDescription,
+          accountRef: student.id,
+          accountNo: null,
+          rank: (maxRank._max.rank ?? 0) + 1,
+          status: chartStatus,
+        },
+      });
+      accountId = created.id;
+    }
+  }
+
+  await prisma.student.update({
+    where: { id: student.id },
+    data: { accountId },
+  });
+
+  return accountId;
+}
+
 async function main() {
   console.log("🌱 Starting database seeding...");
 
@@ -622,6 +786,774 @@ async function main() {
       });
     }
     console.log(`   ✓ ${subCategories.length} sub-categories`);
+
+    // Suppliers (+ ledger accounts under SUPPLIER_SUBHEAD / Accounts Payable)
+    console.log("🏭 Seeding suppliers...");
+    const adminUserId = "77e7a005-b0a5-4a6e-897c-f827333924d4";
+    const suppliers = [
+      {
+        id: "e1f2a3b4-c5d6-4789-e012-345678901001",
+        name: "OfficeMart Nigeria Ltd",
+        contactName: "Ada Okonkwo",
+        email: "sales@officemart.ng",
+        phone: "+2348012345678",
+        address: "12 Allen Avenue",
+        city: "Ikeja",
+        state: "Lagos",
+        country: "Nigeria",
+        website: "https://officemart.ng",
+        notes: "Primary office consumables vendor",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e1f2a3b4-c5d6-4789-e012-345678901002",
+        name: "TechSupply Africa Limited",
+        contactName: "Emeka Nwosu",
+        email: "procurement@techsupply.africa",
+        phone: "+2348023456789",
+        address: "45 Computer Village",
+        city: "Ikeja",
+        state: "Lagos",
+        country: "Nigeria",
+        website: null,
+        notes: "ICT hardware and peripherals",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e1f2a3b4-c5d6-4789-e012-345678901003",
+        name: "CleanPro Janitorial Services",
+        contactName: "Fatima Bello",
+        email: "orders@cleanpro.ng",
+        phone: "+2348034567890",
+        address: "8 Industrial Estate Road",
+        city: "Abuja",
+        state: "FCT",
+        country: "Nigeria",
+        website: null,
+        notes: "Cleaning supplies and hygiene products",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e1f2a3b4-c5d6-4789-e012-345678901004",
+        name: "LabEquip Scientific Supplies",
+        contactName: "Dr. James Adeyemi",
+        email: "lab@labequip.ng",
+        phone: "+2348045678901",
+        address: "3 Science Park Close",
+        city: "Ibadan",
+        state: "Oyo",
+        country: "Nigeria",
+        website: "https://labequip.ng",
+        notes: "Laboratory chemicals and glassware",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e1f2a3b4-c5d6-4789-e012-345678901005",
+        name: "Furniture World Nigeria Ltd",
+        contactName: "Chidi Okafor",
+        email: "info@furnitureworld.ng",
+        phone: "+2348056789012",
+        address: "21 Warehouse Road",
+        city: "Port Harcourt",
+        state: "Rivers",
+        country: "Nigeria",
+        website: null,
+        notes: "Desks, chairs, and storage furniture",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e1f2a3b4-c5d6-4789-e012-345678901006",
+        name: "SportGear Depot",
+        contactName: "Amina Yusuf",
+        email: "wholesale@sportgear.ng",
+        phone: "+2348067890123",
+        address: "7 Stadium Link Road",
+        city: "Kano",
+        state: "Kano",
+        country: "Nigeria",
+        website: "https://sportgear.ng",
+        notes: "Sports and PE equipment",
+        status: "Active",
+        createdById: adminUserId,
+      },
+    ];
+
+    let supplierLedgerCount = 0;
+    for (const s of suppliers) {
+      const supplier = await prisma.supplier.upsert({
+        where: { name: s.name },
+        update: {
+          contactName: s.contactName,
+          email: s.email,
+          phone: s.phone,
+          address: s.address,
+          city: s.city,
+          state: s.state,
+          country: s.country,
+          website: s.website,
+          notes: s.notes,
+          status: s.status,
+          createdById: s.createdById,
+        },
+        create: s,
+      });
+
+      const ledgerId = await ensureSupplierLedgerAccount(supplier);
+      if (ledgerId) {
+        supplierLedgerCount += 1;
+      }
+    }
+    console.log(
+      `   ✓ ${suppliers.length} suppliers, ${supplierLedgerCount} supplier ledger accounts`
+    );
+
+    // Brands
+    console.log("🏷️ Seeding brands...");
+    const brands = [
+      { id: "f2a3b4c5-d6e7-4890-f012-345678902001", name: "Generic", status: "Active" },
+      { id: "f2a3b4c5-d6e7-4890-f012-345678902002", name: "BIC", status: "Active" },
+      { id: "f2a3b4c5-d6e7-4890-f012-345678902003", name: "HP", status: "Active" },
+      { id: "f2a3b4c5-d6e7-4890-f012-345678902004", name: "Dell", status: "Active" },
+      { id: "f2a3b4c5-d6e7-4890-f012-345678902005", name: "Logitech", status: "Active" },
+      { id: "f2a3b4c5-d6e7-4890-f012-345678902006", name: "Staedtler", status: "Active" },
+      { id: "f2a3b4c5-d6e7-4890-f012-345678902007", name: "Dettol", status: "Active" },
+      { id: "f2a3b4c5-d6e7-4890-f012-345678902008", name: "Nike", status: "Active" },
+      { id: "f2a3b4c5-d6e7-4890-f012-345678902009", name: "Deli", status: "Active" },
+      { id: "f2a3b4c5-d6e7-4890-f012-345678902010", name: "Canon", status: "Active" },
+    ];
+
+    for (const b of brands) {
+      await prisma.brand.upsert({
+        where: { name: b.name },
+        update: { status: b.status },
+        create: b,
+      });
+    }
+    console.log(`   ✓ ${brands.length} brands`);
+
+    // Inventory items (linked to categories, sub-categories, brands, UOMs)
+    console.log("📋 Seeding inventory items...");
+    const uomIds = {
+      piece: "5b15389c-3d56-4ec1-b848-43c76d435f35",
+      carton: "f331e6b0-e5d3-4c3a-a6af-c46858c3396b",
+      kilogram: "1c152b2e-bd60-418f-b312-08c1b001134a",
+      liter: "7e0ebb54-6fc7-46f0-8853-27e23b2693af",
+    };
+    const brandIds = {
+      generic: "f2a3b4c5-d6e7-4890-f012-345678902001",
+      bic: "f2a3b4c5-d6e7-4890-f012-345678902002",
+      hp: "f2a3b4c5-d6e7-4890-f012-345678902003",
+      dell: "f2a3b4c5-d6e7-4890-f012-345678902004",
+      logitech: "f2a3b4c5-d6e7-4890-f012-345678902005",
+      staedtler: "f2a3b4c5-d6e7-4890-f012-345678902006",
+      dettol: "f2a3b4c5-d6e7-4890-f012-345678902007",
+      nike: "f2a3b4c5-d6e7-4890-f012-345678902008",
+      deli: "f2a3b4c5-d6e7-4890-f012-345678902009",
+      canon: "f2a3b4c5-d6e7-4890-f012-345678902010",
+    };
+    const subCategoryIds = {
+      paperProducts: "b1c2d3e4-f5a6-4789-b012-345678901001",
+      writingInstruments: "b1c2d3e4-f5a6-4789-b012-345678901002",
+      filingStorage: "b1c2d3e4-f5a6-4789-b012-345678901003",
+      notebooks: "b1c2d3e4-f5a6-4789-b012-345678901004",
+      pensPencils: "b1c2d3e4-f5a6-4789-b012-345678901005",
+      detergents: "b1c2d3e4-f5a6-4789-b012-345678901007",
+      cleaningTools: "b1c2d3e4-f5a6-4789-b012-345678901008",
+      glassware: "b1c2d3e4-f5a6-4789-b012-345678901011",
+      computers: "b1c2d3e4-f5a6-4789-b012-345678901013",
+      peripherals: "b1c2d3e4-f5a6-4789-b012-345678901014",
+      desks: "b1c2d3e4-f5a6-4789-b012-345678901016",
+      chairs: "b1c2d3e4-f5a6-4789-b012-345678901017",
+      teamSports: "b1c2d3e4-f5a6-4789-b012-345678901019",
+      electrical: "b1c2d3e4-f5a6-4789-b012-345678901023",
+    };
+
+    const inventoryItems = [
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903001",
+        sku: "OFF-PAP-001",
+        name: "A4 Copy Paper (500 Sheets)",
+        categoryId: categoryIds.officeSupplies,
+        subCategoryId: subCategoryIds.paperProducts,
+        brandId: brandIds.deli,
+        uomId: uomIds.carton,
+        barcode: "8901234567001",
+        costPrice: "4500.00",
+        sellingPrice: "5500.00",
+        lowStockThreshold: 10,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903002",
+        sku: "OFF-PEN-001",
+        name: "Ballpoint Pen Blue (Box of 50)",
+        categoryId: categoryIds.officeSupplies,
+        subCategoryId: subCategoryIds.writingInstruments,
+        brandId: brandIds.bic,
+        uomId: uomIds.carton,
+        barcode: "8901234567002",
+        costPrice: "3200.00",
+        sellingPrice: "4000.00",
+        lowStockThreshold: 5,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903003",
+        sku: "OFF-FIL-001",
+        name: "Lever Arch File A4",
+        categoryId: categoryIds.officeSupplies,
+        subCategoryId: subCategoryIds.filingStorage,
+        brandId: brandIds.generic,
+        uomId: uomIds.piece,
+        barcode: "8901234567003",
+        costPrice: "850.00",
+        sellingPrice: "1200.00",
+        lowStockThreshold: 20,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903004",
+        sku: "STA-NBK-001",
+        name: "Exercise Book 80 Leaves",
+        categoryId: categoryIds.stationery,
+        subCategoryId: subCategoryIds.notebooks,
+        brandId: brandIds.generic,
+        uomId: uomIds.piece,
+        barcode: "8901234567004",
+        costPrice: "350.00",
+        sellingPrice: "500.00",
+        lowStockThreshold: 100,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903005",
+        sku: "STA-PNC-001",
+        name: "HB Pencil Pack (12)",
+        categoryId: categoryIds.stationery,
+        subCategoryId: subCategoryIds.pensPencils,
+        brandId: brandIds.staedtler,
+        uomId: uomIds.piece,
+        barcode: "8901234567005",
+        costPrice: "600.00",
+        sellingPrice: "900.00",
+        lowStockThreshold: 30,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903006",
+        sku: "CLN-SOP-001",
+        name: "Liquid Hand Soap 5L",
+        categoryId: categoryIds.cleaningSupplies,
+        subCategoryId: subCategoryIds.detergents,
+        brandId: brandIds.dettol,
+        uomId: uomIds.liter,
+        barcode: "8901234567006",
+        costPrice: "2800.00",
+        sellingPrice: "3500.00",
+        lowStockThreshold: 8,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903007",
+        sku: "CLN-MOP-001",
+        name: "Mop Head Replacement",
+        categoryId: categoryIds.cleaningSupplies,
+        subCategoryId: subCategoryIds.cleaningTools,
+        brandId: brandIds.generic,
+        uomId: uomIds.piece,
+        barcode: "8901234567007",
+        costPrice: "1200.00",
+        sellingPrice: "1800.00",
+        lowStockThreshold: 15,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903008",
+        sku: "LAB-BEK-001",
+        name: "Beaker 250ml Borosilicate",
+        categoryId: categoryIds.laboratorySupplies,
+        subCategoryId: subCategoryIds.glassware,
+        brandId: brandIds.generic,
+        uomId: uomIds.piece,
+        barcode: "8901234567008",
+        costPrice: "1500.00",
+        sellingPrice: "2200.00",
+        lowStockThreshold: 12,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903009",
+        sku: "ICT-DTP-001",
+        name: "Desktop Computer Core i5 16GB",
+        categoryId: categoryIds.ictEquipment,
+        subCategoryId: subCategoryIds.computers,
+        brandId: brandIds.hp,
+        uomId: uomIds.piece,
+        barcode: "8901234567009",
+        costPrice: "485000.00",
+        sellingPrice: "520000.00",
+        lowStockThreshold: 2,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903010",
+        sku: "ICT-MSE-001",
+        name: "Wireless Optical Mouse",
+        categoryId: categoryIds.ictEquipment,
+        subCategoryId: subCategoryIds.peripherals,
+        brandId: brandIds.logitech,
+        uomId: uomIds.piece,
+        barcode: "8901234567010",
+        costPrice: "4500.00",
+        sellingPrice: "6500.00",
+        lowStockThreshold: 10,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903011",
+        sku: "FUR-DSK-001",
+        name: "Single Student Desk",
+        categoryId: categoryIds.furniture,
+        subCategoryId: subCategoryIds.desks,
+        brandId: brandIds.generic,
+        uomId: uomIds.piece,
+        barcode: "8901234567011",
+        costPrice: "28000.00",
+        sellingPrice: "35000.00",
+        lowStockThreshold: 5,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903012",
+        sku: "FUR-CHR-001",
+        name: "Plastic Classroom Chair",
+        categoryId: categoryIds.furniture,
+        subCategoryId: subCategoryIds.chairs,
+        brandId: brandIds.generic,
+        uomId: uomIds.piece,
+        barcode: "8901234567012",
+        costPrice: "8500.00",
+        sellingPrice: "11000.00",
+        lowStockThreshold: 10,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903013",
+        sku: "SPT-FBL-001",
+        name: "Football Size 5 Match",
+        categoryId: categoryIds.sportsPe,
+        subCategoryId: subCategoryIds.teamSports,
+        brandId: brandIds.nike,
+        uomId: uomIds.piece,
+        barcode: "8901234567013",
+        costPrice: "12000.00",
+        sellingPrice: "15000.00",
+        lowStockThreshold: 6,
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f2a3b4c5-d6e7-4890-a012-345678903014",
+        sku: "BLD-ELC-001",
+        name: "LED Bulb 12W E27",
+        categoryId: categoryIds.buildingMaintenance,
+        subCategoryId: subCategoryIds.electrical,
+        brandId: brandIds.generic,
+        uomId: uomIds.piece,
+        barcode: "8901234567014",
+        costPrice: "950.00",
+        sellingPrice: "1400.00",
+        lowStockThreshold: 25,
+        status: "Active",
+        createdById: adminUserId,
+      },
+    ];
+
+    for (const item of inventoryItems) {
+      await prisma.inventoryItem.upsert({
+        where: { name: item.name },
+        update: {
+          sku: item.sku,
+          categoryId: item.categoryId,
+          subCategoryId: item.subCategoryId,
+          brandId: item.brandId,
+          uomId: item.uomId,
+          barcode: item.barcode,
+          costPrice: item.costPrice,
+          sellingPrice: item.sellingPrice,
+          lowStockThreshold: item.lowStockThreshold,
+          status: item.status,
+          createdById: item.createdById,
+        },
+        create: item,
+      });
+    }
+    console.log(`   ✓ ${inventoryItems.length} inventory items`);
+
+    // Stores (+ UserStore access for managers, same as StoreService.createStore)
+    console.log("🏬 Seeding stores...");
+    const secondaryAdminUserId = "39fc583a-a071-49f3-980f-8932fa6cb6c9";
+    const stores = [
+      {
+        id: "a3a4b5c6-d7e8-4890-a012-345678904001",
+        name: "Main Central Store",
+        description: "Primary inventory store for general school supplies",
+        status: "Active",
+        managerId: adminUserId,
+      },
+      {
+        id: "a3a4b5c6-d7e8-4890-a012-345678904002",
+        name: "Annex Campus Store",
+        description: "Secondary campus storage and distribution point",
+        status: "Active",
+        managerId: secondaryAdminUserId,
+      },
+      {
+        id: "a3a4b5c6-d7e8-4890-a012-345678904003",
+        name: "Science Lab Store",
+        description: "Laboratory chemicals, glassware, and safety stock",
+        status: "Active",
+        managerId: adminUserId,
+      },
+      {
+        id: "a3a4b5c6-d7e8-4890-a012-345678904004",
+        name: "Sports Equipment Store",
+        description: "PE and sports gear storage",
+        status: "Active",
+        managerId: secondaryAdminUserId,
+      },
+    ];
+
+    for (const st of stores) {
+      const store = await prisma.store.upsert({
+        where: { name: st.name },
+        update: {
+          description: st.description,
+          status: st.status,
+          managerId: st.managerId,
+        },
+        create: st,
+      });
+
+      if (store.managerId) {
+        await prisma.userStore.upsert({
+          where: {
+            userId_storeId: {
+              userId: store.managerId,
+              storeId: store.id,
+            },
+          },
+          create: {
+            userId: store.managerId,
+            storeId: store.id,
+          },
+          update: {},
+        });
+      }
+    }
+    console.log(`   ✓ ${stores.length} stores`);
+
+    // School classes and sub-classes (required for student class assignment)
+    console.log("🎓 Seeding school classes and sub-classes...");
+    const schoolClasses = [
+      {
+        id: "c4d5e6f7-a8b9-4012-c012-345678905001",
+        name: "JSS 1",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "c4d5e6f7-a8b9-4012-c012-345678905002",
+        name: "JSS 2",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "c4d5e6f7-a8b9-4012-c012-345678905003",
+        name: "JSS 3",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "c4d5e6f7-a8b9-4012-c012-345678905004",
+        name: "SS 1",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "c4d5e6f7-a8b9-4012-c012-345678905005",
+        name: "SS 2",
+        status: "Active",
+        createdById: adminUserId,
+      },
+    ];
+
+    for (const cls of schoolClasses) {
+      await prisma.schoolClass.upsert({
+        where: { name: cls.name },
+        update: { status: cls.status },
+        create: cls,
+      });
+    }
+
+    const classIds = {
+      jss1: "c4d5e6f7-a8b9-4012-c012-345678905001",
+      jss2: "c4d5e6f7-a8b9-4012-c012-345678905002",
+      jss3: "c4d5e6f7-a8b9-4012-c012-345678905003",
+      ss1: "c4d5e6f7-a8b9-4012-c012-345678905004",
+      ss2: "c4d5e6f7-a8b9-4012-c012-345678905005",
+    };
+
+    const subClasses = [
+      {
+        id: "d5e6f7a8-b9c0-4123-d012-345678906001",
+        name: "A",
+        classId: classIds.jss1,
+        status: "Active",
+      },
+      {
+        id: "d5e6f7a8-b9c0-4123-d012-345678906002",
+        name: "B",
+        classId: classIds.jss1,
+        status: "Active",
+      },
+      {
+        id: "d5e6f7a8-b9c0-4123-d012-345678906003",
+        name: "A",
+        classId: classIds.jss2,
+        status: "Active",
+      },
+      {
+        id: "d5e6f7a8-b9c0-4123-d012-345678906004",
+        name: "B",
+        classId: classIds.jss2,
+        status: "Active",
+      },
+      {
+        id: "d5e6f7a8-b9c0-4123-d012-345678906005",
+        name: "A",
+        classId: classIds.ss1,
+        status: "Active",
+      },
+    ];
+
+    for (const sub of subClasses) {
+      await prisma.subClass.upsert({
+        where: {
+          name_classId: {
+            name: sub.name,
+            classId: sub.classId,
+          },
+        },
+        update: { status: sub.status },
+        create: sub,
+      });
+    }
+    console.log(`   ✓ ${schoolClasses.length} classes, ${subClasses.length} sub-classes`);
+
+    // Students (+ AR ledger accounts under STUDENT_SUBHEAD)
+    console.log("👨‍🎓 Seeding students...");
+    const subClassIds = {
+      jss1A: "d5e6f7a8-b9c0-4123-d012-345678906001",
+      jss1B: "d5e6f7a8-b9c0-4123-d012-345678906002",
+      jss2A: "d5e6f7a8-b9c0-4123-d012-345678906003",
+      jss2B: "d5e6f7a8-b9c0-4123-d012-345678906004",
+      ss1A: "d5e6f7a8-b9c0-4123-d012-345678906005",
+    };
+
+    const students = [
+      {
+        id: "e6f7a8b9-c0d1-4234-e012-345678907001",
+        admissionNumber: "ADM2025001",
+        firstName: "Chioma",
+        middleName: "Ada",
+        lastName: "Adebayo",
+        studentEmail: "chioma.adebayo@student.school.ng",
+        gender: "female",
+        dateOfBirth: new Date("2013-04-12"),
+        classId: classIds.jss1,
+        subClassId: subClassIds.jss1A,
+        guardianName: "Mr. Tunde Adebayo",
+        guardianEmail: "tunde.adebayo@email.com",
+        guardianContact: "+2348011111001",
+        address: "12 Admiralty Way, Lekki, Lagos",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e6f7a8b9-c0d1-4234-e012-345678907002",
+        admissionNumber: "ADM2025002",
+        firstName: "Ibrahim",
+        middleName: null,
+        lastName: "Musa",
+        studentEmail: "ibrahim.musa@student.school.ng",
+        gender: "male",
+        dateOfBirth: new Date("2013-08-25"),
+        classId: classIds.jss1,
+        subClassId: subClassIds.jss1B,
+        guardianName: "Mrs. Halima Musa",
+        guardianEmail: "halima.musa@email.com",
+        guardianContact: "+2348011111002",
+        address: "5 Zaria Road, Kaduna",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e6f7a8b9-c0d1-4234-e012-345678907003",
+        admissionNumber: "ADM2025003",
+        firstName: "Grace",
+        middleName: "Chinelo",
+        lastName: "Okoro",
+        studentEmail: null,
+        gender: "female",
+        dateOfBirth: new Date("2012-11-03"),
+        classId: classIds.jss2,
+        subClassId: subClassIds.jss2A,
+        guardianName: "Mr. Peter Okoro",
+        guardianEmail: "peter.okoro@email.com",
+        guardianContact: "+2348011111003",
+        address: "22 Ogui Road, Enugu",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e6f7a8b9-c0d1-4234-e012-345678907004",
+        admissionNumber: "ADM2025004",
+        firstName: "David",
+        middleName: "Oluwaseun",
+        lastName: "Balogun",
+        studentEmail: "david.balogun@student.school.ng",
+        gender: "male",
+        dateOfBirth: new Date("2012-01-19"),
+        classId: classIds.jss2,
+        subClassId: subClassIds.jss2B,
+        guardianName: "Mrs. Funke Balogun",
+        guardianEmail: "funke.balogun@email.com",
+        guardianContact: "+2348011111004",
+        address: "9 Ring Road, Ibadan",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e6f7a8b9-c0d1-4234-e012-345678907005",
+        admissionNumber: "ADM2025005",
+        firstName: "Amina",
+        middleName: null,
+        lastName: "Yusuf",
+        studentEmail: "amina.yusuf@student.school.ng",
+        gender: "female",
+        dateOfBirth: new Date("2011-06-30"),
+        classId: classIds.jss3,
+        subClassId: null,
+        guardianName: "Alhaji Yusuf Ibrahim",
+        guardianEmail: "yusuf.ibrahim@email.com",
+        guardianContact: "+2348011111005",
+        address: "3 Kano Road, Kano",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e6f7a8b9-c0d1-4234-e012-345678907006",
+        admissionNumber: "ADM2025006",
+        firstName: "Emmanuel",
+        middleName: "Chukwu",
+        lastName: "Eze",
+        studentEmail: "emmanuel.eze@student.school.ng",
+        gender: "male",
+        dateOfBirth: new Date("2010-09-14"),
+        classId: classIds.ss1,
+        subClassId: subClassIds.ss1A,
+        guardianName: "Mr. Chinedu Eze",
+        guardianEmail: "chinedu.eze@email.com",
+        guardianContact: "+2348011111006",
+        address: "14 Aba Road, Port Harcourt",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e6f7a8b9-c0d1-4234-e012-345678907007",
+        admissionNumber: "ADM2025007",
+        firstName: "Fatima",
+        middleName: "Zainab",
+        lastName: "Bello",
+        studentEmail: null,
+        gender: "female",
+        dateOfBirth: new Date("2010-12-08"),
+        classId: classIds.ss1,
+        subClassId: subClassIds.ss1A,
+        guardianName: "Dr. Aisha Bello",
+        guardianEmail: "aisha.bello@email.com",
+        guardianContact: "+2348011111007",
+        address: "7 Garki Area 11, Abuja",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "e6f7a8b9-c0d1-4234-e012-345678907008",
+        admissionNumber: "ADM2025008",
+        firstName: "Samuel",
+        middleName: null,
+        lastName: "Ojo",
+        studentEmail: "samuel.ojo@student.school.ng",
+        gender: "male",
+        dateOfBirth: new Date("2009-05-22"),
+        classId: classIds.ss2,
+        subClassId: null,
+        guardianName: "Mrs. Bola Ojo",
+        guardianEmail: "bola.ojo@email.com",
+        guardianContact: "+2348011111008",
+        address: "18 Allen Avenue, Ikeja, Lagos",
+        status: "Active",
+        createdById: adminUserId,
+      },
+    ];
+
+    let studentLedgerCount = 0;
+    for (const st of students) {
+      const student = await prisma.student.upsert({
+        where: { admissionNumber: st.admissionNumber },
+        update: {
+          firstName: st.firstName,
+          middleName: st.middleName,
+          lastName: st.lastName,
+          studentEmail: st.studentEmail,
+          gender: st.gender,
+          dateOfBirth: st.dateOfBirth,
+          classId: st.classId,
+          subClassId: st.subClassId,
+          guardianName: st.guardianName,
+          guardianEmail: st.guardianEmail,
+          guardianContact: st.guardianContact,
+          address: st.address,
+          status: st.status,
+          createdById: st.createdById,
+        },
+        create: st,
+      });
+
+      const ledgerId = await ensureStudentLedgerAccount(student);
+      if (ledgerId) {
+        studentLedgerCount += 1;
+      }
+    }
+    console.log(`   ✓ ${students.length} students, ${studentLedgerCount} student ledger accounts`);
 
     // Academic sessions and terms
     console.log("📅 Seeding sessions and terms...");

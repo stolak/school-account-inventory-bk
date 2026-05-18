@@ -109,46 +109,6 @@ export class StudentService {
           createdBy: { select: { firstName: true, lastName: true } },
         },
       });
-      let accountId: number | null = null;
-      try {
-        const defaultSubhead = await defaulSubheadSettingsService.getBySettingsId(
-          StudentService.STUDENT_SUBHEAD_SETTINGS_ID
-        );
-
-        if (defaultSubhead?.subheadId) {
-          const accountDescription = `${created.firstName} ${created.lastName} (${created.admissionNumber})`;
-          const createdAccount = await accountChartService.create({
-            subheadId: defaultSubhead.subheadId,
-            accountDescription,
-            accountRef: created.id,
-          });
-          accountId = createdAccount.id;
-          await this.prisma.$executeRaw(
-            Prisma.sql`UPDATE students SET account_id = ${createdAccount.id} WHERE id = ${created.id}`
-          );
-
-          const updatedStudent = await this.prisma.student.findUnique({
-            where: { id: created.id },
-            include: {
-              class: { select: { id: true, name: true } },
-              subClass: { select: { id: true, name: true, classId: true } },
-              createdBy: { select: { firstName: true, lastName: true } },
-            },
-          });
-          if (!updatedStudent) {
-            throw new Error("Student not found after account chart linking");
-          }
-
-          return updatedStudent;
-        }
-      } catch (linkError) {
-        // Keep student/account chart linkage atomic from API perspective.
-        await this.prisma.student.delete({ where: { id: created.id } }).catch(() => undefined);
-        if (accountId) {
-          await accountChartService.delete(accountId);
-        }
-        throw linkError;
-      }
 
       return created;
     } catch (e) {
@@ -312,11 +272,12 @@ export class StudentService {
   }
 
   async deleteStudent(id: string): Promise<StudentData> {
-    const [studentBillingCount, studentDiscountCount, inventoryTransactionCount] = await Promise.all([
-      this.prisma.studentBilling.count({ where: { studentId: id } }),
-      this.prisma.studentConcessionDiscount.count({ where: { studentId: id } }),
-      this.prisma.inventoryTransaction.count({ where: { studentId: id } }),
-    ]);
+    const [studentBillingCount, studentDiscountCount, inventoryTransactionCount] =
+      await Promise.all([
+        this.prisma.studentBilling.count({ where: { studentId: id } }),
+        this.prisma.studentConcessionDiscount.count({ where: { studentId: id } }),
+        this.prisma.inventoryTransaction.count({ where: { studentId: id } }),
+      ]);
 
     if (studentBillingCount > 0 || studentDiscountCount > 0 || inventoryTransactionCount > 0) {
       const blockers: string[] = [];
