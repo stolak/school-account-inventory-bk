@@ -169,6 +169,78 @@ async function ensureStudentLedgerAccount(student) {
   return accountId;
 }
 
+function splitStaffName(fullName) {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return { firstName: null, lastName: null };
+  if (parts.length === 1) return { firstName: parts[0], lastName: null };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
+/** Mirror StaffService.createStaffWithUser — linked User + Staff row. */
+async function upsertStaffWithUser(hashedPassword, input) {
+  const normalizedEmail = input.email.trim().toLowerCase();
+  const normalizedStaffNumber = input.StaffNumber.trim();
+  const normalizedName = input.name.trim();
+  const { firstName, lastName } = splitStaffName(normalizedName);
+
+  const user = await prisma.user.upsert({
+    where: { email: normalizedEmail },
+    update: {
+      password: hashedPassword,
+      firstName,
+      lastName,
+      userType: input.userType ?? "Admin",
+      role: input.userRole ?? "Admin",
+      isActive: true,
+      isVerified: true,
+      isEmailVerified: true,
+      isPhoneVerified: false,
+      isDeleted: false,
+      status: "active",
+    },
+    create: {
+      id: input.userId,
+      email: normalizedEmail,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      userType: input.userType ?? "Admin",
+      role: input.userRole ?? "Admin",
+      isActive: true,
+      isVerified: true,
+      isEmailVerified: true,
+      isPhoneVerified: false,
+      isDeleted: false,
+      status: "active",
+      createdById: input.createdById,
+    },
+  });
+
+  await prisma.staff.upsert({
+    where: { StaffNumber: normalizedStaffNumber },
+    update: {
+      email: normalizedEmail,
+      name: normalizedName,
+      role: input.role ?? "teacher",
+      status: input.status ?? "Active",
+      profileImageUrl: input.profileImageUrl ?? null,
+      createdById: input.createdById,
+      userId: user.id,
+    },
+    create: {
+      id: input.id,
+      StaffNumber: normalizedStaffNumber,
+      email: normalizedEmail,
+      name: normalizedName,
+      role: input.role ?? "teacher",
+      status: input.status ?? "Active",
+      profileImageUrl: input.profileImageUrl ?? null,
+      createdById: input.createdById,
+      userId: user.id,
+    },
+  });
+}
+
 async function main() {
   console.log("🌱 Starting database seeding...");
 
@@ -505,6 +577,8 @@ async function main() {
 
     // Inventory categories
     console.log("📦 Seeding categories...");
+    // Account chart IDs (see accountCharts seed): 4 INV-GENERAL, 5 FA-FURN, 6 FA-ICT,
+    // 13 EXP-CONS, 15 EXP-MAINT
     const categories = [
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901001",
@@ -512,7 +586,7 @@ async function main() {
         description: "General office consumables (paper, pens, folders)",
         status: "Active",
         categoryType: "Consumable",
-        consumableAccountId: null,
+        consumableAccountId: 13, // 4102001 Consumable Expenses
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901002",
@@ -520,7 +594,7 @@ async function main() {
         description: "Student and staff stationery items",
         status: "Active",
         categoryType: "Consumable",
-        consumableAccountId: null,
+        consumableAccountId: 13, // 4102001 Consumable Expenses
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901003",
@@ -528,7 +602,7 @@ async function main() {
         description: "Janitorial and hygiene consumables",
         status: "Active",
         categoryType: "Consumable",
-        consumableAccountId: null,
+        consumableAccountId: 13, // 4102001 Consumable Expenses
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901004",
@@ -536,7 +610,7 @@ async function main() {
         description: "Science lab consumables and chemicals",
         status: "Active",
         categoryType: "Consumable",
-        consumableAccountId: null,
+        consumableAccountId: 13, // 4102001 Consumable Expenses
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901005",
@@ -544,7 +618,7 @@ async function main() {
         description: "Computers, peripherals, and durable IT assets",
         status: "Active",
         categoryType: "NonConsumable",
-        consumableAccountId: null,
+        consumableAccountId: 6, // 1202001 ICT Equipment (fixed asset)
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901006",
@@ -552,7 +626,7 @@ async function main() {
         description: "Desks, chairs, cabinets, and fixtures",
         status: "Active",
         categoryType: "NonConsumable",
-        consumableAccountId: null,
+        consumableAccountId: 5, // 1201001 Furniture and Fixtures
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901007",
@@ -560,7 +634,7 @@ async function main() {
         description: "Sports equipment and physical education gear",
         status: "Active",
         categoryType: "NonConsumable",
-        consumableAccountId: null,
+        consumableAccountId: 4, // 1103001 Inventory - General Stock
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901008",
@@ -568,7 +642,7 @@ async function main() {
         description: "Tools, hardware, and maintenance materials",
         status: "Active",
         categoryType: "NonConsumable",
-        consumableAccountId: null,
+        consumableAccountId: 15, // 4104001 Maintenance Expense
       },
     ];
 
@@ -1269,6 +1343,164 @@ async function main() {
       }
     }
     console.log(`   ✓ ${stores.length} stores`);
+
+    // Facilities
+    console.log("🏢 Seeding facilities...");
+    const facilities = [
+      {
+        id: "f7a8b9c0-d1e2-4234-f012-345678908001",
+        name: "Main Auditorium",
+        description: "Assembly hall and large school events",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4234-f012-345678908002",
+        name: "Science Laboratory Block",
+        description: "Physics, chemistry, and biology labs",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4234-f012-345678908003",
+        name: "Sports Complex",
+        description: "Football field, courts, and PE facilities",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4234-f012-345678908004",
+        name: "School Library",
+        description: "Reading rooms and learning resource centre",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4234-f012-345678908005",
+        name: "ICT Laboratory",
+        description: "Computer labs and digital learning spaces",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4234-f012-345678908006",
+        name: "Administrative Block",
+        description: "Offices, records, and staff workspaces",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4234-f012-345678908007",
+        name: "Dining Hall",
+        description: "Cafeteria and meal service area",
+        status: "Active",
+        createdById: adminUserId,
+      },
+    ];
+
+    for (const facility of facilities) {
+      await prisma.facility.upsert({
+        where: { id: facility.id },
+        update: {
+          name: facility.name,
+          description: facility.description,
+          status: facility.status,
+          createdById: facility.createdById,
+        },
+        create: facility,
+      });
+    }
+    console.log(`   ✓ ${facilities.length} facilities`);
+
+    // Staff (+ linked user accounts, same as StaffService.createStaffWithUser)
+    console.log("👔 Seeding staff...");
+    const staffMembers = [
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-345678909001",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a001",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909001",
+        email: "ngozi.okonkwo@staff.school.ng",
+        name: "Dr. Ngozi Okonkwo",
+        role: "principal",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-345678909002",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a002",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909002",
+        email: "tunde.bello@staff.school.ng",
+        name: "Mr. Tunde Bello",
+        role: "vice_principal",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-345678909003",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a003",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909003",
+        email: "ada.musa@staff.school.ng",
+        name: "Mrs. Ada Musa",
+        role: "class_teacher",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-345678909004",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a004",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909004",
+        email: "james.eze@staff.school.ng",
+        name: "Mr. James Eze",
+        role: "subject_teacher",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-345678909005",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a005",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909005",
+        email: "fatima.yusuf@staff.school.ng",
+        name: "Mrs. Fatima Yusuf",
+        role: "subject_teacher",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-345678909006",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a006",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909006",
+        email: "chidi.okafor@staff.school.ng",
+        name: "Mr. Chidi Okafor",
+        role: "teacher",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-345678909007",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a007",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909007",
+        email: "bola.adeyemi@staff.school.ng",
+        name: "Mrs. Bola Adeyemi",
+        role: "admin",
+        status: "Active",
+        createdById: adminUserId,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-345678909008",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a008",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909008",
+        email: "emmanuel.nwosu@staff.school.ng",
+        name: "Mr. Emmanuel Nwosu",
+        role: "assistant_teacher",
+        status: "Active",
+        createdById: adminUserId,
+      },
+    ];
+
+    for (const member of staffMembers) {
+      await upsertStaffWithUser(hashedPassword, member);
+    }
+    console.log(`   ✓ ${staffMembers.length} staff (with user accounts, password: 12345)`);
 
     // School classes and sub-classes (required for student class assignment)
     console.log("🎓 Seeding school classes and sub-classes...");
