@@ -1,5 +1,6 @@
 import prisma from "../utils/prisma";
 import { Prisma, Status } from "@prisma/client";
+import { userStoreService } from "./userStoreService";
 
 /** Users with explicit store access via `user_stores` (included on list stores). */
 export interface StoreAccessibleUser {
@@ -191,15 +192,8 @@ export class StoreService {
    */
   async listStoresAccessibleByUser(
     userId: string,
-    params: Omit<ListStoresParams, "managerId"> = {}
-  ): Promise<{
-    stores: StoreAccessibleByUser[];
-    pagination: { page: number; limit: number; total: number; totalPages: number };
-  }> {
-    const page = clampInt(params.page ?? 1, 1, 1_000_000);
-    const limit = clampInt(params.limit ?? 20, 1, 100);
-    const skip = (page - 1) * limit;
-
+    params: Omit<ListStoresParams, "managerId" | "page" | "limit"> = {}
+  ): Promise<{ stores: StoreAccessibleByUser[] }> {
     const accessFilter: Prisma.StoreWhereInput = {
       OR: [{ managerId: userId }, { userAccesses: { some: { userId } } }],
     };
@@ -221,16 +215,11 @@ export class StoreService {
 
     const include = myStoresInclude(userId);
 
-    const [total, rows] = await Promise.all([
-      this.prisma.store.count({ where }),
-      this.prisma.store.findMany({
-        where,
-        orderBy: { name: "asc" },
-        skip,
-        take: limit,
-        include,
-      }),
-    ]);
+    const rows = await this.prisma.store.findMany({
+      where,
+      orderBy: { name: "asc" },
+      include,
+    });
 
     const stores: StoreAccessibleByUser[] = rows.map((row) => {
       const { userAccesses, ...rest } = row;
@@ -243,15 +232,27 @@ export class StoreService {
       };
     });
 
-    const totalPages = Math.max(1, Math.ceil(total / limit));
-    return { stores, pagination: { page, limit, total, totalPages } };
+    return { stores };
   }
 
   async getStoreById(id: string): Promise<StoreData | null> {
-    return await this.prisma.store.findUnique({
+    const row = await this.prisma.store.findUnique({
       where: { id },
-      include: storeInclude,
+      include: listStoresInclude,
     });
+    if (!row) return null;
+
+    const { userAccesses, ...rest } = row;
+    return {
+      ...rest,
+      accessibleUsers: userAccesses.map((ua) => ({
+        id: ua.user.id,
+        email: ua.user.email,
+        firstName: ua.user.firstName,
+        lastName: ua.user.lastName,
+        accessGrantedAt: ua.createdAt,
+      })),
+    };
   }
 
   async updateStore(
@@ -319,45 +320,15 @@ export class StoreService {
   }
 
   async addUserToStore(storeId: string, userId: string): Promise<UserStoreAccessData> {
-    const store = await this.prisma.store.findUnique({ where: { id: storeId }, select: { id: true } });
-    if (!store) throw new Error("Store not found");
-
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-    if (!user) throw new Error("Invalid userId");
-
-    try {
-      const row = await this.prisma.userStore.create({
-        data: { userId, storeId },
-        include: {
-          store: { select: { id: true, name: true } },
-          user: { select: { id: true, email: true, firstName: true, lastName: true } },
-        },
-      });
-      return row;
-    } catch (e) {
-      if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
-        throw new Error("User already has access to this store");
-      }
-      throw e;
-    }
+    return userStoreService.grantAccess(userId, storeId);
   }
 
   async removeUserFromStore(storeId: string, userId: string): Promise<{ storeId: string; userId: string }> {
-    const store = await this.prisma.store.findUnique({ where: { id: storeId }, select: { id: true } });
-    if (!store) throw new Error("Store not found");
+    return userStoreService.revokeAccess(userId, storeId);
+  }
 
-    try {
-      await this.prisma.userStore.delete({
-        where: { userId_storeId: { userId, storeId } },
-      });
-    } catch (e) {
-      if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") {
-        throw new Error("User is not assigned to this store");
-      }
-      throw e;
-    }
-
-    return { storeId, userId };
+  async listUsersForStore(storeId: string, params: { page?: number; limit?: number } = {}) {
+    return userStoreService.listUsersForStore(storeId, params);
   }
 }
 

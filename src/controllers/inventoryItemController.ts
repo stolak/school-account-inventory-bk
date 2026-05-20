@@ -100,6 +100,12 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *           type: string
  *         description: Filter by creator user ID
  *       - in: query
+ *         name: storeId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: When provided, currentStock is calculated from completed transactions at this store only
+ *       - in: query
  *         name: status
  *         schema:
  *           type: string
@@ -156,7 +162,7 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *                             type: integer
  *                           currentStock:
  *                             type: string
- *                             description: Available quantity (sum(qtyIn-qtyOut))
+ *                             description: sum(qtyIn) − sum(qtyOut) on completed transactions; scoped to storeId when that query param is set
  *                           categoryId:
  *                             type: string
  *                             nullable: true
@@ -310,6 +316,7 @@ export const inventoryItemController = {
       const brandId = typeof req.query.brandId === "string" ? req.query.brandId : undefined;
       const uomId = typeof req.query.uomId === "string" ? req.query.uomId : undefined;
       const createdById = typeof req.query.createdById === "string" ? req.query.createdById : undefined;
+      const storeId = typeof req.query.storeId === "string" ? req.query.storeId : undefined;
       const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
       const status =
         statusRaw === undefined
@@ -338,6 +345,7 @@ export const inventoryItemController = {
         brandId,
         uomId,
         createdById,
+        storeId,
         status,
         page,
         limit,
@@ -349,10 +357,12 @@ export const inventoryItemController = {
         data: result,
       });
     } catch (error: any) {
-      return res.status(500).json({
+      const message = error?.message ?? "Failed to retrieve inventory items";
+      const status = message === "Invalid storeId" ? 404 : 500;
+      return res.status(status).json({
         success: false,
-        message: "Failed to retrieve inventory items",
-        error: error?.message,
+        message,
+        error: status === 500 ? message : undefined,
       });
     }
   },

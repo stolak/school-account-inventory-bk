@@ -192,15 +192,9 @@ export const storeController = {
    *           type: string
    *           enum: [Active, Inactive, Archived, All]
    *         description: Omit for Active only; use All for all statuses
-   *       - in: query
-   *         name: page
-   *         schema: { type: integer, minimum: 1, default: 1 }
-   *       - in: query
-   *         name: limit
-   *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
    *     responses:
    *       200:
-   *         description: Paginated stores for the authenticated user
+   *         description: All accessible stores for the authenticated user (no pagination)
    *       400:
    *         description: Invalid status filter
    *       401:
@@ -235,10 +229,7 @@ export const storeController = {
         });
       }
 
-      const page = parseIntOrUndefined(req.query.page);
-      const limit = parseIntOrUndefined(req.query.limit);
-
-      const result = await storeService.listStoresAccessibleByUser(userId, { q, status, page, limit });
+      const result = await storeService.listStoresAccessibleByUser(userId, { q, status });
       return res.json({ success: true, message: "Stores retrieved successfully", data: result });
     } catch (error: unknown) {
       return res.status(500).json({
@@ -469,6 +460,49 @@ export const storeController = {
    *       500:
    *         description: Server error
    */
+  /**
+   * @openapi
+   * /api/v1/stores/{id}/users:
+   *   get:
+   *     summary: List users assigned to a store (UserStore)
+   *     tags: [Stores]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: page
+   *         schema: { type: integer, minimum: 1, default: 1 }
+   *       - in: query
+   *         name: limit
+   *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+   *     responses:
+   *       200:
+   *         description: Users with explicit store access
+   *       404:
+   *         description: Store not found
+   */
+  listStoreUsers: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      if (!id?.trim()) {
+        return res.status(400).json({ success: false, message: "id is required" });
+      }
+
+      const page = parseIntOrUndefined(req.query.page);
+      const limit = parseIntOrUndefined(req.query.limit);
+
+      const data = await storeService.listUsersForStore(id.trim(), { page, limit });
+      return res.json({ success: true, message: "Store users retrieved successfully", data });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to list store users";
+      return res.status(message === "Store not found" ? 404 : 500).json({ success: false, message });
+    }
+  },
+
   addUserToStore: async (req: Request, res: Response) => {
     try {
       const { id } = req.params;

@@ -28,6 +28,8 @@ export interface ListInventoryItemsParams {
   brandId?: string;
   uomId?: string;
   createdById?: string;
+  /** When set, `currentStock` is sum(qtyIn) − sum(qtyOut) for completed rows at this store only. */
+  storeId?: string;
   status?: Status | "All";
   page?: number;
   limit?: number;
@@ -222,6 +224,12 @@ export class InventoryItemService {
     inventoryItems: InventoryItemData[];
     pagination: { page: number; limit: number; total: number; totalPages: number };
   }> {
+    const storeId = params.storeId?.trim();
+    if (storeId) {
+      const store = await this.prisma.store.findUnique({ where: { id: storeId }, select: { id: true } });
+      if (!store) throw new Error("Invalid storeId");
+    }
+
     const page = clampInt(params.page ?? 1, 1, 1_000_000);
     const limit = clampInt(params.limit ?? 20, 1, 100);
     const skip = (page - 1) * limit;
@@ -267,16 +275,21 @@ export class InventoryItemService {
     const stockAgg = itemIds.length
       ? await this.prisma.inventoryTransaction.groupBy({
           by: ["itemId"],
-          where: { itemId: { in: itemIds }, status: "completed" },
+          where: {
+            itemId: { in: itemIds },
+            status: InventoryTransactionStatus.completed,
+            ...(storeId ? { storeId } : {}),
+          },
           _sum: { qtyIn: true, qtyOut: true },
         })
       : [];
 
     const stockByItemId = new Map<string, string>();
     for (const r of stockAgg) {
-      const qtyIn = r._sum.qtyIn ?? new Prisma.Decimal(0);
-      const qtyOut = r._sum.qtyOut ?? new Prisma.Decimal(0);
-      stockByItemId.set(r.itemId, qtyIn.minus(qtyOut).toString());
+      stockByItemId.set(
+        r.itemId,
+        decimalNetBalance(r._sum.qtyIn ?? null, r._sum.qtyOut ?? null)
+      );
     }
 
     // Keep behavior predictable if MySQL collation differs.
