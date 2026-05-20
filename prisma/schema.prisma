@@ -123,6 +123,7 @@ model User {
   storeAccesses           UserStore[]
   tempJournalTransfers    TempJournalTransfer[]
   studentJournalTransfers StudentJournalTransfer[]
+  inventoryTransactions   InventoryTransaction[]
 
   @@map("users")
 }
@@ -593,20 +594,24 @@ model InventoryTransaction {
   createdAt        DateTime                   @default(now()) @map("created_at")
   updatedAt        DateTime                   @default(now()) @map("updated_at")
 
-  item         InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  supplier     Supplier?     @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  receiver     User?         @relation("InventoryTransactionReceiver", fields: [receiverId], references: [id], onDelete: SetNull)
-  createdBy    User          @relation("InventoryTransactionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  project      Project?      @relation("ProjectTransactions", fields: [projectId], references: [id])
-  projectId    String?       @db.Char(36)
-  hostelRoomId String?       @map("hostel_room_id") @db.Char(36)
-  hostelRoom   HostelRoom?   @relation(fields: [hostelRoomId], references: [id], onDelete: SetNull)
-  hostelId     String?       @map("hostel_id") @db.Char(36)
-  hostel       Hostel?       @relation(fields: [hostelId], references: [id], onDelete: SetNull)
-  storeId      String?       @map("store_id") @db.Char(36)
-  store        Store?        @relation(fields: [storeId], references: [id], onDelete: SetNull)
-  facilityId   String?       @map("facility_id") @db.Char(36)
-  facility     Facility?     @relation(fields: [facilityId], references: [id], onDelete: SetNull)
+  item               InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  supplier           Supplier?     @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  receiver           User?         @relation("InventoryTransactionReceiver", fields: [receiverId], references: [id], onDelete: SetNull)
+  createdBy          User          @relation("InventoryTransactionCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  project            Project?      @relation("ProjectTransactions", fields: [projectId], references: [id])
+  projectId          String?       @db.Char(36)
+  hostelRoomId       String?       @map("hostel_room_id") @db.Char(36)
+  hostelRoom         HostelRoom?   @relation(fields: [hostelRoomId], references: [id], onDelete: SetNull)
+  hostelId           String?       @map("hostel_id") @db.Char(36)
+  hostel             Hostel?       @relation(fields: [hostelId], references: [id], onDelete: SetNull)
+  storeId            String?       @map("store_id") @db.Char(36)
+  store              Store?        @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  facilityId         String?       @map("facility_id") @db.Char(36)
+  facility           Facility?     @relation(fields: [facilityId], references: [id], onDelete: SetNull)
+  isAcknowledged     Boolean       @default(false) @map("is_acknowledged")
+  acknowledgedAt     DateTime?     @map("acknowledged_at") @db.DateTime
+  acknowledgedBy     String?       @map("acknowledged_by") @db.Char(36)
+  acknowledgedByUser User?         @relation(fields: [acknowledgedBy], references: [id], onDelete: SetNull)
 
   @@index([itemId])
   @@index([supplierId])

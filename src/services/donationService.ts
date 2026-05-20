@@ -21,6 +21,10 @@ export interface DonationTransactionData {
   item?: { name: string } | null;
   store?: { id: string; name: string } | null;
   createdBy?: { firstName: string | null; lastName: string | null } | null;
+  isAcknowledged?: boolean;
+  acknowledgedAt?: Date | null;
+  acknowledgedBy?: string | null;
+  acknowledgedByUser?: { firstName: string | null; lastName: string | null; email: string } | null;
 }
 
 export interface ListDonationsParams {
@@ -68,26 +72,39 @@ export class DonationService {
       ...(params.transactionDateFrom !== undefined || params.transactionDateTo !== undefined
         ? {
             transactionDate: {
-              ...(params.transactionDateFrom !== undefined ? { gte: params.transactionDateFrom } : {}),
+              ...(params.transactionDateFrom !== undefined
+                ? { gte: params.transactionDateFrom }
+                : {}),
               ...(params.transactionDateTo !== undefined ? { lte: params.transactionDateTo } : {}),
             },
           }
         : {}),
-      ...(params.q ? { OR: [{ referenceNo: { contains: params.q } }, { notes: { contains: params.q } }] } : {}),
+      ...(params.q
+        ? { OR: [{ referenceNo: { contains: params.q } }, { notes: { contains: params.q } }] }
+        : {}),
     };
   }
 
   private async assertItemExists(itemId: string) {
-    const item = await this.prisma.inventoryItem.findUnique({ where: { id: itemId }, select: { id: true } });
+    const item = await this.prisma.inventoryItem.findUnique({
+      where: { id: itemId },
+      select: { id: true },
+    });
     if (!item) throw new Error("Invalid itemId");
   }
 
   private async assertStoreExists(storeId: string) {
-    const store = await this.prisma.store.findUnique({ where: { id: storeId }, select: { id: true } });
+    const store = await this.prisma.store.findUnique({
+      where: { id: storeId },
+      select: { id: true },
+    });
     if (!store) throw new Error("Invalid storeId");
   }
 
-  private async getActivePeriodIdsOrNull(): Promise<{ sessionId: string | null; termId: string | null }> {
+  private async getActivePeriodIdsOrNull(): Promise<{
+    sessionId: string | null;
+    termId: string | null;
+  }> {
     const ap = await activePeriodService.getActivePeriod();
     if (!ap) return { sessionId: null, termId: null };
     return { sessionId: ap.sessionId ?? null, termId: ap.termId ?? null };
@@ -107,7 +124,9 @@ export class DonationService {
 
     const active = await this.getActivePeriodIdsOrNull();
     const finalReferenceNo =
-      input.referenceNo === undefined || input.referenceNo === null || input.referenceNo.trim() === ""
+      input.referenceNo === undefined ||
+      input.referenceNo === null ||
+      input.referenceNo.trim() === ""
         ? generateReferenceNo()
         : input.referenceNo.trim();
 
@@ -152,7 +171,9 @@ export class DonationService {
 
     const active = await this.getActivePeriodIdsOrNull();
     const finalReferenceNo =
-      input.referenceNo === undefined || input.referenceNo === null || input.referenceNo.trim() === ""
+      input.referenceNo === undefined ||
+      input.referenceNo === null ||
+      input.referenceNo.trim() === ""
         ? generateReferenceNo()
         : input.referenceNo.trim();
     const txDate = input.transactionDate ?? new Date();
@@ -280,9 +301,14 @@ export class DonationService {
     const missing = ids.filter((id) => !existingSet.has(id));
     if (missing.length) throw new Error(`Donation not found: ${missing.join(", ")}`);
 
-    const itemIds = [...new Set(input.updates.map((u) => u.itemId).filter((v): v is string => !!v))];
+    const itemIds = [
+      ...new Set(input.updates.map((u) => u.itemId).filter((v): v is string => !!v)),
+    ];
     if (itemIds.length) {
-      const found = await this.prisma.inventoryItem.findMany({ where: { id: { in: itemIds } }, select: { id: true } });
+      const found = await this.prisma.inventoryItem.findMany({
+        where: { id: { in: itemIds } },
+        select: { id: true },
+      });
       const foundSet = new Set(found.map((r) => r.id));
       const missingItemIds = itemIds.filter((id) => !foundSet.has(id));
       if (missingItemIds.length) throw new Error(`Invalid itemId(s): ${missingItemIds.join(", ")}`);
@@ -330,6 +356,8 @@ export class DonationService {
   async deleteDonation(id: string): Promise<DonationTransactionData> {
     const existing = await this.getDonationById(id);
     if (!existing) throw new Error("Donation not found");
+    //if acknowledged, throw error
+    if (existing.isAcknowledged) throw new Error("Donation is acknowledged and cannot be deleted");
     return await this.prisma.inventoryTransaction.delete({
       where: { id },
       include: donationInclude,
@@ -348,7 +376,9 @@ export class DonationService {
     const missing = ids.filter((id) => !existingSet.has(id));
     if (missing.length) throw new Error(`Donation not found: ${missing.join(", ")}`);
 
-    await this.prisma.$transaction(ids.map((id) => this.prisma.inventoryTransaction.delete({ where: { id } })));
+    await this.prisma.$transaction(
+      ids.map((id) => this.prisma.inventoryTransaction.delete({ where: { id } }))
+    );
     return existing;
   }
 

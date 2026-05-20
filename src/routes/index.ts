@@ -44,6 +44,7 @@ import userStoreRouter from "./userStore";
 import storeTransferRouter from "./storeTransfer";
 import facilityRouter from "./facility";
 import facilityCollectionRouter from "./facilityCollection";
+import inventoryReceiveAcknowledgementRouter from "./inventoryReceiveAcknowledgement";
 import userRouter from "./user";
 
 const router = Router();
@@ -88,6 +89,7 @@ router.use("/user-stores", userStoreRouter);
 router.use("/store-transfers", storeTransferRouter);
 router.use("/facilities", facilityRouter);
 router.use("/facility-collections", facilityCollectionRouter);
+router.use("/inventory-receive-acknowledgements", inventoryReceiveAcknowledgementRouter);
 router.use("/users", userRouter);
 
 router.use("/upload", uploadRouter);

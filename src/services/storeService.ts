@@ -235,6 +235,18 @@ export class StoreService {
     return { stores };
   }
 
+  /** True when user is store manager and/or has an explicit `user_stores` grant. */
+  async userHasStoreAccess(userId: string, storeId: string): Promise<boolean> {
+    const store = await this.prisma.store.findFirst({
+      where: {
+        id: storeId,
+        OR: [{ managerId: userId }, { userAccesses: { some: { userId } } }],
+      },
+      select: { id: true },
+    });
+    return !!store;
+  }
+
   async getStoreById(id: string): Promise<StoreData | null> {
     const row = await this.prisma.store.findUnique({
       where: { id },
