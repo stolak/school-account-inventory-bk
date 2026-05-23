@@ -435,6 +435,96 @@ export const studentCollectionController = {
    *       500:
    *         description: Server error
    */
+  /**
+   * @openapi
+   * /api/v1/student-collections/report/items-received:
+   *   post:
+   *     summary: Quantities received per student for selected items
+   *     tags: [StudentCollections]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       Returns one row per Active student (optionally filtered by class/subClass on the student record),
+   *       with qtyReceived per requested item — sum(qtyOut) on completed student_collection transactions.
+   *       Optional query filters also apply to transaction sessionId, termId, classId, and subclassId.
+   *     parameters:
+   *       - in: query
+   *         name: classId
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: subclassId
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: sessionId
+   *         schema: { type: string, format: uuid }
+   *       - in: query
+   *         name: termId
+   *         schema: { type: string, format: uuid }
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [itemIds]
+   *             properties:
+   *               itemIds:
+   *                 type: array
+   *                 minItems: 1
+   *                 items:
+   *                   type: string
+   *                   format: uuid
+   *     responses:
+   *       200:
+   *         description: Array of studentInfo + items with qtyReceived
+   *       400:
+   *         description: Validation error
+   *       500:
+   *         description: Server error
+   */
+  getStudentItemsReceivedReport: async (req: Request, res: Response) => {
+    try {
+      const { itemIds } = req.body ?? {};
+      if (!Array.isArray(itemIds) || itemIds.length === 0) {
+        return res.status(400).json({ success: false, message: "itemIds must be a non-empty array" });
+      }
+      if (!itemIds.every((id) => typeof id === "string" && id.trim())) {
+        return res.status(400).json({
+          success: false,
+          message: "Each itemIds entry must be a non-empty string",
+        });
+      }
+
+      const classId = typeof req.query.classId === "string" ? req.query.classId : undefined;
+      const subclassId = typeof req.query.subclassId === "string" ? req.query.subclassId : undefined;
+      const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+      const termId = typeof req.query.termId === "string" ? req.query.termId : undefined;
+
+      const data = await studentCollectionService.getStudentItemsReceivedReport({
+        itemIds,
+        classId,
+        subclassId,
+        sessionId,
+        termId,
+      });
+
+      return res.json({
+        success: true,
+        message: "Student items received report retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve report";
+      const status =
+        message === "itemIds must not be empty" ||
+        message.includes("itemIds must") ||
+        message.includes("Invalid itemId")
+          ? 400
+          : 500;
+      return res.status(status).json({ success: false, message });
+    }
+  },
+
   getStudentCollectionSummary: async (req: Request, res: Response) => {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;

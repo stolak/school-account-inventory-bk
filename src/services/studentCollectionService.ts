@@ -1,7 +1,12 @@
 import prisma from "../utils/prisma";
 import { activePeriodService } from "./activePeriodService";
 import { resolveStoreIdForIssuer } from "./resolveStoreForIssuer";
-import { InventoryTransactionStatus, InventoryTransactionType, Prisma } from "@prisma/client";
+import {
+  InventoryTransactionStatus,
+  InventoryTransactionType,
+  Prisma,
+  StudentStatus,
+} from "@prisma/client";
 import { randomUUID } from "crypto";
 
 export interface StudentCollectionData {
@@ -31,6 +36,29 @@ export interface StudentCollectionData {
     lastName: string;
   } | null;
   createdBy?: { firstName: string | null; lastName: string | null } | null;
+}
+
+export interface StudentItemsReceivedReportParams {
+  itemIds: string[];
+  classId?: string;
+  subclassId?: string;
+  sessionId?: string;
+  termId?: string;
+}
+
+export interface StudentItemsReceivedReportRow {
+  studentInfo: {
+    id: string;
+    firstName: string;
+    middleName: string | null;
+    lastName: string;
+    admissionNumber: string;
+  };
+  items: Array<{
+    itemId: string;
+    itemName: string;
+    qtyReceived: number;
+  }>;
 }
 
 export interface ListStudentCollectionsParams {
@@ -346,6 +374,99 @@ export class StudentCollectionService {
     });
 
     return { summary };
+  }
+
+  /**
+   * Per-student quantities received (sum of qtyOut on completed student_collection rows)
+   * for the requested items. Students are scoped by Active status and optional class/subClass;
+   * transactions may be further filtered by session, term, and class/subClass on the row.
+   */
+  async getStudentItemsReceivedReport(
+    params: StudentItemsReceivedReportParams
+  ): Promise<StudentItemsReceivedReportRow[]> {
+    const itemIds = [...new Set(params.itemIds.map((id) => id.trim()).filter(Boolean))];
+    if (!itemIds.length) {
+      throw new Error("itemIds must not be empty");
+    }
+
+    const catalogItems = await this.prisma.inventoryItem.findMany({
+      where: { id: { in: itemIds } },
+      select: { id: true, name: true },
+    });
+    const itemById = new Map(catalogItems.map((i) => [i.id, i]));
+    const missingItems = itemIds.filter((id) => !itemById.has(id));
+    if (missingItems.length) {
+      throw new Error(`Invalid itemId(s): ${missingItems.join(", ")}`);
+    }
+
+    const studentWhere: Prisma.StudentWhereInput = {
+      status: StudentStatus.Active,
+    };
+    const classId = params.classId?.trim();
+    const subclassId = params.subclassId?.trim();
+    if (classId) studentWhere.classId = classId;
+    if (subclassId) studentWhere.subClassId = subclassId;
+
+    const students = await this.prisma.student.findMany({
+      where: studentWhere,
+      select: {
+        id: true,
+        firstName: true,
+        middleName: true,
+        lastName: true,
+        admissionNumber: true,
+      },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }, { admissionNumber: "asc" }],
+    });
+
+    const txWhere: Prisma.InventoryTransactionWhereInput = {
+      transactionType: InventoryTransactionType.student_collection,
+      status: InventoryTransactionStatus.completed,
+      itemId: { in: itemIds },
+      studentId: { not: null },
+      ...(params.sessionId?.trim() ? { sessionId: params.sessionId.trim() } : {}),
+      ...(params.termId?.trim() ? { termId: params.termId.trim() } : {}),
+      ...(classId ? { classId } : {}),
+      ...(subclassId ? { subclassId } : {}),
+    };
+
+    const studentIds = students.map((s) => s.id);
+    const grouped =
+      studentIds.length > 0
+        ? await this.prisma.inventoryTransaction.groupBy({
+            by: ["studentId", "itemId"],
+            where: {
+              ...txWhere,
+              studentId: { in: studentIds },
+            },
+            _sum: { qtyOut: true },
+          })
+        : [];
+
+    const qtyByStudentItem = new Map<string, number>();
+    for (const row of grouped) {
+      if (!row.studentId) continue;
+      const key = `${row.studentId}\t${row.itemId}`;
+      qtyByStudentItem.set(
+        key,
+        Number((row._sum.qtyOut ?? new Prisma.Decimal(0)).toString())
+      );
+    }
+
+    return students.map((student) => ({
+      studentInfo: {
+        id: student.id,
+        firstName: student.firstName,
+        middleName: student.middleName,
+        lastName: student.lastName,
+        admissionNumber: student.admissionNumber,
+      },
+      items: itemIds.map((itemId) => ({
+        itemId,
+        itemName: itemById.get(itemId)!.name,
+        qtyReceived: qtyByStudentItem.get(`${student.id}\t${itemId}`) ?? 0,
+      })),
+    }));
   }
 
   async getStudentCollectionById(id: string): Promise<StudentCollectionData | null> {

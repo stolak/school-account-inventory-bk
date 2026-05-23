@@ -9,6 +9,7 @@ router.use(authenticateJWT);
 router.post("/bulk", studentCollectionController.createBulkStudentCollections);
 router.put("/bulk", studentCollectionController.updateBulkStudentCollections);
 router.delete("/bulk", studentCollectionController.deleteBulkStudentCollections);
+router.post("/report/items-received", studentCollectionController.getStudentItemsReceivedReport);
 router.post("/", studentCollectionController.createStudentCollection);
 router.get("/summary", studentCollectionController.getStudentCollectionSummary);
 router.get("/", studentCollectionController.listStudentCollections);
