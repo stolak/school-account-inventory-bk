@@ -25,18 +25,10 @@ datasource db {
 }
 
 enum UserType {
-  Admin
-  Merchant
-  Buyer
-}
-
-enum Role {
-  Visitor
-  Admin
-  Merchant
-  Buyer
   SuperAdmin
-  CustomerSupport
+  Staff
+  Student
+  Parent
 }
 
 enum Status {
@@ -79,8 +71,7 @@ model User {
   profileImageUrl String?
   phoneNumber     String?
   email           String   @unique
-  userType        UserType @default(Buyer)
-  role            Role     @default(Visitor)
+  userType        UserType @default(Staff)
   isActive        Boolean  @default(false)
   isVerified      Boolean  @default(false)
   isEmailVerified Boolean  @default(false)

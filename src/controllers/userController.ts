@@ -1,10 +1,9 @@
 import { Request, Response } from "express";
-import { Role, UserType } from "@prisma/client";
+import { UserType } from "@prisma/client";
 import { userService } from "../services/userService";
 import { parseIntOrUndefined } from "../utils/request";
 
 const USER_TYPES = new Set<string>(Object.values(UserType));
-const ROLES = new Set<string>(Object.values(Role));
 
 function parsePrivilegeIds(body: unknown): string[] | null {
   const privilegeIds = (body as { privilegeIds?: unknown })?.privilegeIds;
@@ -42,14 +41,18 @@ function parseRoleId(body: unknown): string | null {
  *         name: userType
  *         schema:
  *           type: string
- *           enum: [Admin, Merchant, Buyer]
+ *           enum: [SuperAdmin, Staff, Student, Parent]
  *         description: Filter by Prisma UserType
+ *       - in: query
+ *         name: roleId
+ *         schema:
+ *           type: string
+ *         description: Filter by AppRole id (UserRole.roleId)
  *       - in: query
  *         name: role
  *         schema:
  *           type: string
- *           enum: [Visitor, Admin, Merchant, Buyer, SuperAdmin, CustomerSupport]
- *         description: Filter by Prisma Role
+ *         description: Filter by AppRole name (exact match on roles.name)
  *       - in: query
  *         name: status
  *         schema:
@@ -82,7 +85,7 @@ function parseRoleId(body: unknown): string | null {
  *       200:
  *         description: users array and pagination
  *       400:
- *         description: Invalid userType or role
+ *         description: Invalid userType
  *       401:
  *         description: Unauthorized
  *       500:
@@ -92,7 +95,14 @@ export const userController = {
   listUsers: async (req: Request, res: Response) => {
     try {
       const userTypeRaw = typeof req.query.userType === "string" ? req.query.userType : undefined;
-      const roleRaw = typeof req.query.role === "string" ? req.query.role : undefined;
+      const roleId =
+        typeof req.query.roleId === "string" && req.query.roleId.trim()
+          ? req.query.roleId.trim()
+          : undefined;
+      const roleName =
+        typeof req.query.role === "string" && req.query.role.trim()
+          ? req.query.role.trim()
+          : undefined;
       const status = typeof req.query.status === "string" ? req.query.status : undefined;
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
       const includeDeletedRaw = req.query.includeDeleted;
@@ -102,21 +112,17 @@ export const userController = {
         if (!USER_TYPES.has(userTypeRaw)) {
           return res.status(400).json({
             success: false,
-            message: "userType must be Admin, Merchant, or Buyer",
+            message: "userType must be SuperAdmin, Staff, Student, or Parent",
           });
         }
         userType = userTypeRaw as UserType;
       }
 
-      let role: Role | undefined;
-      if (roleRaw !== undefined) {
-        if (!ROLES.has(roleRaw)) {
-          return res.status(400).json({
-            success: false,
-            message: "role must be Visitor, Admin, Merchant, Buyer, SuperAdmin, or CustomerSupport",
-          });
-        }
-        role = roleRaw as Role;
+      if (roleId && roleName) {
+        return res.status(400).json({
+          success: false,
+          message: "Use only one of roleId or role (role name), not both",
+        });
       }
 
       const includeDeleted =
@@ -129,7 +135,8 @@ export const userController = {
 
       const result = await userService.listUsers({
         ...(userType !== undefined ? { userType } : {}),
-        ...(role !== undefined ? { role } : {}),
+        ...(roleId !== undefined ? { roleId } : {}),
+        ...(roleName !== undefined ? { roleName } : {}),
         ...(status !== undefined ? { status } : {}),
         ...(q !== undefined ? { q } : {}),
         includeDeleted,
@@ -156,8 +163,8 @@ export const userController = {
    *     security:
    *       - bearerAuth: []
    *     description: |
-   *       Returns user profile fields plus direct privileges and assigned application roles.
-   *       Password is never returned.
+ *       Returns user profile fields, direct privileges, and application role (UserRole → AppRole).
+ *       Password is never returned.
    *     parameters:
    *       - in: path
    *         name: userId

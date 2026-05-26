@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { staffService } from "../services/staffService";
-import { Role, StaffRole, Status, UserType } from "@prisma/client";
+import { StaffRole, Status, UserType } from "@prisma/client";
 import { isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
 
 /**
@@ -117,11 +117,19 @@ export const staffController = {
       if (role !== undefined && role !== null && !Object.values(StaffRole).includes(role)) {
         return res.status(400).json({ success: false, message: "Invalid role" });
       }
-      if (status !== undefined && status !== null && status !== Status.Active && status !== Status.Inactive && status !== Status.Archived) {
+      if (
+        status !== undefined &&
+        status !== null &&
+        status !== Status.Active &&
+        status !== Status.Inactive &&
+        status !== Status.Archived
+      ) {
         return res.status(400).json({ success: false, message: "Invalid status" });
       }
       if (!isStringOrNullOrUndefined(profileImageUrl)) {
-        return res.status(400).json({ success: false, message: "profileImageUrl must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "profileImageUrl must be a string or null" });
       }
 
       if (user !== undefined && (typeof user !== "object" || user === null)) {
@@ -137,26 +145,43 @@ export const staffController = {
         name: name.trim(),
         ...(role !== undefined ? { role } : {}),
         ...(status !== undefined ? { status } : {}),
-        profileImageUrl: profileImageUrl === undefined ? undefined : profileImageUrl === "" ? null : profileImageUrl,
+        profileImageUrl:
+          profileImageUrl === undefined
+            ? undefined
+            : profileImageUrl === ""
+              ? null
+              : profileImageUrl,
         createdById,
         user:
           user === undefined
             ? undefined
             : {
                 ...(typeof user.password === "string" ? { password: user.password } : {}),
-                ...(user.phoneNumber === undefined ? {} : { phoneNumber: user.phoneNumber === "" ? null : user.phoneNumber }),
+                ...(user.phoneNumber === undefined
+                  ? {}
+                  : { phoneNumber: user.phoneNumber === "" ? null : user.phoneNumber }),
                 ...(typeof user.isActive === "boolean" ? { isActive: user.isActive } : {}),
                 ...(typeof user.isVerified === "boolean" ? { isVerified: user.isVerified } : {}),
-                ...(typeof user.isEmailVerified === "boolean" ? { isEmailVerified: user.isEmailVerified } : {}),
-                ...(user.role !== undefined && Object.values(Role).includes(user.role) ? { role: user.role } : {}),
-                ...(user.userType !== undefined && Object.values(UserType).includes(user.userType) ? { userType: user.userType } : {}),
+                ...(typeof user.isEmailVerified === "boolean"
+                  ? { isEmailVerified: user.isEmailVerified }
+                  : {}),
+                ...(user.role !== undefined ? { role: user.role } : {}),
+                ...(user.userType !== undefined && Object.values(UserType).includes(user.userType)
+                  ? { userType: user.userType }
+                  : {}),
               },
       });
 
-      return res.status(201).json({ success: true, message: "Staff created successfully", data: created });
+      return res
+        .status(201)
+        .json({ success: true, message: "Staff created successfully", data: created });
     } catch (error: any) {
       const message = error?.message ?? "Failed to create staff";
-      const status = message.includes("already exists") ? 409 : message.includes("required") ? 400 : 500;
+      const status = message.includes("already exists")
+        ? 409
+        : message.includes("required")
+          ? 400
+          : 500;
       return res.status(status).json({ success: false, message });
     }
   },
@@ -165,7 +190,10 @@ export const staffController = {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
       const roleRaw = typeof req.query.role === "string" ? req.query.role : undefined;
-      const role = roleRaw && (Object.values(StaffRole) as string[]).includes(roleRaw) ? (roleRaw as StaffRole) : undefined;
+      const role =
+        roleRaw && (Object.values(StaffRole) as string[]).includes(roleRaw)
+          ? (roleRaw as StaffRole)
+          : undefined;
       if (roleRaw !== undefined && role === undefined) {
         return res.status(400).json({ success: false, message: "Invalid role" });
       }
@@ -193,7 +221,9 @@ export const staffController = {
       const result = await staffService.listStaff({ q, role, status, page, limit });
       return res.json({ success: true, message: "Staff retrieved successfully", data: result });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: "Failed to retrieve staff", error: error?.message });
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to retrieve staff", error: error?.message });
     }
   },
 
@@ -269,7 +299,9 @@ export const staffController = {
       if (!staff) return res.status(404).json({ success: false, message: "Staff not found" });
       return res.json({ success: true, message: "Staff retrieved successfully", data: staff });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: "Failed to retrieve staff", error: error?.message });
+      return res
+        .status(500)
+        .json({ success: false, message: "Failed to retrieve staff", error: error?.message });
     }
   },
 
@@ -280,10 +312,14 @@ export const staffController = {
 
       const { StaffNumber, email, name, role, status, profileImageUrl } = req.body ?? {};
       if (StaffNumber !== undefined && (typeof StaffNumber !== "string" || !StaffNumber.trim())) {
-        return res.status(400).json({ success: false, message: "StaffNumber must be a non-empty string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "StaffNumber must be a non-empty string" });
       }
       if (email !== undefined && (typeof email !== "string" || !email.trim())) {
-        return res.status(400).json({ success: false, message: "email must be a non-empty string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "email must be a non-empty string" });
       }
       if (name !== undefined && (typeof name !== "string" || !name.trim())) {
         return res.status(400).json({ success: false, message: "name must be a non-empty string" });
@@ -291,11 +327,19 @@ export const staffController = {
       if (role !== undefined && role !== null && !Object.values(StaffRole).includes(role)) {
         return res.status(400).json({ success: false, message: "Invalid role" });
       }
-      if (status !== undefined && status !== null && status !== Status.Active && status !== Status.Inactive && status !== Status.Archived) {
+      if (
+        status !== undefined &&
+        status !== null &&
+        status !== Status.Active &&
+        status !== Status.Inactive &&
+        status !== Status.Archived
+      ) {
         return res.status(400).json({ success: false, message: "Invalid status" });
       }
       if (profileImageUrl !== undefined && !isStringOrNullOrUndefined(profileImageUrl)) {
-        return res.status(400).json({ success: false, message: "profileImageUrl must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "profileImageUrl must be a string or null" });
       }
 
       const updated = await staffService.updateStaff(id, {
@@ -304,13 +348,16 @@ export const staffController = {
         ...(name !== undefined ? { name } : {}),
         ...(role !== undefined ? { role } : {}),
         ...(status !== undefined ? { status } : {}),
-        ...(profileImageUrl !== undefined ? { profileImageUrl: profileImageUrl === "" ? null : profileImageUrl } : {}),
+        ...(profileImageUrl !== undefined
+          ? { profileImageUrl: profileImageUrl === "" ? null : profileImageUrl }
+          : {}),
       });
 
       return res.json({ success: true, message: "Staff updated successfully", data: updated });
     } catch (error: any) {
       const message = error?.message ?? "Failed to update staff";
-      const code = message === "Staff not found" ? 404 : message.includes("already exists") ? 409 : 500;
+      const code =
+        message === "Staff not found" ? 404 : message.includes("already exists") ? 409 : 500;
       return res.status(code).json({ success: false, message });
     }
   },
@@ -328,4 +375,3 @@ export const staffController = {
     }
   },
 };
-

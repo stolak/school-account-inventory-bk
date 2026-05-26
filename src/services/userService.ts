@@ -1,11 +1,13 @@
 import prisma from "../utils/prisma";
-import { Prisma, Role, UserType } from "@prisma/client";
+import { Prisma, UserType } from "@prisma/client";
 
 export interface ListUsersParams {
   /** userType (Prisma UserType) */
   userType?: UserType;
-  /** role (Prisma Role) */
-  role?: Role;
+  /** Filter users assigned to this AppRole id (UserRole.roleId) */
+  roleId?: string;
+  /** Filter users assigned to an AppRole with this exact name */
+  roleName?: string;
   /** User.status string field (e.g. active) */
   status?: string;
   /** Search email / firstName / lastName (substring, case-sensitive per DB collation) */
@@ -23,7 +25,6 @@ export interface ListedUser {
   lastName: string | null;
   phoneNumber: string | null;
   userType: UserType;
-  role: Role;
   status: string;
   isActive: boolean;
   isVerified: boolean;
@@ -32,6 +33,8 @@ export interface ListedUser {
   isDeleted: boolean;
   createdAt: Date;
   updatedAt: Date;
+  /** Application role from UserRole (at most one per user) */
+  appRole: AppRoleSummary | null;
 }
 
 export interface PrivilegeSummary {
@@ -44,6 +47,18 @@ export interface AppRoleSummary {
   id: string;
   name: string;
   status: string;
+}
+
+export interface UserDetailData {
+  id: string;
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+  phoneNumber: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  privileges: PrivilegeSummary[];
+  appRole: AppRoleSummary | null;
 }
 
 export interface UserAccessData {
@@ -65,18 +80,20 @@ const appRoleSelect = {
   status: true,
 } satisfies Prisma.AppRoleSelect;
 
+const userRoleWithAppRoleSelect = {
+  roleId: true,
+  role: { select: appRoleSelect },
+} satisfies Prisma.UserRoleSelect;
+
 const userAccessSelect = {
   id: true,
   email: true,
   firstName: true,
   lastName: true,
   phoneNumber: true,
-
   privileges: { select: privilegeSelect },
   userRoles: {
-    select: {
-      role: { select: appRoleSelect },
-    },
+    select: userRoleWithAppRoleSelect,
   },
 } satisfies Prisma.UserSelect;
 
@@ -86,10 +103,6 @@ const getUserByIdSelect = {
   updatedAt: true,
 } satisfies Prisma.UserSelect;
 
-function clampInt(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
-}
-
 const userListSelect = {
   id: true,
   email: true,
@@ -97,7 +110,6 @@ const userListSelect = {
   lastName: true,
   phoneNumber: true,
   userType: true,
-  role: true,
   status: true,
   isActive: true,
   isVerified: true,
@@ -106,10 +118,52 @@ const userListSelect = {
   isDeleted: true,
   createdAt: true,
   updatedAt: true,
+  userRoles: {
+    select: userRoleWithAppRoleSelect,
+  },
+  privileges: {
+    select: privilegeSelect,
+  },
 } satisfies Prisma.UserSelect;
 
+function clampInt(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+type UserWithRoles = Prisma.UserGetPayload<{
+  select: typeof userListSelect | typeof getUserByIdSelect;
+}>;
+
+function mapAppRoleFromUser(user: UserWithRoles): AppRoleSummary | null {
+  return user.userRoles[0]?.role ?? null;
+}
+
+function mapUserDetail(
+  user: Prisma.UserGetPayload<{ select: typeof getUserByIdSelect }>
+): UserDetailData {
+  return {
+    id: user.id,
+    email: user.email,
+    firstName: user.firstName,
+    lastName: user.lastName,
+    phoneNumber: user.phoneNumber,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+    privileges: user.privileges,
+    appRole: mapAppRoleFromUser(user),
+  };
+}
+
+function mapListedUser(user: Prisma.UserGetPayload<{ select: typeof userListSelect }>): ListedUser {
+  const { userRoles: _userRoles, ...rest } = user;
+  return {
+    ...rest,
+    appRole: mapAppRoleFromUser(user),
+  };
+}
+
 export class UserService {
-  async getUserById(userId: string) {
+  async getUserById(userId: string): Promise<UserDetailData> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: getUserByIdSelect,
@@ -119,11 +173,11 @@ export class UserService {
       throw new Error("User not found");
     }
 
-    return user;
+    return mapUserDetail(user);
   }
 
   /**
-   * Paginated user list with optional filters on userType, role, and status (User.status string).
+   * Paginated user list with optional filters on userType, AppRole (via UserRole), and status.
    * By default excludes rows where isDeleted is true.
    */
   async listUsers(params: ListUsersParams = {}): Promise<{
@@ -143,11 +197,15 @@ export class UserService {
     if (params.userType !== undefined) {
       where.userType = params.userType;
     }
-    if (params.role !== undefined) {
-      where.role = params.role;
-    }
+
     if (params.status !== undefined && params.status.trim() !== "") {
       where.status = params.status.trim();
+    }
+
+    if (params.roleId) {
+      where.userRoles = { some: { roleId: params.roleId } };
+    } else if (params.roleName) {
+      where.userRoles = { some: { role: { name: params.roleName } } };
     }
 
     if (params.q?.trim()) {
@@ -172,7 +230,7 @@ export class UserService {
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
     return {
-      users: rows as ListedUser[],
+      users: rows.map(mapListedUser),
       pagination: { page, limit, total, totalPages },
     };
   }

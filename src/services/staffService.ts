@@ -1,6 +1,6 @@
 import prisma from "../utils/prisma";
 import bcrypt from "bcryptjs";
-import { Prisma, StaffRole, Status, UserType, Role } from "@prisma/client";
+import { AppRole, Prisma, StaffRole, Status, UserType } from "@prisma/client";
 
 export interface StaffData {
   id: string;
@@ -14,7 +14,13 @@ export interface StaffData {
   createdAt: Date;
   updatedAt: Date;
   userId: string | null;
-  user?: { id: string; email: string; firstName: string | null; lastName: string | null; isActive: boolean } | null;
+  user?: {
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    isActive: boolean;
+  } | null;
   createdBy?: { firstName: string | null; lastName: string | null } | null;
 }
 
@@ -54,7 +60,7 @@ export class StaffService {
       isActive?: boolean;
       isVerified?: boolean;
       isEmailVerified?: boolean;
-      role?: Role;
+      role?: string;
       userType?: UserType;
     };
   }): Promise<StaffData> {
@@ -71,23 +77,43 @@ export class StaffService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
+        let appRole: AppRole | null = null;
+        if (input.user?.role) {
+          appRole = await tx.appRole.findUnique({ where: { id: input.user?.role } });
+          if (!appRole) throw new Error("App role not found");
+        }
+
         const createdUser = await tx.user.create({
           data: {
             email: normalizedEmail,
             password: hashedPassword,
             firstName,
             lastName,
-            ...(input.user?.phoneNumber !== undefined ? { phoneNumber: input.user.phoneNumber } : {}),
-            ...(input.profileImageUrl !== undefined ? { profileImageUrl: input.profileImageUrl } : {}),
-            userType: input.user?.userType ?? UserType.Admin,
-            role: input.user?.role ?? Role.Admin,
+            ...(input.user?.phoneNumber !== undefined
+              ? { phoneNumber: input.user.phoneNumber }
+              : {}),
+            ...(input.profileImageUrl !== undefined
+              ? { profileImageUrl: input.profileImageUrl }
+              : {}),
+            userType: input.user?.userType ?? UserType.Staff,
             isActive: input.user?.isActive ?? true,
             ...(input.user?.isVerified !== undefined ? { isVerified: input.user.isVerified } : {}),
-            ...(input.user?.isEmailVerified !== undefined ? { isEmailVerified: input.user.isEmailVerified } : {}),
+            ...(input.user?.isEmailVerified !== undefined
+              ? { isEmailVerified: input.user.isEmailVerified }
+              : {}),
             createdById: input.createdById,
           },
           select: { id: true },
         });
+
+        if (appRole) {
+          tx.userRole.create({
+            data: {
+              userId: createdUser.id,
+              roleId: appRole.id,
+            },
+          });
+        }
 
         const staff = await tx.staff.create({
           data: {
@@ -101,7 +127,9 @@ export class StaffService {
             userId: createdUser.id,
           },
           include: {
-            user: { select: { id: true, email: true, firstName: true, lastName: true, isActive: true } },
+            user: {
+              select: { id: true, email: true, firstName: true, lastName: true, isActive: true },
+            },
             createdBy: { select: { firstName: true, lastName: true } },
           },
         });
@@ -150,7 +178,9 @@ export class StaffService {
         skip,
         take: limit,
         include: {
-          user: { select: { id: true, email: true, firstName: true, lastName: true, isActive: true } },
+          user: {
+            select: { id: true, email: true, firstName: true, lastName: true, isActive: true },
+          },
           createdBy: { select: { firstName: true, lastName: true } },
         },
       }),
@@ -164,7 +194,9 @@ export class StaffService {
     return await this.prisma.staff.findUnique({
       where: { id },
       include: {
-        user: { select: { id: true, email: true, firstName: true, lastName: true, isActive: true } },
+        user: {
+          select: { id: true, email: true, firstName: true, lastName: true, isActive: true },
+        },
         createdBy: { select: { firstName: true, lastName: true } },
       },
     });
@@ -197,11 +229,15 @@ export class StaffService {
           ...(name !== undefined ? { name } : {}),
           ...(input.role !== undefined ? { role: input.role } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
-          ...(input.profileImageUrl !== undefined ? { profileImageUrl: input.profileImageUrl } : {}),
+          ...(input.profileImageUrl !== undefined
+            ? { profileImageUrl: input.profileImageUrl }
+            : {}),
           updatedAt: new Date(),
         },
         include: {
-          user: { select: { id: true, email: true, firstName: true, lastName: true, isActive: true } },
+          user: {
+            select: { id: true, email: true, firstName: true, lastName: true, isActive: true },
+          },
           createdBy: { select: { firstName: true, lastName: true } },
         },
       });
@@ -217,7 +253,9 @@ export class StaffService {
     return await this.prisma.staff.delete({
       where: { id },
       include: {
-        user: { select: { id: true, email: true, firstName: true, lastName: true, isActive: true } },
+        user: {
+          select: { id: true, email: true, firstName: true, lastName: true, isActive: true },
+        },
         createdBy: { select: { firstName: true, lastName: true } },
       },
     });
@@ -225,4 +263,3 @@ export class StaffService {
 }
 
 export const staffService = new StaffService();
-
