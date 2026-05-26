@@ -1,5 +1,21 @@
 import { Request, Response } from "express";
+import { Status } from "@prisma/client";
 import { menuService } from "../services/menuService";
+
+const MENU_STATUSES = [Status.Active, Status.Inactive, Status.Archived] as const;
+
+function parseMenuStatus(value: string | undefined): Status | "All" | undefined {
+  if (value === undefined) {
+    return undefined;
+  }
+  if (value === "All") {
+    return "All";
+  }
+  if (value === Status.Active || value === Status.Inactive || value === Status.Archived) {
+    return value;
+  }
+  return undefined;
+}
 
 /**
  * @openapi
@@ -21,6 +37,10 @@ import { menuService } from "../services/menuService";
  *               caption:
  *                 type: string
  *                 example: "Inventory Items"
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive, Archived]
+ *                 description: Optional status (defaults to Active)
  *     responses:
  *       201:
  *         description: Menu created
@@ -39,16 +59,24 @@ import { menuService } from "../services/menuService";
  *         schema:
  *           type: string
  *         description: Optional search query (matches route or caption)
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Active, Inactive, Archived, All]
+ *         description: Defaults to Active only. Use All to include every status.
  *     responses:
  *       200:
  *         description: Menus list
+ *       400:
+ *         description: Validation error
  *       500:
  *         description: Server error
  */
 export const menuController = {
   createMenu: async (req: Request, res: Response) => {
     try {
-      const { route, caption } = req.body ?? {};
+      const { route, caption, status } = req.body ?? {};
 
       if (!route || typeof route !== "string" || !route.trim()) {
         return res.status(400).json({
@@ -64,9 +92,17 @@ export const menuController = {
         });
       }
 
+      if (status !== undefined && !MENU_STATUSES.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, or Archived",
+        });
+      }
+
       const menu = await menuService.createMenu({
         route: route.trim(),
         caption: caption.trim(),
+        ...(status !== undefined ? { status } : {}),
       });
 
       return res.status(201).json({
@@ -76,16 +112,25 @@ export const menuController = {
       });
     } catch (error: any) {
       const message = error?.message ?? "Failed to create menu";
-      const status = message.includes("already exists") ? 409 : 500;
-      return res.status(status).json({ success: false, message });
+      const httpStatus = message.includes("already exists") ? 409 : 500;
+      return res.status(httpStatus).json({ success: false, message });
     }
   },
 
   listMenus: async (req: Request, res: Response) => {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status = parseMenuStatus(statusRaw);
 
-      const menus = await menuService.listMenus({ q });
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, Archived, or All",
+        });
+      }
+
+      const menus = await menuService.listMenus({ q, status });
 
       return res.json({
         success: true,
@@ -142,6 +187,9 @@ export const menuController = {
    *                 type: string
    *               caption:
    *                 type: string
+   *               status:
+   *                 type: string
+   *                 enum: [Active, Inactive, Archived]
    *     responses:
    *       200:
    *         description: Menu updated
@@ -208,7 +256,7 @@ export const menuController = {
   updateMenu: async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { route, caption } = req.body ?? {};
+      const { route, caption, status } = req.body ?? {};
 
       if (!id) {
         return res.status(400).json({
@@ -231,10 +279,17 @@ export const menuController = {
         });
       }
 
-      if (route === undefined && caption === undefined) {
+      if (status !== undefined && !MENU_STATUSES.includes(status)) {
         return res.status(400).json({
           success: false,
-          message: "At least one of route or caption is required",
+          message: "status must be Active, Inactive, or Archived",
+        });
+      }
+
+      if (route === undefined && caption === undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "At least one of route, caption, or status is required",
         });
       }
 
@@ -249,6 +304,7 @@ export const menuController = {
       const updated = await menuService.updateMenu(id, {
         ...(route !== undefined ? { route: route.trim() } : {}),
         ...(caption !== undefined ? { caption: caption.trim() } : {}),
+        ...(status !== undefined ? { status } : {}),
       });
 
       return res.json({
@@ -258,8 +314,8 @@ export const menuController = {
       });
     } catch (error: any) {
       const message = error?.message ?? "Failed to update menu";
-      const status = message.includes("already exists") ? 409 : 500;
-      return res.status(status).json({ success: false, message });
+      const httpStatus = message.includes("already exists") ? 409 : 500;
+      return res.status(httpStatus).json({ success: false, message });
     }
   },
 

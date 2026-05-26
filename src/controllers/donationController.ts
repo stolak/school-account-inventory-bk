@@ -510,6 +510,145 @@ export const donationController = {
 
   /**
    * @openapi
+   * /api/v1/donations/grouped:
+   *   get:
+   *     summary: List donation transactions grouped by referenceNo
+   *     tags: [Donations]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       Same query filters as GET /donations. Pagination applies to reference groups (not individual lines).
+   *       Each group includes referenceNo and all donation rows for that reference.
+   *     parameters:
+   *       - in: query
+   *         name: q
+   *         schema:
+   *           type: string
+   *         description: Search referenceNo/notes
+   *       - in: query
+   *         name: itemId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: storeId
+   *         schema:
+   *           type: string
+   *           format: uuid
+   *       - in: query
+   *         name: sessionId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: termId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: status
+   *         schema:
+   *           type: string
+   *           enum: [pending, cancelled, deleted, completed]
+   *       - in: query
+   *         name: transactionDateFrom
+   *         schema:
+   *           type: string
+   *           format: date
+   *       - in: query
+   *         name: transactionDateTo
+   *         schema:
+   *           type: string
+   *           format: date
+   *       - in: query
+   *         name: page
+   *         schema:
+   *           type: integer
+   *           minimum: 1
+   *           default: 1
+   *       - in: query
+   *         name: limit
+   *         schema:
+   *           type: integer
+   *           minimum: 1
+   *           maximum: 100
+   *           default: 20
+   *     responses:
+   *       200:
+   *         description: Donation groups by referenceNo
+   *       400:
+   *         description: Validation error
+   *       500:
+   *         description: Server error
+   */
+  listDonationsGroupedByReference: async (req: Request, res: Response) => {
+    try {
+      const q = typeof req.query.q === "string" ? req.query.q : undefined;
+      const itemId = typeof req.query.itemId === "string" ? req.query.itemId : undefined;
+      const storeId =
+        typeof req.query.storeId === "string" && req.query.storeId.trim()
+          ? req.query.storeId.trim()
+          : undefined;
+      const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+      const termId = typeof req.query.termId === "string" ? req.query.termId : undefined;
+
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === undefined
+          ? undefined
+          : statusRaw === "pending"
+            ? InventoryTransactionStatus.pending
+            : statusRaw === "cancelled"
+              ? InventoryTransactionStatus.cancelled
+              : statusRaw === "deleted"
+                ? InventoryTransactionStatus.deleted
+                : statusRaw === "completed"
+                  ? InventoryTransactionStatus.completed
+                  : undefined;
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({ success: false, message: "Invalid status" });
+      }
+
+      const page = parseIntOrUndefined(req.query.page);
+      const limit = parseIntOrUndefined(req.query.limit);
+
+      const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
+      const toRaw = parseQueryDateEndInclusive(req.query.transactionDateTo);
+      if (fromRaw === "invalid") return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      if (toRaw === "invalid") return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+      if (transactionDateFrom && transactionDateTo && transactionDateFrom.getTime() > transactionDateTo.getTime()) {
+        return res.status(400).json({ success: false, message: "transactionDateFrom must be before or equal to transactionDateTo" });
+      }
+
+      const result = await donationService.listDonationsGroupedByReference({
+        q,
+        itemId,
+        storeId,
+        sessionId,
+        termId,
+        status,
+        transactionDateFrom,
+        transactionDateTo,
+        page,
+        limit,
+      });
+
+      return res.json({
+        success: true,
+        message: "Donations grouped by reference retrieved successfully",
+        data: result,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve grouped donations",
+        error: error?.message,
+      });
+    }
+  },
+
+  /**
+   * @openapi
    * /api/v1/donations/summary:
    *   get:
    *     summary: Summary of donated quantities (grouped by item)

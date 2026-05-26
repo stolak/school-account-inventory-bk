@@ -18,6 +18,7 @@ const options: swaggerJSDoc.Options = {
       { name: "Brands", description: "Brand management" },
       { name: "Menus", description: "Application menu management (route and caption)" },
       { name: "AppRoles", description: "Application roles (name and status)" },
+      { name: "Privileges", description: "Permission definitions (read-only listing)" },
       { name: "Categories", description: "Category management" },
       { name: "InventoryItems", description: "Inventory item management" },
       { name: "SubCategories", description: "Sub-category management" },

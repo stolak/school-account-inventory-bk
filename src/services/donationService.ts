@@ -40,6 +40,11 @@ export interface ListDonationsParams {
   limit?: number;
 }
 
+export interface DonationReferenceGroup {
+  referenceNo: string | null;
+  donations: DonationTransactionData[];
+}
+
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -223,6 +228,70 @@ export class DonationService {
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
     return { donations: rows, pagination: { page, limit, total, totalPages } };
+  }
+
+  /**
+   * Same filters as listDonations; paginates by distinct referenceNo.
+   * Each group contains all donation lines sharing that reference.
+   */
+  // TODO: This is poorly implemented and needs to be improved
+  async listDonationsGroupedByReference(params: ListDonationsParams = {}): Promise<{
+    groups: DonationReferenceGroup[];
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }> {
+    const page = clampInt(params.page ?? 1, 1, 1_000_000);
+    const limit = clampInt(params.limit ?? 20, 1, 100);
+    const skip = (page - 1) * limit;
+    const where = this.buildDonationWhere(params);
+
+    const [groupRows, allGroupRows] = await Promise.all([
+      this.prisma.inventoryTransaction.groupBy({
+        by: ["referenceNo"],
+        where,
+        _max: { transactionDate: true },
+        orderBy: { _max: { transactionDate: "desc" } },
+        skip,
+        take: limit,
+      }),
+      this.prisma.inventoryTransaction.groupBy({
+        by: ["referenceNo"],
+        where,
+      }),
+    ]);
+
+    const total = allGroupRows.length;
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    if (groupRows.length === 0) {
+      return { groups: [], pagination: { page, limit, total, totalPages } };
+    }
+
+    const rows = await this.prisma.inventoryTransaction.findMany({
+      where: {
+        ...where,
+        OR: groupRows.map((g) => ({ referenceNo: g.referenceNo })),
+      },
+      include: donationInclude,
+      orderBy: [{ transactionDate: "desc" }, { id: "asc" }],
+    });
+
+    const donationsByReference = new Map<string | null, DonationTransactionData[]>();
+    for (const g of groupRows) {
+      donationsByReference.set(g.referenceNo, []);
+    }
+    for (const row of rows) {
+      const bucket = donationsByReference.get(row.referenceNo);
+      if (bucket) {
+        bucket.push(row);
+      }
+    }
+
+    const groups: DonationReferenceGroup[] = groupRows.map((g) => ({
+      referenceNo: g.referenceNo,
+      donations: donationsByReference.get(g.referenceNo) ?? [],
+    }));
+
+    return { groups, pagination: { page, limit, total, totalPages } };
   }
 
   async getDonationById(id: string): Promise<DonationTransactionData | null> {

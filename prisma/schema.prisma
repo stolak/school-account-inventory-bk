@@ -248,6 +248,7 @@ model Menu {
   id        String     @id @default(uuid()) @db.Char(36)
   route     String     @unique
   caption   String
+  status    Status     @default(Active)
   roleMenus RoleMenu[]
 
   @@map("menus")

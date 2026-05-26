@@ -11,6 +11,7 @@ router.put("/bulk", donationController.updateBulkDonations);
 router.delete("/bulk", donationController.deleteBulkDonations);
 router.post("/", donationController.createDonation);
 router.get("/summary", donationController.getDonationSummary);
+router.get("/grouped", donationController.listDonationsGroupedByReference);
 router.get("/", donationController.listDonations);
 router.get("/:id", donationController.getDonationById);
 router.put("/:id", donationController.updateDonation);
