@@ -387,3 +387,87 @@ export const resetPassword = async (req: Request, res: Response) => {
     });
   }
 };
+
+/**
+ * @openapi
+ * /api/v1/auth/me/privileges:
+ *   get:
+ *     summary: Get effective privileges for the authenticated user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Uses the JWT subject user id. Returns direct privileges plus those on the user's AppRole.
+ *       SuperAdmin users receive every privilege in the system.
+ *     responses:
+ *       200:
+ *         description: Privilege list for the current user
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+export const getMyPrivileges = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const privileges = await userService.getUserPrivileges(userId);
+
+    return res.json({
+      success: true,
+      message: "Privileges retrieved successfully",
+      data: { privileges },
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to retrieve privileges";
+    const httpStatus = message === "User not found" ? 404 : 500;
+    return res.status(httpStatus).json({ success: false, message });
+  }
+};
+
+/**
+ * @openapi
+ * /api/v1/auth/me/menus:
+ *   get:
+ *     summary: Get menus for the authenticated user's application role
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     description: |
+ *       Uses the JWT subject user id. Returns menus on the user's AppRole via RoleMenu.
+ *       SuperAdmin users receive every menu in the system.
+ *     responses:
+ *       200:
+ *         description: Menu list for the current user
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+export const getMyMenus = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const menus = await userService.getUserMenus(userId);
+
+    return res.json({
+      success: true,
+      message: "Menus retrieved successfully",
+      data: { menus },
+    });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to retrieve menus";
+    const httpStatus = message === "User not found" ? 404 : 500;
+    return res.status(httpStatus).json({ success: false, message });
+  }
+};

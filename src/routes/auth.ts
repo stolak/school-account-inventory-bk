@@ -1,5 +1,12 @@
 import express from "express";
-import { register, login, forgotPassword, resetPassword } from "../controllers/authController";
+import {
+  register,
+  login,
+  forgotPassword,
+  resetPassword,
+  getMyPrivileges,
+  getMyMenus,
+} from "../controllers/authController";
 import { authenticateJWT } from "../middlewares/auth";
 const router = express.Router();
 /**
@@ -124,5 +131,8 @@ router.post("/forgot-password", forgotPassword);
  *         description: Invalid or expired token
  */
 router.post("/reset-password", resetPassword);
+
+router.get("/me/privileges", authenticateJWT, getMyPrivileges);
+router.get("/me/menus", authenticateJWT, getMyMenus);
 
 export = router;

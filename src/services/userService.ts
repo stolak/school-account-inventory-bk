@@ -1,5 +1,5 @@
 import prisma from "../utils/prisma";
-import { Prisma, UserType } from "@prisma/client";
+import { Prisma, Status, UserType } from "@prisma/client";
 
 export interface ListUsersParams {
   /** userType (Prisma UserType) */
@@ -43,6 +43,13 @@ export interface PrivilegeSummary {
   description: string | null;
 }
 
+export interface MenuSummary {
+  id: string;
+  route: string;
+  caption: string;
+  status: Status;
+}
+
 export interface AppRoleSummary {
   id: string;
   name: string;
@@ -73,6 +80,13 @@ const privilegeSelect = {
   name: true,
   description: true,
 } satisfies Prisma.PrivilegeSelect;
+
+const menuSelect = {
+  id: true,
+  route: true,
+  caption: true,
+  status: true,
+} satisfies Prisma.MenuSelect;
 
 const appRoleSelect = {
   id: true,
@@ -162,6 +176,24 @@ function mapListedUser(user: Prisma.UserGetPayload<{ select: typeof userListSele
   };
 }
 
+function mergePrivilegesById(groups: PrivilegeSummary[][]): PrivilegeSummary[] {
+  const byId = new Map<string, PrivilegeSummary>();
+  for (const group of groups) {
+    for (const p of group) {
+      byId.set(p.id, p);
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function mergeMenusById(menus: MenuSummary[]): MenuSummary[] {
+  const byId = new Map<string, MenuSummary>();
+  for (const m of menus) {
+    byId.set(m.id, m);
+  }
+  return [...byId.values()].sort((a, b) => a.route.localeCompare(b.route));
+}
+
 export class UserService {
   async getUserById(userId: string): Promise<UserDetailData> {
     const user = await prisma.user.findUnique({
@@ -174,6 +206,85 @@ export class UserService {
     }
 
     return mapUserDetail(user);
+  }
+
+  /**
+   * Effective privileges for a user: direct User↔Privilege links plus privileges on the
+   * assigned AppRole (UserRole). SuperAdmin users receive every privilege in the system.
+   */
+  async getUserPrivileges(userId: string): Promise<PrivilegeSummary[]> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        userType: true,
+        privileges: { select: privilegeSelect },
+        userRoles: {
+          select: {
+            role: {
+              select: {
+                privileges: { select: privilegeSelect },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (user.userType === UserType.SuperAdmin) {
+      return prisma.privilege.findMany({
+        select: privilegeSelect,
+        orderBy: { name: "asc" },
+      });
+    }
+
+    const rolePrivileges = user.userRoles.flatMap((ur) => ur.role.privileges);
+    return mergePrivilegesById([user.privileges, rolePrivileges]);
+  }
+
+  /**
+   * Menus linked to the user's AppRole via RoleMenu (UserRole → AppRole).
+   * SuperAdmin users receive every menu in the system.
+   */
+  async getUserMenus(userId: string): Promise<MenuSummary[]> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        userType: true,
+        userRoles: {
+          select: {
+            role: {
+              select: {
+                roleMenus: {
+                  select: {
+                    menu: { select: menuSelect },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (user.userType === UserType.SuperAdmin) {
+      return prisma.menu.findMany({
+        select: menuSelect,
+        orderBy: { route: "asc" },
+      });
+    }
+
+    const roleMenus = user.userRoles.flatMap((ur) =>
+      ur.role.roleMenus.map((rm) => rm.menu)
+    );
+    return mergeMenusById(roleMenus);
   }
 
   /**

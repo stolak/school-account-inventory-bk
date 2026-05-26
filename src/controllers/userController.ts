@@ -210,6 +210,47 @@ export const userController = {
   /**
    * @openapi
    * /api/v1/users/{userId}/privileges:
+   *   get:
+   *     summary: List effective privileges for a user
+   *     tags: [Users]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       Returns privileges assigned directly to the user plus those on the user's AppRole (UserRole).
+   *       SuperAdmin users receive every privilege in the system.
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Effective privilege list
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success: { type: boolean }
+   *                 message: { type: string }
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     privileges:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           id: { type: string }
+   *                           name: { type: string }
+   *                           description: { type: string, nullable: true }
+   *       404:
+   *         description: User not found
+   *       401:
+   *         description: Unauthorized
+   *       500:
+   *         description: Server error
    *   post:
    *     summary: Assign privileges to a user
    *     tags: [Users]
@@ -245,6 +286,99 @@ export const userController = {
    *       500:
    *         description: Server error
    */
+  getUserPrivileges: async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        return res.status(400).json({ success: false, message: "userId parameter is required" });
+      }
+
+      const privileges = await userService.getUserPrivileges(userId);
+
+      return res.json({
+        success: true,
+        message: "User privileges retrieved successfully",
+        data: { privileges },
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to retrieve user privileges";
+      const httpStatus = message === "User not found" ? 404 : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/users/{userId}/menus:
+   *   get:
+   *     summary: List menus for a user's application role
+   *     tags: [Users]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       Returns menus assigned to the user's AppRole via RoleMenu (UserRole → AppRole).
+   *       SuperAdmin users receive every menu in the system. Users without a role receive an empty list.
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Menu list for the user's role
+   *         content:
+   *           application/json:
+   *             schema:
+   *               type: object
+   *               properties:
+   *                 success: { type: boolean }
+   *                 message: { type: string }
+   *                 data:
+   *                   type: object
+   *                   properties:
+   *                     menus:
+   *                       type: array
+   *                       items:
+   *                         type: object
+   *                         properties:
+   *                           id: { type: string }
+   *                           route: { type: string }
+   *                           caption: { type: string }
+   *                           status:
+   *                             type: string
+   *                             enum: [Active, Inactive, Archived]
+   *       404:
+   *         description: User not found
+   *       401:
+   *         description: Unauthorized
+   *       500:
+   *         description: Server error
+   */
+  getUserMenus: async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        return res.status(400).json({ success: false, message: "userId parameter is required" });
+      }
+
+      const menus = await userService.getUserMenus(userId);
+
+      return res.json({
+        success: true,
+        message: "User menus retrieved successfully",
+        data: { menus },
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve user menus";
+      const httpStatus = message === "User not found" ? 404 : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
   addPrivilegesToUser: async (req: Request, res: Response) => {
     try {
       const { userId } = req.params;
