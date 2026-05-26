@@ -27,6 +27,17 @@ function parsePrivilegeIds(body: unknown): string[] | null {
   return privilegeIds.map((id) => id.trim());
 }
 
+function parseMenuIds(body: unknown): string[] | null {
+  const menuIds = (body as { menuIds?: unknown })?.menuIds;
+  if (!Array.isArray(menuIds) || menuIds.length === 0) {
+    return null;
+  }
+  if (!menuIds.every((id) => typeof id === "string" && id.trim())) {
+    return null;
+  }
+  return menuIds.map((id) => id.trim());
+}
+
 /**
  * @openapi
  * /api/v1/app-roles:
@@ -457,6 +468,172 @@ export const appRoleController = {
         message === "Role not found" || message === "Privilege is not assigned to this role"
           ? 404
           : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/app-roles/{id}/menus:
+   *   post:
+   *     summary: Assign menus to a role
+   *     tags: [AppRoles]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Role ID
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [menuIds]
+   *             properties:
+   *               menuIds:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *                 example: ["menu-uuid-1", "menu-uuid-2"]
+   *     responses:
+   *       200:
+   *         description: Menus assigned; returns all role-menu links for the role
+   *       400:
+   *         description: Validation error
+   *       404:
+   *         description: Role or menu not found
+   *       500:
+   *         description: Server error
+   *   get:
+   *     summary: List menus attached to a role
+   *     tags: [AppRoles]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Role ID
+   *     responses:
+   *       200:
+   *         description: Role-menu links with nested menu details
+   *       404:
+   *         description: Role not found
+   *       500:
+   *         description: Server error
+   */
+  addMenusToRole: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const menuIds = parseMenuIds(req.body);
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: "Role id parameter is required",
+        });
+      }
+
+      if (!menuIds) {
+        return res.status(400).json({
+          success: false,
+          message: "menuIds must be a non-empty array of strings",
+        });
+      }
+
+      const roleMenus = await appRoleService.addMenusToRole(id, menuIds);
+
+      return res.json({
+        success: true,
+        message: "Menus added to role successfully",
+        data: { roleMenus },
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to add menus to role";
+      const httpStatus =
+        message === "Role not found" || message.includes("menu IDs were not found")
+          ? 404
+          : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  listRoleMenus: async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+
+      if (!id) {
+        return res.status(400).json({
+          success: false,
+          message: "Role id parameter is required",
+        });
+      }
+
+      const roleMenus = await appRoleService.listRoleMenus(id);
+
+      return res.json({
+        success: true,
+        message: "Role menus retrieved successfully",
+        data: { roleMenus },
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to retrieve role menus";
+      const httpStatus = message === "Role not found" ? 404 : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/app-roles/{id}/menus/{roleMenuId}:
+   *   delete:
+   *     summary: Remove a menu from a role (delete role_menu link)
+   *     tags: [AppRoles]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: Role ID
+   *       - in: path
+   *         name: roleMenuId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: RoleMenu join record ID (from GET /app-roles/{id}/menus)
+   *     responses:
+   *       200:
+   *         description: Role-menu link deleted
+   *       404:
+   *         description: Role or role-menu record not found
+   *       500:
+   *         description: Server error
+   */
+  deleteRoleMenu: async (req: Request, res: Response) => {
+    try {
+      const { id, roleMenuId } = req.params;
+
+      if (!id || !roleMenuId) {
+        return res.status(400).json({
+          success: false,
+          message: "Role id and roleMenuId parameters are required",
+        });
+      }
+
+      const deleted = await appRoleService.deleteRoleMenu(id, roleMenuId);
+
+      return res.json({
+        success: true,
+        message: "Menu removed from role successfully",
+        data: deleted,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to remove menu from role";
+      const httpStatus = message === "Role menu record not found" ? 404 : 500;
       return res.status(httpStatus).json({ success: false, message });
     }
   },

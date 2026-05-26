@@ -1,5 +1,5 @@
 import prisma from "../utils/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, Status } from "@prisma/client";
 
 export type AppRoleStatus = "active" | "inactive";
 
@@ -14,11 +14,26 @@ export interface AppRoleData {
   name: string;
   status: string;
   privileges?: PrivilegeSummary[];
+  roleMenus?: RoleMenuData[];
 }
 
 export interface ListAppRolesParams {
   q?: string;
   status?: AppRoleStatus | "all";
+}
+
+export interface RoleMenuMenuSummary {
+  id: string;
+  route: string;
+  caption: string;
+  status: Status;
+}
+
+export interface RoleMenuData {
+  id: string;
+  roleId: string;
+  menuId: string;
+  menu: RoleMenuMenuSummary;
 }
 
 const privilegeSelect = {
@@ -29,6 +44,24 @@ const privilegeSelect = {
 
 const roleWithPrivilegesInclude = {
   privileges: { select: privilegeSelect },
+} satisfies Prisma.AppRoleInclude;
+
+const roleMenuInclude = {
+  menu: {
+    select: {
+      id: true,
+      route: true,
+      caption: true,
+      status: true,
+    },
+  },
+} satisfies Prisma.RoleMenuInclude;
+
+const appRoleDetailInclude = {
+  privileges: { select: privilegeSelect },
+  roleMenus: {
+    include: roleMenuInclude,
+  },
 } satisfies Prisma.AppRoleInclude;
 
 function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
@@ -64,7 +97,7 @@ export class AppRoleService {
 
     const rows = await this.prisma.appRole.findMany({
       where: finalWhere,
-      include: roleWithPrivilegesInclude,
+      include: appRoleDetailInclude,
       orderBy: { name: "asc" },
     });
 
@@ -79,7 +112,7 @@ export class AppRoleService {
   async getAppRoleById(id: string): Promise<AppRoleData | null> {
     return await this.prisma.appRole.findUnique({
       where: { id },
-      include: roleWithPrivilegesInclude,
+      include: appRoleDetailInclude,
     });
   }
 
@@ -169,6 +202,71 @@ export class AppRoleService {
       },
       include: roleWithPrivilegesInclude,
     });
+  }
+
+  async addMenusToRole(roleId: string, menuIds: string[]): Promise<RoleMenuData[]> {
+    const uniqueIds = [...new Set(menuIds)];
+
+    const role = await this.prisma.appRole.findUnique({
+      where: { id: roleId },
+      select: { id: true },
+    });
+    if (!role) {
+      throw new Error("Role not found");
+    }
+
+    const menus = await this.prisma.menu.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true },
+    });
+    if (menus.length !== uniqueIds.length) {
+      throw new Error("One or more menu IDs were not found");
+    }
+
+    const existing = await this.prisma.roleMenu.findMany({
+      where: { roleId, menuId: { in: uniqueIds } },
+      select: { menuId: true },
+    });
+    const existingMenuIds = new Set(existing.map((r) => r.menuId));
+    const toCreate = uniqueIds.filter((menuId) => !existingMenuIds.has(menuId));
+
+    if (toCreate.length > 0) {
+      await this.prisma.roleMenu.createMany({
+        data: toCreate.map((menuId) => ({ roleId, menuId })),
+      });
+    }
+
+    return this.listRoleMenus(roleId);
+  }
+
+  async listRoleMenus(roleId: string): Promise<RoleMenuData[]> {
+    const role = await this.prisma.appRole.findUnique({
+      where: { id: roleId },
+      select: { id: true },
+    });
+    if (!role) {
+      throw new Error("Role not found");
+    }
+
+    return await this.prisma.roleMenu.findMany({
+      where: { roleId },
+      include: roleMenuInclude,
+      orderBy: { menu: { route: "asc" } },
+    });
+  }
+
+  async deleteRoleMenu(roleId: string, menuId: string): Promise<RoleMenuData> {
+    const record = await this.prisma.roleMenu.findFirst({
+      where: { menuId, roleId },
+      include: roleMenuInclude,
+    });
+
+    if (!record) {
+      throw new Error("Role menu record not found");
+    }
+
+    await this.prisma.roleMenu.delete({ where: { id: record.id } });
+    return record;
   }
 }
 
