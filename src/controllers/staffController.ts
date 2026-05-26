@@ -1,17 +1,23 @@
 import { Request, Response } from "express";
 import { staffService } from "../services/staffService";
-import { StaffRole, Status, UserType } from "@prisma/client";
+import { StaffPosition, Status, UserType } from "@prisma/client";
+
+const STAFF_POSITIONS = Object.values(StaffPosition) as string[];
 import { isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
 
 /**
  * @openapi
  * /api/v1/staff:
  *   post:
- *     summary: Register a staff and create a linked user
+ *     summary: Register a staff member and create a linked user
  *     tags: [Staff]
  *     security:
  *       - bearerAuth: []
- *     description: Creates a Staff row and also creates a User row, then links them via Staff.userId.
+ *     description: |
+ *       Creates a User and a Staff row linked via Staff.userId.
+ *       Email is checked on users and staff; StaffNumber must be unique on staff.
+ *       Optional `appRoleId` is an AppRole id (UUID) — when provided, a UserRole row is created for the new user.
+ *       Password defaults to `12345` if omitted. Staff `position` defaults to teacher when omitted.
  *     requestBody:
  *       required: true
  *       content:
@@ -22,49 +28,56 @@ import { isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request
  *             properties:
  *               StaffNumber:
  *                 type: string
+ *                 description: Unique staff number
  *               email:
  *                 type: string
+ *                 format: email
  *               name:
  *                 type: string
- *               role:
+ *                 description: Full name (split into user firstName/lastName)
+ *               position:
  *                 type: string
  *                 enum: [class_teacher, assistant_teacher, subject_teacher, principal, vice_principal, teacher, admin, other]
+ *                 description: Staff job position (defaults to teacher)
  *               status:
  *                 type: string
  *                 enum: [Active, Inactive, Archived]
+ *                 description: Staff record status (defaults to Active)
  *               profileImageUrl:
  *                 type: string
  *                 nullable: true
- *               user:
- *                 type: object
- *                 description: Optional user overrides (password defaults to 12345)
- *                 properties:
- *                   password:
- *                     type: string
- *                   phoneNumber:
- *                     type: string
- *                     nullable: true
- *                   isActive:
- *                     type: boolean
- *                   isVerified:
- *                     type: boolean
- *                   isEmailVerified:
- *                     type: boolean
- *                   role:
- *                     type: string
- *                     enum: [Visitor, Admin, Merchant, Buyer, SuperAdmin, CustomerSupport]
- *                   userType:
- *                     type: string
- *                     enum: [Admin, Merchant, Buyer]
+ *               password:
+ *                 type: string
+ *                 description: User login password (defaults to 12345)
+ *               phoneNumber:
+ *                 type: string
+ *                 nullable: true
+ *               isActive:
+ *                 type: boolean
+ *                 description: User.isActive (defaults to true)
+ *               isVerified:
+ *                 type: boolean
+ *               isEmailVerified:
+ *                 type: boolean
+ *               appRoleId:
+ *                 type: string
+ *                 format: uuid
+ *                 description: AppRole id to assign via UserRole (optional)
+ *               userType:
+ *                 type: string
+ *                 enum: [SuperAdmin, Staff, Student, Parent]
+ *                 description: User.userType (defaults to Staff)
  *     responses:
  *       201:
- *         description: Staff created
+ *         description: Staff and user created
  *       400:
  *         description: Validation error
  *       401:
  *         description: Unauthorized
+ *       404:
+ *         description: App role not found
  *       409:
- *         description: Duplicate StaffNumber/email
+ *         description: Duplicate StaffNumber or email
  *       500:
  *         description: Server error
  *   get:
@@ -78,10 +91,11 @@ import { isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request
  *         schema: { type: string }
  *         description: Optional search in StaffNumber, name, email
  *       - in: query
- *         name: role
+ *         name: position
  *         schema:
  *           type: string
  *           enum: [class_teacher, assistant_teacher, subject_teacher, principal, vice_principal, teacher, admin, other]
+ *         description: Filter by Staff.position
  *       - in: query
  *         name: status
  *         schema:
@@ -103,7 +117,21 @@ import { isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request
 export const staffController = {
   createStaff: async (req: Request, res: Response) => {
     try {
-      const { StaffNumber, email, name, role, status, profileImageUrl, user } = req.body ?? {};
+      const {
+        StaffNumber,
+        email,
+        name,
+        position,
+        appRoleId,
+        status,
+        profileImageUrl,
+        password,
+        phoneNumber,
+        isActive,
+        isVerified,
+        isEmailVerified,
+        userType,
+      } = req.body ?? {};
 
       if (!StaffNumber || typeof StaffNumber !== "string" || !StaffNumber.trim()) {
         return res.status(400).json({ success: false, message: "StaffNumber is required" });
@@ -114,8 +142,21 @@ export const staffController = {
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ success: false, message: "name is required" });
       }
-      if (role !== undefined && role !== null && !Object.values(StaffRole).includes(role)) {
-        return res.status(400).json({ success: false, message: "Invalid role" });
+      if (
+        position !== undefined &&
+        position !== null &&
+        !STAFF_POSITIONS.includes(position)
+      ) {
+        return res.status(400).json({ success: false, message: "Invalid position" });
+      }
+      if (
+        appRoleId !== undefined &&
+        appRoleId !== null &&
+        (typeof appRoleId !== "string" || !appRoleId.trim())
+      ) {
+        return res
+          .status(400)
+          .json({ success: false, message: "appRoleId must be a non-empty AppRole id" });
       }
       if (
         status !== undefined &&
@@ -131,9 +172,19 @@ export const staffController = {
           .status(400)
           .json({ success: false, message: "profileImageUrl must be a string or null" });
       }
-
-      if (user !== undefined && (typeof user !== "object" || user === null)) {
-        return res.status(400).json({ success: false, message: "user must be an object" });
+      if (phoneNumber !== undefined && !isStringOrNullOrUndefined(phoneNumber)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "phoneNumber must be a string or null" });
+      }
+      if (password !== undefined && typeof password !== "string") {
+        return res.status(400).json({ success: false, message: "password must be a string" });
+      }
+      if (userType !== undefined && !Object.values(UserType).includes(userType)) {
+        return res.status(400).json({
+          success: false,
+          message: "userType must be SuperAdmin, Staff, Student, or Parent",
+        });
       }
 
       const createdById = (req as any).user?.id;
@@ -143,8 +194,8 @@ export const staffController = {
         StaffNumber: StaffNumber.trim(),
         email: email.trim(),
         name: name.trim(),
-        ...(role !== undefined ? { role } : {}),
-        ...(status !== undefined ? { status } : {}),
+        ...(position !== undefined && position !== null ? { position } : {}),
+        ...(status !== undefined && status !== null ? { status } : {}),
         profileImageUrl:
           profileImageUrl === undefined
             ? undefined
@@ -152,24 +203,17 @@ export const staffController = {
               ? null
               : profileImageUrl,
         createdById,
-        user:
-          user === undefined
-            ? undefined
-            : {
-                ...(typeof user.password === "string" ? { password: user.password } : {}),
-                ...(user.phoneNumber === undefined
-                  ? {}
-                  : { phoneNumber: user.phoneNumber === "" ? null : user.phoneNumber }),
-                ...(typeof user.isActive === "boolean" ? { isActive: user.isActive } : {}),
-                ...(typeof user.isVerified === "boolean" ? { isVerified: user.isVerified } : {}),
-                ...(typeof user.isEmailVerified === "boolean"
-                  ? { isEmailVerified: user.isEmailVerified }
-                  : {}),
-                ...(user.role !== undefined ? { role: user.role } : {}),
-                ...(user.userType !== undefined && Object.values(UserType).includes(user.userType)
-                  ? { userType: user.userType }
-                  : {}),
-              },
+        ...(typeof password === "string" ? { password } : {}),
+        ...(phoneNumber !== undefined
+          ? { phoneNumber: phoneNumber === "" ? null : phoneNumber }
+          : {}),
+        ...(typeof isActive === "boolean" ? { isActive } : {}),
+        ...(typeof isVerified === "boolean" ? { isVerified } : {}),
+        ...(typeof isEmailVerified === "boolean" ? { isEmailVerified } : {}),
+        ...(appRoleId !== undefined && appRoleId !== null
+          ? { appRoleId: appRoleId.trim() }
+          : {}),
+        ...(userType !== undefined ? { userType } : {}),
       });
 
       return res
@@ -179,9 +223,11 @@ export const staffController = {
       const message = error?.message ?? "Failed to create staff";
       const status = message.includes("already exists")
         ? 409
-        : message.includes("required")
-          ? 400
-          : 500;
+        : message === "App role not found"
+          ? 404
+          : message.includes("required") || message.includes("must be")
+            ? 400
+            : 500;
       return res.status(status).json({ success: false, message });
     }
   },
@@ -189,13 +235,14 @@ export const staffController = {
   listStaff: async (req: Request, res: Response) => {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
-      const roleRaw = typeof req.query.role === "string" ? req.query.role : undefined;
-      const role =
-        roleRaw && (Object.values(StaffRole) as string[]).includes(roleRaw)
-          ? (roleRaw as StaffRole)
+      const positionRaw =
+        typeof req.query.position === "string" ? req.query.position : undefined;
+      const position =
+        positionRaw && STAFF_POSITIONS.includes(positionRaw)
+          ? (positionRaw as StaffPosition)
           : undefined;
-      if (roleRaw !== undefined && role === undefined) {
-        return res.status(400).json({ success: false, message: "Invalid role" });
+      if (positionRaw !== undefined && position === undefined) {
+        return res.status(400).json({ success: false, message: "Invalid position" });
       }
 
       const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
@@ -218,7 +265,7 @@ export const staffController = {
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
-      const result = await staffService.listStaff({ q, role, status, page, limit });
+      const result = await staffService.listStaff({ q, position, status, page, limit });
       return res.json({ success: true, message: "Staff retrieved successfully", data: result });
     } catch (error: any) {
       return res
@@ -262,11 +309,11 @@ export const staffController = {
    *             properties:
    *               StaffNumber: { type: string }
    *               email: { type: string }
-   *               name: { type: string }
-   *               role:
-   *                 type: string
-   *                 enum: [class_teacher, assistant_teacher, subject_teacher, principal, vice_principal, teacher, admin, other]
-   *               status:
+ *               name: { type: string }
+ *               position:
+ *                 type: string
+ *                 enum: [class_teacher, assistant_teacher, subject_teacher, principal, vice_principal, teacher, admin, other]
+ *               status:
    *                 type: string
    *                 enum: [Active, Inactive, Archived]
    *               profileImageUrl:
@@ -310,7 +357,7 @@ export const staffController = {
       const { id } = req.params;
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
-      const { StaffNumber, email, name, role, status, profileImageUrl } = req.body ?? {};
+      const { StaffNumber, email, name, position, status, profileImageUrl } = req.body ?? {};
       if (StaffNumber !== undefined && (typeof StaffNumber !== "string" || !StaffNumber.trim())) {
         return res
           .status(400)
@@ -324,8 +371,8 @@ export const staffController = {
       if (name !== undefined && (typeof name !== "string" || !name.trim())) {
         return res.status(400).json({ success: false, message: "name must be a non-empty string" });
       }
-      if (role !== undefined && role !== null && !Object.values(StaffRole).includes(role)) {
-        return res.status(400).json({ success: false, message: "Invalid role" });
+      if (position !== undefined && position !== null && !STAFF_POSITIONS.includes(position)) {
+        return res.status(400).json({ success: false, message: "Invalid position" });
       }
       if (
         status !== undefined &&
@@ -346,7 +393,7 @@ export const staffController = {
         ...(StaffNumber !== undefined ? { StaffNumber } : {}),
         ...(email !== undefined ? { email } : {}),
         ...(name !== undefined ? { name } : {}),
-        ...(role !== undefined ? { role } : {}),
+        ...(position !== undefined && position !== null ? { position } : {}),
         ...(status !== undefined ? { status } : {}),
         ...(profileImageUrl !== undefined
           ? { profileImageUrl: profileImageUrl === "" ? null : profileImageUrl }

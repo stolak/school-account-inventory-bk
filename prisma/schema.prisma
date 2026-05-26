@@ -195,7 +195,7 @@ enum InventoryTransactionStatus {
   completed
 }
 
-enum StaffRole {
+enum StaffPosition {
   class_teacher
   assistant_teacher
   subject_teacher
@@ -518,15 +518,15 @@ model DefaultBillingPeriod {
 model Staff {
   id String @id @default(uuid()) @db.Char(36)
 
-  StaffNumber     String    @unique @map("staff_number") @db.Char(36)
-  email           String    @unique
+  StaffNumber     String        @unique @map("staff_number") @db.Char(36)
+  email           String        @unique
   name            String
-  role            StaffRole @default(teacher)
-  status          Status    @default(Active)
-  profileImageUrl String?   @map("profile_image_url")
-  createdById     String    @map("created_by") @db.Char(36)
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @default(now()) @map("updated_at")
+  position        StaffPosition @default(teacher)
+  status          Status        @default(Active)
+  profileImageUrl String?       @map("profile_image_url")
+  createdById     String        @map("created_by") @db.Char(36)
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @default(now()) @map("updated_at")
 
   createdBy User @relation("StaffCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 

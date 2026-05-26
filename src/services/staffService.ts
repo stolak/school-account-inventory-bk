@@ -1,13 +1,13 @@
 import prisma from "../utils/prisma";
 import bcrypt from "bcryptjs";
-import { AppRole, Prisma, StaffRole, Status, UserType } from "@prisma/client";
+import { AppRole, Prisma, StaffPosition, Status, UserType } from "@prisma/client";
 
 export interface StaffData {
   id: string;
   StaffNumber: string;
   email: string;
   name: string;
-  role: StaffRole;
+  position: StaffPosition;
   status: Status;
   profileImageUrl: string | null;
   createdById: string;
@@ -26,7 +26,7 @@ export interface StaffData {
 
 export interface ListStaffParams {
   q?: string;
-  role?: StaffRole;
+  position?: StaffPosition;
   status?: Status | "All";
   page?: number;
   limit?: number;
@@ -50,19 +50,17 @@ export class StaffService {
     StaffNumber: string;
     email: string;
     name: string;
-    role?: StaffRole;
     status?: Status;
     profileImageUrl?: string | null;
     createdById: string;
-    user?: {
-      password?: string;
-      phoneNumber?: string | null;
-      isActive?: boolean;
-      isVerified?: boolean;
-      isEmailVerified?: boolean;
-      role?: string;
-      userType?: UserType;
-    };
+    password?: string;
+    phoneNumber?: string | null;
+    isActive?: boolean;
+    isVerified?: boolean;
+    isEmailVerified?: boolean;
+    position?: StaffPosition;
+    appRoleId?: string | null;
+    userType?: UserType;
   }): Promise<StaffData> {
     const normalizedEmail = input.email.trim().toLowerCase();
     const normalizedStaffNumber = input.StaffNumber.trim();
@@ -72,16 +70,26 @@ export class StaffService {
     if (!normalizedName) throw new Error("name is required");
 
     const { firstName, lastName } = splitName(normalizedName);
-    const rawPassword = input.user?.password ?? "12345";
+    const rawPassword = input.password ?? "12345";
     const hashedPassword = await bcrypt.hash(rawPassword, 10);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
         let appRole: AppRole | null = null;
-        if (input.user?.role) {
-          appRole = await tx.appRole.findUnique({ where: { id: input.user?.role } });
+        if (input.appRoleId) {
+          appRole = await tx.appRole.findUnique({ where: { id: input.appRoleId } });
           if (!appRole) throw new Error("App role not found");
         }
+        // verify if email already exists
+        const existingUser = await tx.user.findUnique({ where: { email: normalizedEmail } });
+        if (existingUser) throw new Error("Email already exists");
+        // verify if staff number already exists
+        const existingStaff = await tx.staff.findFirst({
+          where: {
+            OR: [{ StaffNumber: normalizedStaffNumber }, { email: normalizedEmail }],
+          },
+        });
+        if (existingStaff) throw new Error("Staff number or email already exists");
 
         const createdUser = await tx.user.create({
           data: {
@@ -89,17 +97,15 @@ export class StaffService {
             password: hashedPassword,
             firstName,
             lastName,
-            ...(input.user?.phoneNumber !== undefined
-              ? { phoneNumber: input.user.phoneNumber }
-              : {}),
+            ...(input.phoneNumber !== undefined ? { phoneNumber: input.phoneNumber } : {}),
             ...(input.profileImageUrl !== undefined
               ? { profileImageUrl: input.profileImageUrl }
               : {}),
-            userType: input.user?.userType ?? UserType.Staff,
-            isActive: input.user?.isActive ?? true,
-            ...(input.user?.isVerified !== undefined ? { isVerified: input.user.isVerified } : {}),
-            ...(input.user?.isEmailVerified !== undefined
-              ? { isEmailVerified: input.user.isEmailVerified }
+            userType: input.userType ?? UserType.Staff,
+            isActive: input.isActive ?? true,
+            ...(input.isVerified !== undefined ? { isVerified: input.isVerified } : {}),
+            ...(input.isEmailVerified !== undefined
+              ? { isEmailVerified: input.isEmailVerified }
               : {}),
             createdById: input.createdById,
           },
@@ -107,7 +113,7 @@ export class StaffService {
         });
 
         if (appRole) {
-          tx.userRole.create({
+          await tx.userRole.create({
             data: {
               userId: createdUser.id,
               roleId: appRole.id,
@@ -120,7 +126,7 @@ export class StaffService {
             StaffNumber: normalizedStaffNumber,
             email: normalizedEmail,
             name: normalizedName,
-            role: input.role ?? StaffRole.teacher,
+            ...(input.position !== undefined ? { position: input.position } : {}),
             status: input.status ?? Status.Active,
             profileImageUrl: input.profileImageUrl ?? null,
             createdById: input.createdById,
@@ -160,7 +166,7 @@ export class StaffService {
       where.status = params.status;
     }
 
-    if (params.role) where.role = params.role;
+    if (params.position) where.position = params.position;
 
     if (params.q) {
       where.OR = [
@@ -208,7 +214,7 @@ export class StaffService {
       StaffNumber?: string;
       email?: string;
       name?: string;
-      role?: StaffRole;
+      position?: StaffPosition;
       status?: Status;
       profileImageUrl?: string | null;
     }
@@ -227,7 +233,7 @@ export class StaffService {
           ...(staffNumber !== undefined ? { StaffNumber: staffNumber } : {}),
           ...(email !== undefined ? { email } : {}),
           ...(name !== undefined ? { name } : {}),
-          ...(input.role !== undefined ? { role: input.role } : {}),
+          ...(input.position !== undefined ? { position: input.position } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
           ...(input.profileImageUrl !== undefined
             ? { profileImageUrl: input.profileImageUrl }
