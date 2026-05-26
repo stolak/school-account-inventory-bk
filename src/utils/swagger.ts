@@ -16,6 +16,8 @@ const options: swaggerJSDoc.Options = {
       { name: "Auth", description: "Authentication endpoints" },
       { name: "Banks", description: "Bank management" },
       { name: "Brands", description: "Brand management" },
+      { name: "Menus", description: "Application menu management (route and caption)" },
+      { name: "AppRoles", description: "Application roles (name and status)" },
       { name: "Categories", description: "Category management" },
       { name: "InventoryItems", description: "Inventory item management" },
       { name: "SubCategories", description: "Sub-category management" },

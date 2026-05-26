@@ -312,6 +312,260 @@ async function main() {
       },
     });
 
+    // Privileges (RBAC — many-to-many with User and AppRole)
+    console.log("🔐 Seeding privileges...");
+    const privileges = [
+      // Users
+      {
+        id: "f1000001-0001-4001-8001-000000000001",
+        name: "users.create",
+        description: "Create user accounts",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000002",
+        name: "users.read",
+        description: "View user accounts and profiles",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000003",
+        name: "users.update",
+        description: "Update user accounts",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000004",
+        name: "users.delete",
+        description: "Delete or deactivate user accounts",
+      },
+      // Application roles
+      {
+        id: "f1000001-0001-4001-8001-000000000005",
+        name: "roles.create",
+        description: "Create application roles",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000006",
+        name: "roles.read",
+        description: "View application roles",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000007",
+        name: "roles.update",
+        description: "Update application roles",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000008",
+        name: "roles.delete",
+        description: "Delete application roles",
+      },
+      // Privileges & menus
+      {
+        id: "f1000001-0001-4001-8001-000000000009",
+        name: "privileges.read",
+        description: "View privilege definitions",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000010",
+        name: "privileges.assign",
+        description: "Assign or remove privileges on users and roles",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000011",
+        name: "menus.manage",
+        description: "Create, update, and delete navigation menus",
+      },
+      // Inventory
+      {
+        id: "f1000001-0001-4001-8001-000000000012",
+        name: "inventory.read",
+        description: "View inventory items, categories, stores, and stock",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000013",
+        name: "inventory.write",
+        description: "Create and update inventory items, categories, and master data",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000014",
+        name: "purchases.manage",
+        description: "Record and manage purchase transactions",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000015",
+        name: "store_transfers.manage",
+        description: "Transfer stock between stores",
+      },
+      // School domain
+      {
+        id: "f1000001-0001-4001-8001-000000000016",
+        name: "students.read",
+        description: "View students and classes",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000017",
+        name: "students.write",
+        description: "Create and update students, classes, and staff",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000018",
+        name: "billing.manage",
+        description: "Manage billing items, student billings, and collections",
+      },
+      // Accounting
+      {
+        id: "f1000001-0001-4001-8001-000000000019",
+        name: "accounting.read",
+        description: "View chart of accounts and transactions",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000020",
+        name: "accounting.write",
+        description: "Post journal entries and manage account charts",
+      },
+    ];
+
+    for (const p of privileges) {
+      await prisma.privilege.upsert({
+        where: { name: p.name },
+        update: { description: p.description },
+        create: p,
+      });
+    }
+    console.log(`   ✓ ${privileges.length} privileges`);
+
+    // Application roles (AppRole) with default privilege sets
+    console.log("👤 Seeding application roles...");
+    const allPrivileges = await prisma.privilege.findMany({
+      select: { id: true, name: true },
+    });
+    const privilegeIdByName = Object.fromEntries(allPrivileges.map((p) => [p.name, p.id]));
+
+    const resolvePrivilegeIds = (names) =>
+      names.map((name) => privilegeIdByName[name]).filter(Boolean);
+
+    const appRoles = [
+      {
+        id: "a2000001-0002-4002-8002-000000000001",
+        name: "Super Admin",
+        status: "active",
+        privilegeNames: allPrivileges.map((p) => p.name),
+      },
+      {
+        id: "a2000001-0002-4002-8002-000000000002",
+        name: "System Administrator",
+        status: "active",
+        privilegeNames: [
+          "users.create",
+          "users.read",
+          "users.update",
+          "users.delete",
+          "roles.create",
+          "roles.read",
+          "roles.update",
+          "roles.delete",
+          "privileges.read",
+          "privileges.assign",
+          "menus.manage",
+          "inventory.read",
+          "inventory.write",
+          "purchases.manage",
+          "store_transfers.manage",
+          "students.read",
+          "students.write",
+          "billing.manage",
+          "accounting.read",
+          "accounting.write",
+        ],
+      },
+      {
+        id: "a2000001-0002-4002-8002-000000000003",
+        name: "Inventory Manager",
+        status: "active",
+        privilegeNames: [
+          "inventory.read",
+          "inventory.write",
+          "purchases.manage",
+          "store_transfers.manage",
+          "students.read",
+        ],
+      },
+      {
+        id: "a2000001-0002-4002-8002-000000000004",
+        name: "Accountant",
+        status: "active",
+        privilegeNames: [
+          "accounting.read",
+          "accounting.write",
+          "billing.manage",
+          "students.read",
+          "inventory.read",
+        ],
+      },
+      {
+        id: "a2000001-0002-4002-8002-000000000005",
+        name: "Registrar",
+        status: "active",
+        privilegeNames: ["students.read", "students.write", "billing.manage"],
+      },
+      {
+        id: "a2000001-0002-4002-8002-000000000006",
+        name: "Store Clerk",
+        status: "active",
+        privilegeNames: [
+          "inventory.read",
+          "purchases.manage",
+          "store_transfers.manage",
+        ],
+      },
+      {
+        id: "a2000001-0002-4002-8002-000000000007",
+        name: "Viewer",
+        status: "active",
+        privilegeNames: [
+          "users.read",
+          "roles.read",
+          "privileges.read",
+          "inventory.read",
+          "students.read",
+          "accounting.read",
+        ],
+      },
+    ];
+
+    const superAdminRoleId = appRoles[0].id;
+
+    for (const role of appRoles) {
+      const privilegeIds = resolvePrivilegeIds(role.privilegeNames);
+      const { privilegeNames: _privilegeNames, ...roleData } = role;
+
+      await prisma.appRole.upsert({
+        where: { id: role.id },
+        update: {
+          name: roleData.name,
+          status: roleData.status,
+          privileges: { set: privilegeIds.map((id) => ({ id })) },
+        },
+        create: {
+          ...roleData,
+          privileges: { connect: privilegeIds.map((id) => ({ id })) },
+        },
+      });
+    }
+    console.log(`   ✓ ${appRoles.length} application roles`);
+
+    // Assign Super Admin application role to seeded admin users
+    const adminUserIds = [
+      "77e7a005-b0a5-4a6e-897c-f827333924d4",
+      "39fc583a-a071-49f3-980f-8932fa6cb6c9",
+    ];
+    for (const userId of adminUserIds) {
+      await prisma.userRole.upsert({
+        where: { userId },
+        update: { roleId: superAdminRoleId },
+        create: { userId, roleId: superAdminRoleId },
+      });
+    }
+    console.log(`   ✓ ${adminUserIds.length} admin users linked to Super Admin role`);
+
     // Chart of accounts — AccountGroup & AccountHead (fixed IDs for idempotent re-seeding)
     console.log("📒 Seeding account groups and account heads...");
 

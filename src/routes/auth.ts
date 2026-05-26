@@ -1,5 +1,5 @@
 import express from "express";
-import { register, login, getUsersByMerchant, forgotPassword, resetPassword } from "../controllers/authController";
+import { register, login, forgotPassword, resetPassword } from "../controllers/authController";
 import { authenticateJWT } from "../middlewares/auth";
 const router = express.Router();
 /**
@@ -56,9 +56,6 @@ router.post("/register", register);
  *         description: Invalid credentials
  */
 router.post("/login", login);
-
-
-router.get("/users", authenticateJWT, getUsersByMerchant);
 
 /**
  * @openapi

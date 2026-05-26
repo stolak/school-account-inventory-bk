@@ -6,6 +6,25 @@ import { parseIntOrUndefined } from "../utils/request";
 const USER_TYPES = new Set<string>(Object.values(UserType));
 const ROLES = new Set<string>(Object.values(Role));
 
+function parsePrivilegeIds(body: unknown): string[] | null {
+  const privilegeIds = (body as { privilegeIds?: unknown })?.privilegeIds;
+  if (!Array.isArray(privilegeIds) || privilegeIds.length === 0) {
+    return null;
+  }
+  if (!privilegeIds.every((id) => typeof id === "string" && id.trim())) {
+    return null;
+  }
+  return privilegeIds.map((id) => id.trim());
+}
+
+function parseRoleId(body: unknown): string | null {
+  const roleId = (body as { roleId?: unknown })?.roleId;
+  if (typeof roleId !== "string" || !roleId.trim()) {
+    return null;
+  }
+  return roleId.trim();
+}
+
 /**
  * @openapi
  * /api/v1/users:
@@ -125,6 +144,314 @@ export const userController = {
         message: "Failed to retrieve users",
         error: error instanceof Error ? error.message : undefined,
       });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/users/{userId}:
+   *   get:
+   *     summary: Get a user by ID
+   *     tags: [Users]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       Returns user profile fields plus direct privileges and assigned application roles.
+   *       Password is never returned.
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *         description: User ID
+   *     responses:
+   *       200:
+   *         description: User details with privileges and app roles
+   *       404:
+   *         description: User not found
+   *       401:
+   *         description: Unauthorized
+   *       500:
+   *         description: Server error
+   */
+  getUserById: async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          message: "userId parameter is required",
+        });
+      }
+
+      const user = await userService.getUserById(userId);
+
+      return res.json({
+        success: true,
+        message: "User retrieved successfully",
+        data: user,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve user";
+      const httpStatus = message === "User not found" ? 404 : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/users/{userId}/privileges:
+   *   post:
+   *     summary: Assign privileges to a user
+   *     tags: [Users]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [privilegeIds]
+   *             properties:
+   *               privilegeIds:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *     responses:
+   *       200:
+   *         description: User with updated privileges and app roles
+   *       400:
+   *         description: Validation error
+   *       404:
+   *         description: User or privilege not found
+   *       401:
+   *         description: Unauthorized
+   *       500:
+   *         description: Server error
+   */
+  addPrivilegesToUser: async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      const privilegeIds = parsePrivilegeIds(req.body);
+
+      if (!userId) {
+        return res.status(400).json({ success: false, message: "userId parameter is required" });
+      }
+      if (!privilegeIds) {
+        return res.status(400).json({
+          success: false,
+          message: "privilegeIds must be a non-empty array of strings",
+        });
+      }
+
+      const data = await userService.addPrivilegesToUser(userId, privilegeIds);
+
+      return res.json({
+        success: true,
+        message: "Privileges added to user successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to add privileges to user";
+      const httpStatus =
+        message === "User not found" || message.includes("privilege IDs were not found")
+          ? 404
+          : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/users/{userId}/privileges/{privilegeId}:
+   *   delete:
+   *     summary: Remove a privilege from a user
+   *     tags: [Users]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: path
+   *         name: privilegeId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: User with updated privileges and app roles
+   *       404:
+   *         description: User not found or privilege not assigned
+   *       401:
+   *         description: Unauthorized
+   *       500:
+   *         description: Server error
+   */
+  removePrivilegeFromUser: async (req: Request, res: Response) => {
+    try {
+      const { userId, privilegeId } = req.params;
+
+      if (!userId || !privilegeId) {
+        return res.status(400).json({
+          success: false,
+          message: "userId and privilegeId parameters are required",
+        });
+      }
+
+      const data = await userService.removePrivilegeFromUser(userId, privilegeId);
+
+      return res.json({
+        success: true,
+        message: "Privilege removed from user successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to remove privilege from user";
+      const httpStatus =
+        message === "User not found" || message === "Privilege is not assigned to this user"
+          ? 404
+          : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/users/{userId}/roles:
+   *   post:
+   *     summary: Assign an application role to a user
+   *     tags: [Users]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       Each user may have at most one AppRole (UserRole.userId is the primary key).
+   *       Assigning again replaces the existing application role.
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [roleId]
+   *             properties:
+   *               roleId:
+   *                 type: string
+   *     responses:
+   *       200:
+   *         description: User with updated privileges and app roles
+   *       400:
+   *         description: Validation error
+   *       404:
+   *         description: User or role not found
+   *       401:
+   *         description: Unauthorized
+   *       500:
+   *         description: Server error
+   */
+  addAppRoleToUser: async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      const roleId = parseRoleId(req.body);
+
+      if (!userId) {
+        return res.status(400).json({ success: false, message: "userId parameter is required" });
+      }
+      if (!roleId) {
+        return res.status(400).json({
+          success: false,
+          message: "roleId is required and must be a non-empty string",
+        });
+      }
+
+      const data = await userService.addAppRoleToUser(userId, roleId);
+
+      return res.json({
+        success: true,
+        message: "Application role assigned to user successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to assign role to user";
+      const httpStatus = message === "User not found" || message === "Role not found" ? 404 : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/users/{userId}/roles/{roleId}:
+   *   delete:
+   *     summary: Remove an application role from a user
+   *     tags: [Users]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: path
+   *         name: userId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: path
+   *         name: roleId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: User with updated privileges and app roles
+   *       404:
+   *         description: User not found or role not assigned
+   *       401:
+   *         description: Unauthorized
+   *       500:
+   *         description: Server error
+   */
+  removeAppRoleFromUser: async (req: Request, res: Response) => {
+    try {
+      const { userId, roleId } = req.params;
+
+      if (!userId || !roleId) {
+        return res.status(400).json({
+          success: false,
+          message: "userId and roleId parameters are required",
+        });
+      }
+
+      const data = await userService.removeAppRoleFromUser(userId, roleId);
+
+      return res.json({
+        success: true,
+        message: "Application role removed from user successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to remove role from user";
+      const httpStatus =
+        message === "User not found" || message === "Role is not assigned to this user"
+          ? 404
+          : 500;
+      return res.status(httpStatus).json({ success: false, message });
     }
   },
 };

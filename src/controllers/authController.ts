@@ -68,19 +68,10 @@ import { userService } from "../services/userService";
  */
 export const register = async (req: Request, res: Response) => {
   try {
-    const {
-      email,
-      password,
-      firstName,
-      lastName,
-      phoneNumber,
-    
-    }: UserRegistrationInput = req.body;
+    const { email, password, firstName, lastName, phoneNumber }: UserRegistrationInput = req.body;
 
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required" });
+      return res.status(400).json({ message: "Email and password are required" });
     }
 
     const user = await authService.create({
@@ -89,8 +80,6 @@ export const register = async (req: Request, res: Response) => {
       firstName,
       lastName,
       phoneNumber,
-     
- 
     });
     res.status(201).json(user);
   } catch (error: any) {
@@ -98,15 +87,12 @@ export const register = async (req: Request, res: Response) => {
   }
 };
 
-
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password, userType } = req.body;
 
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required" });
+      return res.status(400).json({ message: "Email and password are required" });
     }
 
     const result = await authService.login(email, password, userType);
@@ -115,8 +101,6 @@ export const login = async (req: Request, res: Response) => {
     res.status(400).json({ message: error.message });
   }
 };
-
-
 
 /**
  * @openapi
@@ -394,52 +378,12 @@ export const resetPassword = async (req: Request, res: Response) => {
       });
     }
 
-    const result = await authService.resetPassword(
-      email,
-      token,
-      newPassword,
-      confirmPassword
-    );
+    const result = await authService.resetPassword(email, token, newPassword, confirmPassword);
     res.json(result);
   } catch (error: any) {
     res.status(400).json({
       success: false,
       message: error.message || "Failed to reset password",
-    });
-  }
-};
-
-export const getUsersByMerchant = async (req: Request, res: Response) => {
-  try {
-    const { merchantId, userType, role, isActive, page, limit } = req.query;
-
-    if (!merchantId) {
-      return res.status(400).json({
-        success: false,
-        message: "merchantId is required",
-      });
-    }
-
-    const result = await userService.getUsersByMerchantId(
-      merchantId as string,
-      {
-        userType: userType as string,
-        role: role as string,
-        isActive: isActive ? isActive === "true" : undefined,
-        page: page ? parseInt(page as string) : undefined,
-        limit: limit ? parseInt(limit as string) : undefined,
-      }
-    );
-
-    if (result.success) {
-      return res.status(200).json(result);
-    } else {
-      return res.status(400).json(result);
-    }
-  } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      message: error.message,
     });
   }
 };

@@ -39,12 +39,6 @@ enum Role {
   CustomerSupport
 }
 
-enum DocumentStatus {
-  Pending
-  Approved
-  Rejected
-}
-
 enum Status {
   Active
   Inactive
@@ -65,6 +59,16 @@ enum BatchStatus {
 enum InventoryCategoryType {
   Consumable
   NonConsumable
+}
+
+model Privilege {
+  id          String    @id @default(uuid()) @db.Char(36)
+  name        String    @unique
+  description String?
+  user        User[]
+  appRole     AppRole[]
+
+  @@map("privileges")
 }
 
 model User {
@@ -124,6 +128,7 @@ model User {
   tempJournalTransfers    TempJournalTransfer[]
   studentJournalTransfers StudentJournalTransfer[]
   inventoryTransactions   InventoryTransaction[]
+  privileges              Privilege[]
 
   @@map("users")
 }
@@ -228,69 +233,49 @@ model Category {
 
 /// Named `AppRole` to avoid colliding with your existing `Role` enum.
 model AppRole {
-  code      String   @id @db.VarChar(50)
-  name      String
-  status    String   @default("active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @map("updated_at")
+  id     String @id @default(uuid()) @db.Char(36)
+  name   String
+  status String @default("active")
 
-  roleMenus      RoleMenu[]
-  userRoles      UserRole[]
-  rolePrivileges RolePrivilege[]
+  roleMenus  RoleMenu[]
+  userRoles  UserRole[]
+  privileges Privilege[]
 
   @@map("roles")
 }
 
 model Menu {
-  id        String   @id @default(uuid()) @db.Char(36)
-  route     String   @unique
+  id        String     @id @default(uuid()) @db.Char(36)
+  route     String     @unique
   caption   String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @default(now()) @map("updated_at")
-
   roleMenus RoleMenu[]
 
   @@map("menus")
 }
 
 model RoleMenu {
-  id       String @id @default(uuid()) @db.Char(36)
-  roleCode String @map("role_code") @db.VarChar(50)
-  menuId   String @map("menu_id") @db.Char(36)
+  id     String @id @default(uuid()) @db.Char(36)
+  roleId String @map("role_id") @db.VarChar(50)
+  menuId String @map("menu_id") @db.Char(36)
 
-  role AppRole @relation(fields: [roleCode], references: [code], onDelete: Cascade)
-  menu Menu    @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  menu Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  role AppRole? @relation(fields: [roleId], references: [id])
 
-  @@unique([roleCode, menuId])
-  @@index([roleCode])
+  @@unique([roleId, menuId])
+  @@index([roleId])
   @@index([menuId])
   @@map("role_menus")
 }
 
 model UserRole {
-  userId   String @id @map("user_id") @db.Char(36)
-  roleCode String @map("role_code") @db.VarChar(50)
+  userId String @id @map("user_id") @db.Char(36)
+  roleId String @map("role_id") @db.Char(36)
 
   user User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role AppRole @relation(fields: [roleCode], references: [code], onDelete: Cascade)
+  role AppRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
 
-  @@index([roleCode])
+  @@index([roleId])
   @@map("user_roles")
-}
-
-model RolePrivilege {
-  id          String   @id @default(uuid()) @db.Char(36)
-  roleCode    String   @map("role_code") @db.VarChar(50)
-  description String
-  status      Status   @default(Active)
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @default(now()) @map("updated_at")
-
-  role AppRole @relation(fields: [roleCode], references: [code], onDelete: Cascade)
-
-  @@unique([roleCode, description])
-  @@index([roleCode])
-  @@map("role_privileges")
 }
 
 model SubCategory {

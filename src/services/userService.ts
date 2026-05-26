@@ -34,6 +34,58 @@ export interface ListedUser {
   updatedAt: Date;
 }
 
+export interface PrivilegeSummary {
+  id: string;
+  name: string;
+  description: string | null;
+}
+
+export interface AppRoleSummary {
+  id: string;
+  name: string;
+  status: string;
+}
+
+export interface UserAccessData {
+  id: string;
+  email: string;
+  privileges: PrivilegeSummary[];
+  appRoles: AppRoleSummary[];
+}
+
+const privilegeSelect = {
+  id: true,
+  name: true,
+  description: true,
+} satisfies Prisma.PrivilegeSelect;
+
+const appRoleSelect = {
+  id: true,
+  name: true,
+  status: true,
+} satisfies Prisma.AppRoleSelect;
+
+const userAccessSelect = {
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+  phoneNumber: true,
+
+  privileges: { select: privilegeSelect },
+  userRoles: {
+    select: {
+      role: { select: appRoleSelect },
+    },
+  },
+} satisfies Prisma.UserSelect;
+
+const getUserByIdSelect = {
+  ...userAccessSelect,
+  createdAt: true,
+  updatedAt: true,
+} satisfies Prisma.UserSelect;
+
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -60,12 +112,7 @@ export class UserService {
   async getUserById(userId: string) {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        email: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: getUserByIdSelect,
     });
 
     if (!user) {
@@ -130,68 +177,6 @@ export class UserService {
     };
   }
 
-  async getUsersByMerchantId(
-    merchantId: string,
-    filters?: {
-      userType?: string;
-      role?: string;
-      isActive?: boolean;
-      page?: number;
-      limit?: number;
-    }
-  ) {
-    try {
-      const page = filters?.page || 1;
-      const limit = filters?.limit || 10;
-      const skip = (page - 1) * limit;
-
-      // Verify merchant exists
-      
-
-      const where: any = { merchantId };
-      if (filters?.userType) where.userType = filters.userType;
-      if (filters?.role) where.role = filters.role;
-      if (filters?.isActive !== undefined) where.isActive = filters.isActive;
-
-      const [users, total] = await Promise.all([
-        prisma.user.findMany({
-          where,
-          skip,
-          take: limit,
-          select: {
-            id: true,
-            email: true,
-            firstName: true,
-            lastName: true,
-            phoneNumber: true,
-            userType: true,
-            role: true,
-            
-            createdAt: true,
-            updatedAt: true,
-          },
-          orderBy: { createdAt: "desc" },
-        }),
-        prisma.user.count({ where }),
-      ]);
-
-      return {
-        success: true,
-        data: {
-          users,
-          pagination: {
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-          },
-        },
-      };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  }
-
   async updateUser(userId: string, data: { email?: string }) {
     const user = await prisma.user.update({
       where: { id: userId },
@@ -208,6 +193,140 @@ export class UserService {
     });
 
     return { message: "User deleted successfully" };
+  }
+
+  private mapUserAccess(
+    user: Prisma.UserGetPayload<{ select: typeof userAccessSelect }>
+  ): UserAccessData {
+    return {
+      id: user.id,
+      email: user.email,
+      privileges: user.privileges,
+      appRoles: user.userRoles.map((ur) => ur.role),
+    };
+  }
+
+  private async getUserAccessById(userId: string): Promise<UserAccessData | null> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: userAccessSelect,
+    });
+    if (!user) {
+      return null;
+    }
+    return this.mapUserAccess(user);
+  }
+
+  async addPrivilegesToUser(userId: string, privilegeIds: string[]): Promise<UserAccessData> {
+    const uniqueIds = [...new Set(privilegeIds)];
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { privileges: { select: { id: true } } },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const privileges = await prisma.privilege.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true },
+    });
+
+    if (privileges.length !== uniqueIds.length) {
+      throw new Error("One or more privilege IDs were not found");
+    }
+
+    const existingIds = new Set(user.privileges.map((p) => p.id));
+    const toConnect = uniqueIds.filter((id) => !existingIds.has(id));
+
+    if (toConnect.length === 0) {
+      return (await this.getUserAccessById(userId))!;
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        privileges: {
+          connect: toConnect.map((id) => ({ id })),
+        },
+      },
+      select: userAccessSelect,
+    });
+
+    return this.mapUserAccess(updated);
+  }
+
+  async removePrivilegeFromUser(userId: string, privilegeId: string): Promise<UserAccessData> {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { privileges: { where: { id: privilegeId }, select: { id: true } } },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    if (user.privileges.length === 0) {
+      throw new Error("Privilege is not assigned to this user");
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        privileges: {
+          disconnect: { id: privilegeId },
+        },
+      },
+      select: userAccessSelect,
+    });
+
+    return this.mapUserAccess(updated);
+  }
+
+  /**
+   * Assigns an application role to a user. UserRole uses userId as primary key,
+   * so each user may have at most one AppRole; assigning again replaces the existing link.
+   */
+  async addAppRoleToUser(userId: string, roleId: string): Promise<UserAccessData> {
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const role = await prisma.appRole.findUnique({ where: { id: roleId }, select: { id: true } });
+    if (!role) {
+      throw new Error("Role not found");
+    }
+
+    await prisma.userRole.upsert({
+      where: { userId },
+      create: { userId, roleId },
+      update: { roleId },
+    });
+
+    return (await this.getUserAccessById(userId))!;
+  }
+
+  async removeAppRoleFromUser(userId: string, roleId: string): Promise<UserAccessData> {
+    const userRole = await prisma.userRole.findUnique({ where: { userId } });
+
+    if (!userRole) {
+      const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+      if (!user) {
+        throw new Error("User not found");
+      }
+      throw new Error("Role is not assigned to this user");
+    }
+
+    if (userRole.roleId !== roleId) {
+      throw new Error("Role is not assigned to this user");
+    }
+
+    await prisma.userRole.delete({ where: { userId } });
+
+    return (await this.getUserAccessById(userId))!;
   }
 }
 
