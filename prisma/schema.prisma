@@ -120,6 +120,7 @@ model User {
   studentJournalTransfers StudentJournalTransfer[]
   inventoryTransactions   InventoryTransaction[]
   privileges              Privilege[]
+  auditLogs               AuditLog[]
 
   @@map("users")
 }
@@ -1024,4 +1025,41 @@ model StudentConcessionDiscount {
   @@index([approvedBy])
   @@index([createdBy])
   @@map("student_concession_discounts")
+}
+
+model AuditLog {
+  id String @id @default(uuid())
+
+  // Action details
+  action     String // CREATE, UPDATE, DELETE, LOGIN, etc.
+  entityType String // User, Invoice, Product, Payment
+  entityId   String? // ID of affected record
+
+  // User/System info
+  performedById String?
+  performedBy   User?   @relation(fields: [performedById], references: [id])
+
+  // Changes
+  oldValues Json?
+  newValues Json?
+
+  // Request metadata
+  ipAddress String?
+  userAgent String?
+  requestId String?
+
+  // Optional description
+  description String?
+
+  // Status
+  status String? @default("SUCCESS")
+
+  createdAt DateTime @default(now())
+
+  @@index([entityType])
+  @@index([entityId])
+  @@index([performedById])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
 }

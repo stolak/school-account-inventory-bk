@@ -1,0 +1,49 @@
+// audit.service.ts
+
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
+
+export interface CreateAuditLogInput {
+  action: string;
+  entityType: string;
+  entityId?: string;
+
+  performedById?: string;
+
+  oldValues?: any;
+  newValues?: any;
+
+  ipAddress?: string;
+  userAgent?: string;
+  requestId?: string;
+
+  description?: string;
+  status?: string;
+}
+
+export class AuditService {
+  async createAuditLog(data: CreateAuditLogInput) {
+    return prisma.auditLog.create({
+      data: {
+        action: data.action,
+        entityType: data.entityType,
+        entityId: data.entityId,
+
+        performedById: data.performedById,
+
+        oldValues: data.oldValues,
+        newValues: data.newValues,
+
+        ipAddress: data.ipAddress,
+        userAgent: data.userAgent,
+        requestId: data.requestId,
+
+        description: data.description,
+        status: data.status || "SUCCESS",
+      },
+    });
+  }
+}
+
+export const auditService = new AuditService();
