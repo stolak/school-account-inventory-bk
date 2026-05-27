@@ -190,7 +190,8 @@ async function upsertStaffWithUser(hashedPassword, input) {
       password: hashedPassword,
       firstName,
       lastName,
-      userType: input.userType ?? "Staff",
+      userType: input.userType ?? "Admin",
+      role: input.userRole ?? "Admin",
       isActive: true,
       isVerified: true,
       isEmailVerified: true,
@@ -204,7 +205,8 @@ async function upsertStaffWithUser(hashedPassword, input) {
       password: hashedPassword,
       firstName,
       lastName,
-      userType: input.userType ?? "Staff",
+      userType: input.userType ?? "Admin",
+      role: input.userRole ?? "Admin",
       isActive: true,
       isVerified: true,
       isEmailVerified: true,
@@ -220,7 +222,7 @@ async function upsertStaffWithUser(hashedPassword, input) {
     update: {
       email: normalizedEmail,
       name: normalizedName,
-      position: input.position ?? "teacher",
+      role: input.role ?? "teacher",
       status: input.status ?? "Active",
       profileImageUrl: input.profileImageUrl ?? null,
       createdById: input.createdById,
@@ -231,7 +233,7 @@ async function upsertStaffWithUser(hashedPassword, input) {
       StaffNumber: normalizedStaffNumber,
       email: normalizedEmail,
       name: normalizedName,
-      position: input.position ?? "teacher",
+      role: input.role ?? "teacher",
       status: input.status ?? "Active",
       profileImageUrl: input.profileImageUrl ?? null,
       createdById: input.createdById,
@@ -297,7 +299,7 @@ async function main() {
         password: hashedPassword,
         firstName: "Admin",
         lastName: "User",
-        userType: "SuperAdmin",
+        userType: "Admin",
         isActive: true,
         isVerified: true,
         isEmailVerified: true,
@@ -307,124 +309,122 @@ async function main() {
       },
     });
 
-    // Privileges (RBAC) — derived from API routes in src/routes (excludes auth)
+    // Privileges (RBAC — many-to-many with User and AppRole)
     console.log("🔐 Seeding privileges...");
-    // Do not hard-code IDs here; older databases may already contain rows with those IDs.
-    // We upsert by unique `name` and let Prisma/DB handle the primary key.
-    const priv = (name, description) => ({ name, description });
-
-    const crud = (resource, routePrefix, label) => [
-      priv(`${resource}.read`, `${label}: list and view (GET ${routePrefix})`),
-      priv(`${resource}.write`, `${label}: create and update (POST/PUT/PATCH ${routePrefix})`),
-      priv(`${resource}.delete`, `${label}: delete (DELETE ${routePrefix})`),
-    ];
-
     const privileges = [
-      // —— Users (/users) ——
-      priv("users.read", "List/view users, privileges, menus, store access (GET /users…)"),
-      priv("users.privileges.manage", "Assign user privileges (POST/DELETE /users/:userId/privileges)"),
-      priv("users.roles.manage", "Assign user application roles (POST/DELETE /users/:userId/roles)"),
-
-      // —— App roles (/app-roles) ——
-      priv("app_roles.read", "List/view roles, role menus (GET /app-roles…)"),
-      priv("app_roles.write", "Create and update roles (POST/PUT /app-roles)"),
-      priv("app_roles.delete", "Delete roles (DELETE /app-roles/:id)"),
-      priv("app_roles.privileges.manage", "Assign role privileges (POST/DELETE /app-roles/:id/privileges)"),
-      priv("app_roles.menus.manage", "Assign role menus (POST/GET/DELETE /app-roles/:id/menus)"),
-
-      priv("privileges.read", "List privilege definitions (GET /privileges)"),
-
-      ...crud("menus", "/menus", "Navigation menus"),
-
-      // —— Accounting: read-only catalogs ——
-      priv("banks.read", "List/search banks (GET /banks…)"),
-      priv("account_groups.read", "List account groups (GET /account-groups)"),
-      priv("account_heads.read", "List account heads (GET /account-heads)"),
-
-      ...crud("account_subheads", "/account-subheads", "Account subheads"),
-      ...crud("account_charts", "/account-charts", "Account chart of accounts"),
-
-      priv(
-        "account_transactions.read",
-        "Account reports, balances, transaction logs (GET /account-transactions…)"
-      ),
-      priv(
-        "account_transactions.write",
-        "Debit, credit, student journal post (POST /account-transactions…)"
-      ),
-      priv(
-        "account_transactions.delete",
-        "Rollback transactions (DELETE /account-transactions/rollback/:ref)"
-      ),
-
-      priv("default_subhead_settings.read", "View default subhead settings (GET /default-subhead-settings)"),
-      priv(
-        "default_subhead_settings.write",
-        "Update default subhead settings (PATCH /default-subhead-settings/:id)"
-      ),
-      priv("default_account_settings.read", "View default account settings (GET /default-account-settings)"),
-      priv(
-        "default_account_settings.write",
-        "Update default account settings (PATCH /default-account-settings/:id)"
-      ),
-
-      ...crud("billing_items", "/billing-items", "Billing items"),
-      ...crud("concession_discounts", "/concession-discounts", "Concession discounts"),
-      ...crud("class_default_billings", "/class-default-billings", "Class default billings"),
-      ...crud("student_billings", "/student-billings", "Student billings"),
-      ...crud("student_concession_discounts", "/student-concession-discounts", "Student concession discounts"),
-      ...crud("temp_journal_transfers", "/temp-journal-transfers", "Temporary journal transfers"),
-
-      ...crud("categories", "/categories", "Inventory categories"),
-      ...crud("sub_categories", "/sub-categories", "Inventory sub-categories"),
-      ...crud("brands", "/brands", "Product brands"),
-      ...crud("uoms", "/uoms", "Units of measure"),
-      ...crud("inventory_items", "/inventory-items", "Inventory items"),
-      ...crud("suppliers", "/suppliers", "Suppliers"),
-      ...crud("purchases", "/purchases", "Purchases"),
-      ...crud("donations", "/donations", "Donations"),
-
-      ...crud("school_classes", "/school-classes", "School classes"),
-      ...crud("students", "/students", "Students"),
-      ...crud("sub_classes", "/sub-classes", "Sub-classes"),
-      ...crud("terms", "/terms", "Academic terms"),
-      ...crud("sessions", "/sessions", "Academic sessions"),
-      ...crud("staff", "/staff", "Staff"),
-
-      priv("active_period.read", "View active period (GET /active-period)"),
-      priv("active_period.write", "Set active period (PUT /active-period)"),
-      priv("default_billing_period.read", "View default billing period (GET /default-billing-period)"),
-      priv("default_billing_period.write", "Set default billing period (PUT /default-billing-period)"),
-
-      ...crud("projects", "/projects", "Projects"),
-      ...crud("project_collections", "/project-collections", "Project collections"),
-
-      ...crud("stores", "/stores", "Stores"),
-      priv("stores.users.manage", "Assign store users (POST/DELETE /stores/:id/users)"),
-
-      priv("user_stores.read", "List user–store assignments (GET /user-stores…)"),
-      priv("user_stores.write", "Grant/revoke store access (POST/DELETE /user-stores)"),
-
-      priv("store_transfers.read", "List store transfers (GET /store-transfers)"),
-      priv("store_transfers.write", "Transfer stock between stores (POST /store-transfers)"),
-
-      ...crud("student_collections", "/student-collections", "Student collections"),
-      ...crud("staff_collections", "/staff-collections", "Staff collections"),
-      ...crud("facilities", "/facilities", "Facilities"),
-      ...crud("facility_collections", "/facility-collections", "Facility collections"),
-
-      priv(
-        "inventory_receive_acknowledgements.write",
-        "Acknowledge inventory receipt (POST /inventory-receive-acknowledgements)"
-      ),
-      priv("upload.write", "Upload and validate files (POST /upload…)"),
+      // Users
+      {
+        id: "f1000001-0001-4001-8001-000000000001",
+        name: "users.create",
+        description: "Create user accounts",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000002",
+        name: "users.read",
+        description: "View user accounts and profiles",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000003",
+        name: "users.update",
+        description: "Update user accounts",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000004",
+        name: "users.delete",
+        description: "Delete or deactivate user accounts",
+      },
+      // Application roles
+      {
+        id: "f1000001-0001-4001-8001-000000000005",
+        name: "roles.create",
+        description: "Create application roles",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000006",
+        name: "roles.read",
+        description: "View application roles",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000007",
+        name: "roles.update",
+        description: "Update application roles",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000008",
+        name: "roles.delete",
+        description: "Delete application roles",
+      },
+      // Privileges & menus
+      {
+        id: "f1000001-0001-4001-8001-000000000009",
+        name: "privileges.read",
+        description: "View privilege definitions",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000010",
+        name: "privileges.assign",
+        description: "Assign or remove privileges on users and roles",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000011",
+        name: "menus.manage",
+        description: "Create, update, and delete navigation menus",
+      },
+      // Inventory
+      {
+        id: "f1000001-0001-4001-8001-000000000012",
+        name: "inventory.read",
+        description: "View inventory items, categories, stores, and stock",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000013",
+        name: "inventory.write",
+        description: "Create and update inventory items, categories, and master data",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000014",
+        name: "purchases.manage",
+        description: "Record and manage purchase transactions",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000015",
+        name: "store_transfers.manage",
+        description: "Transfer stock between stores",
+      },
+      // School domain
+      {
+        id: "f1000001-0001-4001-8001-000000000016",
+        name: "students.read",
+        description: "View students and classes",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000017",
+        name: "students.write",
+        description: "Create and update students, classes, and staff",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000018",
+        name: "billing.manage",
+        description: "Manage billing items, student billings, and collections",
+      },
+      // Accounting
+      {
+        id: "f1000001-0001-4001-8001-000000000019",
+        name: "accounting.read",
+        description: "View chart of accounts and transactions",
+      },
+      {
+        id: "f1000001-0001-4001-8001-000000000020",
+        name: "accounting.write",
+        description: "Post journal entries and manage account charts",
+      },
     ];
 
     for (const p of privileges) {
       await prisma.privilege.upsert({
         where: { name: p.name },
         update: { description: p.description },
-        create: { name: p.name, description: p.description },
+        create: p,
       });
     }
     console.log(`   ✓ ${privileges.length} privileges`);
@@ -439,82 +439,50 @@ async function main() {
     const resolvePrivilegeIds = (names) =>
       names.map((name) => privilegeIdByName[name]).filter(Boolean);
 
-    const pickResource = (resource, actions = ["read", "write", "delete"]) =>
-      actions.map((action) => `${resource}.${action}`);
-    const pickResources = (resources, actions = ["read", "write", "delete"]) =>
-      resources.flatMap((resource) => pickResource(resource, actions));
-
-    const allPrivilegeNames = allPrivileges.map((p) => p.name);
-    const allReadPrivilegeNames = allPrivilegeNames.filter((name) => name.endsWith(".read"));
-
-    const inventoryResources = [
-      "categories",
-      "sub_categories",
-      "brands",
-      "uoms",
-      "inventory_items",
-      "suppliers",
-      "purchases",
-      "donations",
-      "stores",
-      "student_collections",
-      "staff_collections",
-    ];
-
-    const schoolResources = [
-      "school_classes",
-      "students",
-      "sub_classes",
-      "terms",
-      "sessions",
-      "staff",
-    ];
-
-    const billingResources = [
-      "billing_items",
-      "concession_discounts",
-      "class_default_billings",
-      "student_billings",
-      "student_concession_discounts",
-    ];
-
-    const accountingResources = [
-      "account_subheads",
-      "account_charts",
-      "account_transactions",
-      "temp_journal_transfers",
-    ];
-
     const appRoles = [
       {
         id: "a2000001-0002-4002-8002-000000000001",
         name: "Super Admin",
         status: "active",
-        privilegeNames: allPrivilegeNames,
+        privilegeNames: allPrivileges.map((p) => p.name),
       },
       {
         id: "a2000001-0002-4002-8002-000000000002",
         name: "System Administrator",
         status: "active",
-        privilegeNames: allPrivilegeNames.filter((name) => name !== "upload.write"),
+        privilegeNames: [
+          "users.create",
+          "users.read",
+          "users.update",
+          "users.delete",
+          "roles.create",
+          "roles.read",
+          "roles.update",
+          "roles.delete",
+          "privileges.read",
+          "privileges.assign",
+          "menus.manage",
+          "inventory.read",
+          "inventory.write",
+          "purchases.manage",
+          "store_transfers.manage",
+          "students.read",
+          "students.write",
+          "billing.manage",
+          "accounting.read",
+          "accounting.write",
+        ],
       },
       {
         id: "a2000001-0002-4002-8002-000000000003",
         name: "Inventory Manager",
         status: "active",
         privilegeNames: [
-          ...pickResources(inventoryResources),
-          "stores.users.manage",
-          "user_stores.read",
-          "user_stores.write",
-          "store_transfers.read",
-          "store_transfers.write",
-          "inventory_receive_acknowledgements.write",
-          "facilities.read",
-          "facility_collections.read",
+          "inventory.read",
+          "inventory.write",
+          "purchases.manage",
+          "store_transfers.manage",
           "students.read",
-          "school_classes.read",
-          "staff.read",
         ],
       },
       {
@@ -522,58 +490,37 @@ async function main() {
         name: "Accountant",
         status: "active",
         privilegeNames: [
-          "banks.read",
-          "account_groups.read",
-          "account_heads.read",
-          ...pickResources(accountingResources),
-          "default_subhead_settings.read",
-          "default_subhead_settings.write",
-          "default_account_settings.read",
-          "default_account_settings.write",
-          ...pickResources(billingResources),
-          "active_period.read",
-          "active_period.write",
-          "default_billing_period.read",
-          "default_billing_period.write",
+          "accounting.read",
+          "accounting.write",
+          "billing.manage",
           "students.read",
-          "inventory_items.read",
-          "purchases.read",
-          "donations.read",
+          "inventory.read",
         ],
       },
       {
         id: "a2000001-0002-4002-8002-000000000005",
         name: "Registrar",
         status: "active",
-        privilegeNames: [
-          ...pickResources(schoolResources),
-          ...pickResources(billingResources),
-          "active_period.read",
-          "default_billing_period.read",
-        ],
+        privilegeNames: ["students.read", "students.write", "billing.manage"],
       },
       {
         id: "a2000001-0002-4002-8002-000000000006",
         name: "Store Clerk",
         status: "active",
-        privilegeNames: [
-          ...pickResources(
-            ["inventory_items", "purchases", "donations", "suppliers", "categories", "uoms"],
-            ["read", "write"]
-          ),
-          "store_transfers.read",
-          "store_transfers.write",
-          "stores.read",
-          "inventory_receive_acknowledgements.write",
-          "student_collections.read",
-          "staff_collections.read",
-        ],
+        privilegeNames: ["inventory.read", "purchases.manage", "store_transfers.manage"],
       },
       {
         id: "a2000001-0002-4002-8002-000000000007",
         name: "Viewer",
         status: "active",
-        privilegeNames: allReadPrivilegeNames,
+        privilegeNames: [
+          "users.read",
+          "roles.read",
+          "privileges.read",
+          "inventory.read",
+          "students.read",
+          "accounting.read",
+        ],
       },
     ];
 
