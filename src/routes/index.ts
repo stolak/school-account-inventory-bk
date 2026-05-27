@@ -49,10 +49,16 @@ import facilityRouter from "./facility";
 import facilityCollectionRouter from "./facilityCollection";
 import inventoryReceiveAcknowledgementRouter from "./inventoryReceiveAcknowledgement";
 import userRouter from "./user";
+import { authenticateJWT } from "../middlewares/auth";
+import { requirePrivilege } from "../middlewares/requirePrivilege";
 
 const router = Router();
 
 router.use("/auth", authRouter);
+
+// Protected API: JWT first, then privilege check (user id comes from token, not request params)
+router.use(authenticateJWT);
+router.use(requirePrivilege);
 router.use("/banks", bankRouter);
 router.use("/account-groups", accountGroupRouter);
 router.use("/account-heads", accountHeadRouter);
@@ -101,4 +107,3 @@ router.use("/users", userRouter);
 router.use("/upload", uploadRouter);
 
 export default router;
-
