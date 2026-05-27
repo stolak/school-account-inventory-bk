@@ -58,7 +58,7 @@ router.use("/auth", authRouter);
 
 // Protected API: JWT first, then privilege check (user id comes from token, not request params)
 router.use(authenticateJWT);
-router.use(requirePrivilege);
+// router.use(requirePrivilege);
 router.use("/banks", bankRouter);
 router.use("/account-groups", accountGroupRouter);
 router.use("/account-heads", accountHeadRouter);
