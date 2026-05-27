@@ -612,6 +612,78 @@ async function main() {
     }
     console.log(`   ✓ ${adminUserIds.length} admin users linked to Super Admin role`);
 
+    // Navigation menus (flattened from frontend sidebarNavSections)
+    console.log("📋 Seeding menus...");
+    const sidebarMenus = [
+      // Main
+      { route: "/", caption: "Dashboard" },
+      { route: "/purchases", caption: "Purchases" },
+      { route: "/donations", caption: "Donations" },
+      { route: "/project-disbursement", caption: "Project disbursement" },
+      { route: "/facility-item-distribution", caption: "Facility item distribution" },
+      { route: "/sales", caption: "Sales" },
+      { route: "/suppliers", caption: "Suppliers" },
+      { route: "/projects", caption: "Projects" },
+      { route: "/facility-unit-setup", caption: "Facility/unit setup" },
+      { route: "/store-setup", caption: "Store setup" },
+      { route: "/store-transfers", caption: "Store transfers" },
+      // School Management
+      { route: "/classes", caption: "Classes & sub-classes" },
+      { route: "/students", caption: "Students" },
+      { route: "/staff", caption: "Staff" },
+      { route: "/sessions", caption: "Sessions & terms" },
+      { route: "/student-collections", caption: "Student Collections" },
+      { route: "/staff-collections", caption: "Staff Collections" },
+      // Analytics
+      { route: "/reports/student-inventory", caption: "Student collections summary" },
+      { route: "/reports/student-items-received", caption: "Student items received" },
+      { route: "/reports/inventory-collections", caption: "Inventory Collections Report" },
+      { route: "/reports/item-balances", caption: "Item balance report" },
+      { route: "/reports/item-transaction-log", caption: "Item transaction log" },
+      { route: "/reports/account-statement", caption: "Account statement" },
+      { route: "/reports/trial-balance", caption: "Trial balance" },
+      { route: "/reports/balance-sheet", caption: "Balance sheet" },
+      { route: "/reports/student-billing-summary", caption: "Student billing summary" },
+      { route: "/reports/student-balances", caption: "Student balances" },
+      { route: "/reports/student-transaction-log", caption: "Student transaction log" },
+      // Accounting
+      { route: "/account-subheads", caption: "Account setup" },
+      { route: "/billing-items", caption: "Billing & discounts" },
+      { route: "/student-billing", caption: "Student billing" },
+      { route: "/class-default-billings", caption: "Class default billing" },
+      { route: "/journal-transfers", caption: "Journal transfers" },
+      { route: "/student-journal-transfers", caption: "Student journal transfers" },
+      // Setup
+      { route: "/inventory", caption: "Inventory" },
+      { route: "/default-account-settings", caption: "Default account settings" },
+      { route: "/users", caption: "User management" },
+      { route: "/app-roles", caption: "Role management" },
+      { route: "/menus", caption: "Menu management" },
+    ];
+
+    for (const item of sidebarMenus) {
+      await prisma.menu.upsert({
+        where: { route: item.route },
+        update: { caption: item.caption, status: "Active" },
+        create: { route: item.route, caption: item.caption, status: "Active" },
+      });
+    }
+    console.log(`   ✓ ${sidebarMenus.length} menus`);
+
+    const systemAdminRoleId = appRoles[1].id;
+    const allMenus = await prisma.menu.findMany({ select: { id: true } });
+    for (const menu of allMenus) {
+      for (const roleId of [superAdminRoleId, systemAdminRoleId]) {
+        const existing = await prisma.roleMenu.findFirst({
+          where: { roleId, menuId: menu.id },
+        });
+        if (!existing) {
+          await prisma.roleMenu.create({ data: { roleId, menuId: menu.id } });
+        }
+      }
+    }
+    console.log(`   ✓ menus linked to Super Admin and System Administrator roles`);
+
     // Chart of accounts — AccountGroup & AccountHead (fixed IDs for idempotent re-seeding)
     console.log("📒 Seeding account groups and account heads...");
 
