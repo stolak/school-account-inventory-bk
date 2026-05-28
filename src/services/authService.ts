@@ -343,6 +343,48 @@ export class AuthService {
       throw new Error(error.message || "Failed to reset password");
     }
   }
+
+  /**
+   * Change password for an authenticated user (requires current password).
+   */
+  async changePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+    confirmPassword: string
+  ): Promise<{ success: boolean; message: string }> {
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      throw new Error("currentPassword, newPassword, and confirmPassword are required");
+    }
+    if (newPassword !== confirmPassword) {
+      throw new Error("Passwords do not match");
+    }
+    if (newPassword.length < 6) {
+      throw new Error("Password must be at least 6 characters long");
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, password: true },
+    });
+
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      throw new Error("Current password is incorrect");
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    await prisma.user.update({
+      where: { id: userId },
+      data: { password: hashedPassword },
+    });
+
+    return { success: true, message: "Password changed successfully" };
+  }
 }
 
 export const authService = new AuthService();

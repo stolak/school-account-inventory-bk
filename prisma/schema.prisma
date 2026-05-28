@@ -216,9 +216,11 @@ model Category {
   status              Status                @default(Active)
   categoryType        InventoryCategoryType @default(Consumable)
   consumableAccountId Int?                  @map("consumable_account_id")
-  consumableAccount   AccountChart?         @relation(fields: [consumableAccountId], references: [id])
+  consumableAccount   AccountChart?         @relation("CategoryConsumableAccount", fields: [consumableAccountId], references: [id])
   subCategories       SubCategory[]
   inventoryItems      InventoryItem[]
+  assetAccountId      Int?                  @map("asset_account_id")
+  assetAccount        AccountChart?         @relation("CategoryAssetAccount", fields: [assetAccountId], references: [id])
 
   @@map("categories")
 }
@@ -740,7 +742,8 @@ model AccountChart {
   concessionDiscounts     ConcessionDiscount[]
   billingItems            BillingItem[]
   students                Student[]
-  categories              Category[]
+  consumableCategories    Category[]               @relation("CategoryConsumableAccount")
+  assetCategories         Category[]               @relation("CategoryAssetAccount")
   studentJournalTransfers StudentJournalTransfer[]
   // suppliers               Supplier[]
 

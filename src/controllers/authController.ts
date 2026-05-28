@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { authService } from "../services/authService";
 import { UserRegistrationInput } from "../services/authService";
 import { userService } from "../services/userService";
+import { getAuthenticatedUserId } from "../middlewares/auth";
 
 /**
  * @openapi
@@ -468,6 +469,84 @@ export const getMyMenus = async (req: Request, res: Response) => {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to retrieve menus";
     const httpStatus = message === "User not found" ? 404 : 500;
+    return res.status(httpStatus).json({ success: false, message });
+  }
+};
+
+/**
+ * @openapi
+ * /api/v1/auth/me/password:
+ *   patch:
+ *     summary: Change password for the authenticated user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword, confirmPassword]
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 6
+ *               confirmPassword:
+ *                 type: string
+ *                 minLength: 6
+ *     responses:
+ *       200:
+ *         description: Password changed successfully
+ *       400:
+ *         description: Validation error / incorrect current password
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Server error
+ */
+export const changeMyPassword = async (req: Request, res: Response) => {
+  try {
+    const userId = getAuthenticatedUserId(req);
+    if (!userId) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const { currentPassword, newPassword, confirmPassword } = req.body ?? {};
+    if (typeof currentPassword !== "string" || !currentPassword) {
+      return res
+        .status(400)
+        .json({ success: false, message: "currentPassword is required" });
+    }
+    if (typeof newPassword !== "string" || !newPassword) {
+      return res.status(400).json({ success: false, message: "newPassword is required" });
+    }
+    if (typeof confirmPassword !== "string" || !confirmPassword) {
+      return res.status(400).json({ success: false, message: "confirmPassword is required" });
+    }
+
+    const result = await authService.changePassword(
+      userId,
+      currentPassword,
+      newPassword,
+      confirmPassword
+    );
+    return res.json(result);
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to change password";
+    const httpStatus =
+      message === "User not found"
+        ? 404
+        : message.includes("required") ||
+            message.includes("match") ||
+            message.includes("incorrect") ||
+            message.includes("at least 6")
+          ? 400
+          : 500;
     return res.status(httpStatus).json({ success: false, message });
   }
 };

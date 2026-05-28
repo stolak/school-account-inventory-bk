@@ -6,6 +6,7 @@ import {
   resetPassword,
   getMyPrivileges,
   getMyMenus,
+  changeMyPassword,
 } from "../controllers/authController";
 import { authenticateJWT } from "../middlewares/auth";
 const router = express.Router();
@@ -134,5 +135,6 @@ router.post("/reset-password", resetPassword);
 
 router.get("/me/privileges", authenticateJWT, getMyPrivileges);
 router.get("/me/menus", authenticateJWT, getMyMenus);
+router.patch("/me/password", authenticateJWT, changeMyPassword);
 
 export = router;
