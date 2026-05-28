@@ -229,14 +229,14 @@ export const purchaseController = {
    *       content:
    *         application/json:
    *           schema:
- *             type: object
- *             required: [items, storeId]
- *             properties:
- *               storeId:
- *                 type: string
- *                 format: uuid
- *                 description: Store receiving the stock (required; applied to every line)
- *               supplierId:
+   *             type: object
+   *             required: [items, storeId]
+   *             properties:
+   *               storeId:
+   *                 type: string
+   *                 format: uuid
+   *                 description: Store receiving the stock (required; applied to every line)
+   *               supplierId:
    *                 type: string
    *                 nullable: true
    *                 description: Optional. Empty string "" is treated as null.
@@ -252,7 +252,11 @@ export const purchaseController = {
    *                 description: Optional. Defaults to today.
    *               amountPaid:
    *                 oneOf: [{ type: string }, { type: number }]
-   *                 description: Optional. If provided must be > 0. Applied to each created row.
+   *                 description: Optional payment amount (>= 0). Applied to each created row. When greater than zero, paymentAccountId is required and ledger payment entries are posted.
+   *               paymentAccountId:
+   *                 type: string
+   *                 nullable: true
+   *                 description: Chart of accounts id (AccountChart.id) for the cash/bank account used to pay the supplier. Required when amountPaid is greater than zero. Empty string "" is treated as null.
    *               status:
    *                 type: string
    *                 enum: [pending, cancelled, deleted, completed]
@@ -275,15 +279,24 @@ export const purchaseController = {
    *         description: Purchases created
    *       400:
    *         description: Validation error
- *       404:
- *         description: Referenced item/supplier/store not found
- *       500:
- *         description: Server error
+   *       404:
+   *         description: Referenced item/supplier/store/payment account not found
+   *       500:
+   *         description: Server error
    */
   createBulkPurchases: async (req: Request, res: Response) => {
     try {
-      const { storeId, supplierId, referenceNo, notes, transactionDate, amountPaid, status, items } =
-        req.body ?? {};
+      const {
+        storeId,
+        supplierId,
+        referenceNo,
+        notes,
+        transactionDate,
+        amountPaid,
+        paymentAccountId,
+        status,
+        items,
+      } = req.body ?? {};
 
       if (!storeId || typeof storeId !== "string" || !storeId.trim()) {
         return res.status(400).json({ success: false, message: "storeId is required" });
@@ -330,13 +343,40 @@ export const purchaseController = {
           .status(400)
           .json({ success: false, message: "amountPaid must be a string or number" });
       }
+      let amountPaidNum = 0;
       if (amountPaid !== undefined) {
-        const amountPaidNum = typeof amountPaid === "string" ? Number(amountPaid) : amountPaid;
+        amountPaidNum = typeof amountPaid === "string" ? Number(amountPaid) : amountPaid;
         if (!Number.isFinite(amountPaidNum) || amountPaidNum < 0) {
           return res
             .status(400)
-            .json({ success: false, message: "amountPaid must be greater than 0" });
+            .json({ success: false, message: "amountPaid must be zero or greater" });
         }
+      }
+
+      if (!isStringOrNullOrUndefined(paymentAccountId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "paymentAccountId must be a string or null" });
+      }
+      const normalizedPaymentAccountId =
+        paymentAccountId === undefined || paymentAccountId === null
+          ? null
+          : String(paymentAccountId).trim().length > 0
+            ? String(paymentAccountId).trim()
+            : null;
+      if (normalizedPaymentAccountId !== null) {
+        const paymentAccountIdNum = Number(normalizedPaymentAccountId);
+        if (!Number.isFinite(paymentAccountIdNum) || paymentAccountIdNum < 1) {
+          return res
+            .status(400)
+            .json({ success: false, message: "paymentAccountId must be a positive integer" });
+        }
+      }
+      if (amountPaidNum > 0 && !normalizedPaymentAccountId) {
+        return res.status(400).json({
+          success: false,
+          message: "paymentAccountId is required when amountPaid is greater than zero",
+        });
       }
 
       if (
@@ -414,6 +454,9 @@ export const purchaseController = {
         notes: notes === undefined ? null : notes,
         transactionDate: parsedDate ?? undefined,
         ...(amountPaid !== undefined ? { amountPaid } : {}),
+        ...(paymentAccountId !== undefined
+          ? { paymentAccountId: normalizedPaymentAccountId }
+          : {}),
         status,
         createdById,
         items: normalizedItems,

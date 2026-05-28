@@ -115,7 +115,13 @@ export class PurchaseService {
     });
     if (!supplier) throw new Error("Invalid supplierId");
   }
-
+  private async assertPaymentAccountExists(paymentAccountId: number) {
+    const paymentAccount = await this.prisma.accountChart.findUnique({
+      where: { id: paymentAccountId },
+      select: { id: true },
+    });
+    if (!paymentAccount) throw new Error("Invalid paymentAccountId");
+  }
   private async assertStoreExists(storeId: string) {
     const store = await this.prisma.store.findUnique({
       where: { id: storeId },
@@ -131,6 +137,7 @@ export class PurchaseService {
     qtyIn: string | number;
     inCost?: string | number;
     amountPaid?: string | number;
+    paymentAccountId?: string | null;
     referenceNo?: string | null;
     notes?: string | null;
     transactionDate?: Date;
@@ -166,6 +173,7 @@ export class PurchaseService {
     notes?: string | null;
     transactionDate?: Date;
     amountPaid?: string | number;
+    paymentAccountId?: string | null;
     createdById: string;
     items: Array<{ itemId: string; qtyIn: string | number; inCost: string | number }>;
     status?: InventoryTransactionStatus;
@@ -177,6 +185,11 @@ export class PurchaseService {
 
     const supplierId = input.supplierId ?? null;
     if (supplierId) await this.assertSupplierExists(supplierId);
+    if (Number(input.amountPaid ?? 0) > 0 && !input.paymentAccountId) {
+      throw new Error("paymentAccountId is required when amountPaid is greater than zero");
+    }
+    if (input.paymentAccountId)
+      await this.assertPaymentAccountExists(Number(input.paymentAccountId));
 
     const itemIds = [...new Set(input.items.map((i) => i.itemId))];
     const existingItems = await this.prisma.inventoryItem.findMany({
@@ -333,6 +346,33 @@ export class PurchaseService {
             transactionDate: txDate.toISOString(),
             postedBy: input.createdById,
             remarks: `Purchase credit - supplier ${supplierId} - ${referenceNo}`,
+          },
+          tx
+        );
+      }
+
+      if (input.amountPaid && Number(input.amountPaid) > 0) {
+        await accountTransactionService.creditAccount(
+          {
+            accountId: String(input.paymentAccountId),
+            amount: Number(input.amountPaid),
+            ref: referenceNo,
+            manualRef: referenceNo,
+            transactionDate: txDate.toISOString(),
+            postedBy: input.createdById,
+            remarks: `Purchase credit - payment account - ${referenceNo}`,
+          },
+          tx
+        );
+        await accountTransactionService.debitAccount(
+          {
+            accountId: supplierAccountNumber ?? "",
+            amount: Number(input.amountPaid),
+            ref: referenceNo,
+            manualRef: referenceNo,
+            transactionDate: txDate.toISOString(),
+            postedBy: input.createdById,
+            remarks: `Purchase debit - payment account - ${referenceNo}`,
           },
           tx
         );
