@@ -15,6 +15,12 @@ export interface CategoryData {
     accountNo: string | null;
     accountDescription: string;
   } | null;
+  assetAccountId?: number | null;
+  assetAccount?: {
+    id: number;
+    accountNo: string | null;
+    accountDescription: string;
+  } | null;
 }
 
 export interface ListCategoriesParams {
@@ -44,16 +50,26 @@ export class CategoryService {
         accountDescription: true,
       },
     },
+    assetAccount: {
+      select: {
+        id: true,
+        accountNo: true,
+        accountDescription: true,
+      },
+    },
   } satisfies Prisma.CategoryInclude;
 
-  private async ensureConsumableAccountExists(consumableAccountId?: number | null): Promise<void> {
-    if (consumableAccountId === undefined || consumableAccountId === null) return;
+  private async ensureAccountChartExists(
+    accountId: number | null | undefined,
+    fieldName: "consumableAccountId" | "assetAccountId"
+  ): Promise<void> {
+    if (accountId === undefined || accountId === null) return;
     const account = await this.prisma.accountChart.findUnique({
-      where: { id: consumableAccountId },
+      where: { id: accountId },
       select: { id: true },
     });
     if (!account) {
-      throw new Error("Invalid consumableAccountId: account chart not found");
+      throw new Error(`Invalid ${fieldName}: account chart not found`);
     }
   }
 
@@ -63,12 +79,14 @@ export class CategoryService {
     status?: Status;
     categoryType?: InventoryCategoryType;
     consumableAccountId?: number | null;
+    assetAccountId?: number | null;
   }): Promise<CategoryData> {
     const name = input.name.trim();
     if (!name) throw new Error("name is required");
 
     const categoryType = input.categoryType ?? InventoryCategoryType.Consumable;
-    await this.ensureConsumableAccountExists(input.consumableAccountId);
+    await this.ensureAccountChartExists(input.consumableAccountId, "consumableAccountId");
+    await this.ensureAccountChartExists(input.assetAccountId, "assetAccountId");
 
     try {
       const created = await this.prisma.category.create({
@@ -80,6 +98,9 @@ export class CategoryService {
           ...(input.consumableAccountId === undefined || input.consumableAccountId === null
             ? {}
             : { consumableAccount: { connect: { id: input.consumableAccountId } } }),
+          ...(input.assetAccountId === undefined || input.assetAccountId === null
+            ? {}
+            : { assetAccount: { connect: { id: input.assetAccountId } } }),
         },
         include: this.categoryInclude,
       });
@@ -149,6 +170,7 @@ export class CategoryService {
       status?: Status;
       categoryType?: InventoryCategoryType;
       consumableAccountId?: number | null;
+      assetAccountId?: number | null;
     }
   ): Promise<CategoryData> {
     const existing = await this.getCategoryById(id);
@@ -159,7 +181,10 @@ export class CategoryService {
     }
 
     if (input.consumableAccountId !== undefined) {
-      await this.ensureConsumableAccountExists(input.consumableAccountId);
+      await this.ensureAccountChartExists(input.consumableAccountId, "consumableAccountId");
+    }
+    if (input.assetAccountId !== undefined) {
+      await this.ensureAccountChartExists(input.assetAccountId, "assetAccountId");
     }
 
     const consumableAccountRelation: Prisma.CategoryUpdateInput = {};
@@ -168,6 +193,15 @@ export class CategoryService {
         consumableAccountRelation.consumableAccount = { disconnect: true };
       } else {
         consumableAccountRelation.consumableAccount = { connect: { id: input.consumableAccountId } };
+      }
+    }
+
+    const assetAccountRelation: Prisma.CategoryUpdateInput = {};
+    if (input.assetAccountId !== undefined) {
+      if (input.assetAccountId === null) {
+        assetAccountRelation.assetAccount = { disconnect: true };
+      } else {
+        assetAccountRelation.assetAccount = { connect: { id: input.assetAccountId } };
       }
     }
 
@@ -180,6 +214,7 @@ export class CategoryService {
           ...(input.status !== undefined ? { status: input.status } : {}),
           ...(input.categoryType !== undefined ? { categoryType: input.categoryType } : {}),
           ...consumableAccountRelation,
+          ...assetAccountRelation,
           updatedAt: new Date(),
         },
         include: this.categoryInclude,

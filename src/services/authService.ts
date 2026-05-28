@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import { getJwtSecret } from "../utils/env";
 import prisma from "../utils/prisma";
 import { emailService } from "./emailService";
+import { UserType } from "@prisma/client";
 
 export interface AuthResponse {
   success: boolean;
@@ -14,9 +15,7 @@ export interface AuthResponse {
       email: string;
       profileImageUrl?: string;
       name: string;
-      userType: "buyer" | "merchant" | "admin";
-     
-     
+      userType: UserType;
     };
     tokens: {
       accessToken: string;
@@ -33,13 +32,11 @@ export interface UserRegistrationInput {
   lastName?: string;
   phoneNumber?: string;
   profileImageUrl?: string;
-  
+
   isActive?: boolean;
 }
 
-function mapUserType(
-  userType?: "Admin" | "Merchant" | "Buyer"
-): "buyer" | "merchant" | "admin" {
+function mapUserType(userType?: "Admin" | "Merchant" | "Buyer"): "buyer" | "merchant" | "admin" {
   switch (userType) {
     case "Admin":
       return "admin";
@@ -75,7 +72,6 @@ export class AuthService {
       throw new Error("User already exists with this email");
     }
 
-    
     // Hash password
     const validatedPassoword = password || "12345"; // auto-generated password
     const hashedPassword: string = await bcrypt.hash(validatedPassoword, 10);
@@ -89,12 +85,10 @@ export class AuthService {
         lastName: true,
         profileImageUrl: true,
         userType: true,
-        
       },
     });
 
-    const name =
-      [user.firstName, user.lastName].filter(Boolean).join(" ") || "";
+    const name = [user.firstName, user.lastName].filter(Boolean).join(" ") || "";
     const tokens = buildTokens(user.id);
 
     return {
@@ -106,19 +100,14 @@ export class AuthService {
           email: user.email,
           profileImageUrl: user.profileImageUrl ?? undefined,
           name,
-          userType: mapUserType(user.userType as any),
-          
+          userType: user.userType,
         },
         tokens,
       },
     };
   }
 
-  async login(
-    email: string,
-    password: string,
-    userType?: string
-  ): Promise<AuthResponse> {
+  async login(email: string, password: string, userType?: string): Promise<AuthResponse> {
     // Find user by email
     const where: any = { email };
     if (userType) {
@@ -135,10 +124,9 @@ export class AuthService {
         firstName: true,
         lastName: true,
         userType: true,
-       
+
         isVerified: true,
         profileImageUrl: true,
-        
       },
     });
     if (!user) {
@@ -150,15 +138,12 @@ export class AuthService {
       throw new Error("Invalid credentials");
     }
 
-    const name =
-      [user.firstName, user.lastName].filter(Boolean).join(" ") || "";
+    const name = [user.firstName, user.lastName].filter(Boolean).join(" ") || "";
     const tokens = buildTokens({
       id: user.id,
       email: user.email,
       name,
       profileImageUrl: user.profileImageUrl ?? undefined,
-
-     
     });
 
     return {
@@ -170,8 +155,7 @@ export class AuthService {
           email: user.email,
           name,
           profileImageUrl: user.profileImageUrl ?? undefined,
-          userType: mapUserType(user.userType as any),
-       
+          userType: user.userType,
         },
         tokens,
       },
@@ -181,7 +165,6 @@ export class AuthService {
   /**
    * Create a merchant user with optional outlet assignment
    */
-
 
   async getUserById(userId: string) {
     const user = await prisma.user.findUnique({
@@ -241,7 +224,8 @@ export class AuthService {
       });
 
       // Build reset URL
-      const frontendUrl = process.env.FRONTEND_URL || process.env.APP_URL || "http://localhost:3000";
+      const frontendUrl =
+        process.env.FRONTEND_URL || process.env.APP_URL || "http://localhost:3000";
       const resetLink = `${frontendUrl}/reset-password?token=${resetToken}&email=${encodeURIComponent(email)}`;
 
       // Get user name

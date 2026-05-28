@@ -23,6 +23,26 @@ function parseConsumableAccountIdInput(
   return { ok: true, value: parsed };
 }
 
+function parseAssetAccountIdInput(
+  value: unknown
+): { ok: true; value: number | null | undefined } | { ok: false; message: string } {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (value === null) return { ok: true, value: null };
+
+  const parsed =
+    typeof value === "number" && Number.isInteger(value)
+      ? value
+      : typeof value === "string"
+        ? Number.parseInt(value, 10)
+        : NaN;
+
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    return { ok: false, message: "assetAccountId must be a positive integer, null, or omitted" };
+  }
+
+  return { ok: true, value: parsed };
+}
+
 function parseCategoryTypeInput(
   value: unknown
 ): { ok: true; value: InventoryCategoryType | undefined } | { ok: false; message: string } {
@@ -37,7 +57,12 @@ function parseCategoryTypeInput(
 }
 
 function httpStatusForCategoryMutation(message: string): number {
-  if (message === "Category not found" || message.includes("Invalid consumableAccountId")) return 404;
+  if (
+    message === "Category not found" ||
+    message.includes("Invalid consumableAccountId") ||
+    message.includes("Invalid assetAccountId")
+  )
+    return 404;
   if (message.includes("already exists")) return 409;
   if (message === "name cannot be empty" || message === "name is required") {
     return 400;
@@ -88,6 +113,20 @@ function httpStatusForCategoryMutation(message: string): number {
  *               nullable: true
  *             accountDescription:
  *               type: string
+ *         assetAccountId:
+ *           type: integer
+ *           nullable: true
+ *         assetAccount:
+ *           type: object
+ *           nullable: true
+ *           properties:
+ *             id:
+ *               type: integer
+ *             accountNo:
+ *               type: string
+ *               nullable: true
+ *             accountDescription:
+ *               type: string
  */
 
 /**
@@ -124,6 +163,10 @@ function httpStatusForCategoryMutation(message: string): number {
  *                 type: integer
  *                 nullable: true
  *                 description: Optional linked account chart for category postings
+ *               assetAccountId:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: Optional linked account chart for asset category postings
  *     responses:
  *       201:
  *         description: Category created
@@ -139,9 +182,9 @@ function httpStatusForCategoryMutation(message: string): number {
  *                 data:
  *                   $ref: '#/components/schemas/Category'
  *       400:
- *         description: Validation error (invalid categoryType or consumableAccountId)
+ *         description: Validation error (invalid categoryType or account ids)
  *       404:
- *         description: Invalid consumableAccountId
+ *         description: Invalid consumableAccountId or assetAccountId
  *       409:
  *         description: Duplicate category name
  *       500:
@@ -219,7 +262,8 @@ function httpStatusForCategoryMutation(message: string): number {
 export const categoryController = {
   createCategory: async (req: Request, res: Response) => {
     try {
-      const { name, description, status, categoryType, consumableAccountId } = req.body ?? {};
+      const { name, description, status, categoryType, consumableAccountId, assetAccountId } =
+        req.body ?? {};
 
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({
@@ -260,6 +304,14 @@ export const categoryController = {
         });
       }
 
+      const parsedAsset = parseAssetAccountIdInput(assetAccountId);
+      if (!parsedAsset.ok) {
+        return res.status(400).json({
+          success: false,
+          message: parsedAsset.message,
+        });
+      }
+
       const category = await categoryService.createCategory({
         name: name.trim(),
         description: description === undefined ? null : description,
@@ -268,6 +320,7 @@ export const categoryController = {
         ...(parsedConsumable.value !== undefined
           ? { consumableAccountId: parsedConsumable.value }
           : {}),
+        ...(parsedAsset.value !== undefined ? { assetAccountId: parsedAsset.value } : {}),
       });
 
       return res.status(201).json({
@@ -406,6 +459,10 @@ export const categoryController = {
    *                 type: integer
    *                 nullable: true
    *                 description: Pass null to disconnect the linked account chart.
+ *               assetAccountId:
+ *                 type: integer
+ *                 nullable: true
+ *                 description: Pass null to disconnect the linked asset account chart.
    *     responses:
    *       200:
    *         description: Category updated
@@ -422,8 +479,8 @@ export const categoryController = {
    *                   $ref: '#/components/schemas/Category'
    *       400:
    *         description: Validation error
-   *       404:
-   *         description: Category not found or invalid consumableAccountId
+ *       404:
+ *         description: Category not found or invalid account chart id(s)
    *       409:
    *         description: Duplicate category name
    *       500:
@@ -501,7 +558,8 @@ export const categoryController = {
   updateCategory: async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { name, description, status, categoryType, consumableAccountId } = req.body ?? {};
+      const { name, description, status, categoryType, consumableAccountId, assetAccountId } =
+        req.body ?? {};
 
       if (!id) {
         return res.status(400).json({
@@ -549,6 +607,14 @@ export const categoryController = {
         });
       }
 
+      const parsedAsset = parseAssetAccountIdInput(assetAccountId);
+      if (!parsedAsset.ok) {
+        return res.status(400).json({
+          success: false,
+          message: parsedAsset.message,
+        });
+      }
+
       const updated = await categoryService.updateCategory(id, {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(description !== undefined ? { description } : {}),
@@ -557,6 +623,7 @@ export const categoryController = {
         ...(parsedConsumable.value !== undefined
           ? { consumableAccountId: parsedConsumable.value }
           : {}),
+        ...(parsedAsset.value !== undefined ? { assetAccountId: parsedAsset.value } : {}),
       });
 
       return res.json({
