@@ -542,6 +542,116 @@ export const inventoryItemController = {
 
   /**
    * @openapi
+   * /api/v1/inventory-items/balance-matrix:
+   *   post:
+   *     summary: Inventory balance matrix (items × stores)
+   *     tags: [InventoryItems]
+   *     security:
+   *       - bearerAuth: []
+   *     description: |
+   *       Returns, for each store, the balance for each item where balance = sum(qtyIn) − sum(qtyOut)
+   *       over **completed** inventory transactions at that store.
+   *
+   *       `stores` and `items` may be omitted / null / empty array.
+   *       - When `stores` is null/[]/omitted: uses all Active stores.
+   *       - When `items` is null/[]/omitted: uses all Active items (optionally filtered by categoryId/subCategoryId).
+   *     requestBody:
+   *       required: false
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             properties:
+   *               stores:
+   *                 oneOf:
+   *                   - type: array
+   *                     items: { type: string, format: uuid }
+   *                   - type: "null"
+   *                 description: Store ids or null/[] for all Active stores
+   *               items:
+   *                 oneOf:
+   *                   - type: array
+   *                     items: { type: string, format: uuid }
+   *                   - type: "null"
+   *                 description: Item ids or null/[] for all Active items
+   *               categoryId:
+   *                 type: string
+   *                 format: uuid
+   *                 nullable: true
+   *               subCategoryId:
+   *                 type: string
+   *                 format: uuid
+   *                 nullable: true
+   *     responses:
+   *       200:
+   *         description: Balance matrix (array of stores with per-item balances)
+   *       400:
+   *         description: Invalid input
+   *       401:
+   *         description: Unauthorized
+   *       404:
+   *         description: Invalid categoryId/subCategoryId or unknown store/item ids
+   *       500:
+   *         description: Server error
+   */
+  getInventoryBalanceMatrix: async (req: Request, res: Response) => {
+    try {
+      const { stores, items, categoryId, subCategoryId } = req.body ?? {};
+
+      if (stores !== undefined && stores !== null && !Array.isArray(stores)) {
+        return res.status(400).json({ success: false, message: "stores must be an array, null, or omitted" });
+      }
+      if (items !== undefined && items !== null && !Array.isArray(items)) {
+        return res.status(400).json({ success: false, message: "items must be an array, null, or omitted" });
+      }
+      if (
+        categoryId !== undefined &&
+        categoryId !== null &&
+        (typeof categoryId !== "string" || !categoryId.trim())
+      ) {
+        return res.status(400).json({ success: false, message: "categoryId must be a non-empty string" });
+      }
+      if (
+        subCategoryId !== undefined &&
+        subCategoryId !== null &&
+        (typeof subCategoryId !== "string" || !subCategoryId.trim())
+      ) {
+        return res.status(400).json({ success: false, message: "subCategoryId must be a non-empty string" });
+      }
+
+      const data = await inventoryItemService.getInventoryBalanceMatrix({
+        ...(stores !== undefined ? { stores } : {}),
+        ...(items !== undefined ? { items } : {}),
+        ...(typeof categoryId === "string" && categoryId.trim() ? { categoryId: categoryId.trim() } : {}),
+        ...(typeof subCategoryId === "string" && subCategoryId.trim()
+          ? { subCategoryId: subCategoryId.trim() }
+          : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Inventory balance matrix retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve inventory balance matrix";
+      const code =
+        message === "Invalid categoryId" ||
+        message === "Invalid subCategoryId" ||
+        message.includes("store IDs were not found") ||
+        message.includes("item IDs were not found")
+          ? 404
+          : 500;
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  /**
+   * @openapi
    * /api/v1/inventory-items/{id}:
    *   get:
    *     summary: Get an inventory item by ID

@@ -111,6 +111,29 @@ export interface ItemBalanceRow {
   balance: string;
 }
 
+export interface InventoryBalanceMatrixParams {
+  stores?: string[] | null;
+  items?: string[] | null;
+  categoryId?: string;
+  subCategoryId?: string;
+}
+
+export type InventoryBalanceMatrixRow = {
+  store: { id: string; name: string };
+  items: Array<{
+    item: {
+      id: string;
+      name: string;
+      sku: string | null;
+      barcode: string | null;
+      category: { id: string; name: string } | null;
+      subCategory: { id: string; name: string } | null;
+    };
+    /** sum(qtyIn) − sum(qtyOut) for completed transactions at this store */
+    balance: string;
+  }>;
+};
+
 function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
   return typeof e === "object" && e !== null && "code" in e && typeof (e as any).code === "string";
 }
@@ -540,6 +563,125 @@ export class InventoryItemService {
 
   async deleteInventoryItem(id: string): Promise<InventoryItemData> {
     return await this.prisma.inventoryItem.delete({ where: { id } });
+  }
+
+  /**
+   * Balance matrix: for each store, list each item and its balance (sum(qtyIn) − sum(qtyOut))
+   * computed from completed transactions at that store.
+   *
+   * When `stores` or `items` is null/empty, defaults to all Active stores/items respectively.
+   */
+  async getInventoryBalanceMatrix(
+    params: InventoryBalanceMatrixParams = {}
+  ): Promise<InventoryBalanceMatrixRow[]> {
+    const categoryId = params.categoryId?.trim();
+    const subCategoryId = params.subCategoryId?.trim();
+
+    await this.assertLookupsExist({
+      ...(categoryId ? { categoryId } : {}),
+      ...(subCategoryId ? { subCategoryId } : {}),
+    });
+
+    const requestedStoreIds =
+      params.stores === null || params.stores === undefined
+        ? []
+        : params.stores.map((s) => s.trim()).filter(Boolean);
+    const requestedItemIds =
+      params.items === null || params.items === undefined
+        ? []
+        : params.items.map((s) => s.trim()).filter(Boolean);
+
+    const stores =
+      requestedStoreIds.length > 0
+        ? await this.prisma.store.findMany({
+            where: { id: { in: requestedStoreIds }, status: Status.Active },
+            select: { id: true, name: true },
+            orderBy: { name: "asc" },
+          })
+        : await this.prisma.store.findMany({
+            where: { status: Status.Active },
+            select: { id: true, name: true },
+            orderBy: { name: "asc" },
+          });
+
+    if (requestedStoreIds.length > 0 && stores.length !== new Set(requestedStoreIds).size) {
+      throw new Error("One or more store IDs were not found");
+    }
+
+    const items =
+      requestedItemIds.length > 0
+        ? await this.prisma.inventoryItem.findMany({
+            where: {
+              id: { in: requestedItemIds },
+              status: Status.Active,
+              ...(categoryId ? { categoryId } : {}),
+              ...(subCategoryId ? { subCategoryId } : {}),
+            },
+            select: {
+              id: true,
+              name: true,
+              sku: true,
+              barcode: true,
+              category: { select: { id: true, name: true } },
+              subCategory: { select: { id: true, name: true } },
+            },
+            orderBy: { name: "asc" },
+          })
+        : await this.prisma.inventoryItem.findMany({
+            where: {
+              status: Status.Active,
+              ...(categoryId ? { categoryId } : {}),
+              ...(subCategoryId ? { subCategoryId } : {}),
+            },
+            select: {
+              id: true,
+              name: true,
+              sku: true,
+              barcode: true,
+              category: { select: { id: true, name: true } },
+              subCategory: { select: { id: true, name: true } },
+            },
+            orderBy: { name: "asc" },
+          });
+
+    if (requestedItemIds.length > 0 && items.length !== new Set(requestedItemIds).size) {
+      throw new Error("One or more item IDs were not found");
+    }
+
+    if (!stores.length || !items.length) {
+      return stores.map((st) => ({ store: st, items: [] }));
+    }
+
+    const storeIds = stores.map((s) => s.id);
+    const itemIds = items.map((i) => i.id);
+
+    const agg = await this.prisma.inventoryTransaction.groupBy({
+      by: ["storeId", "itemId"],
+      where: {
+        status: InventoryTransactionStatus.completed,
+        storeId: { in: storeIds },
+        itemId: { in: itemIds },
+      },
+      _sum: { qtyIn: true, qtyOut: true },
+    });
+
+    const balanceByStoreItem = new Map<string, string>();
+    for (const row of agg) {
+      // storeId is nullable in schema, but our filter ensures non-null.
+      if (!row.storeId) continue;
+      balanceByStoreItem.set(
+        `${row.storeId}::${row.itemId}`,
+        decimalNetBalance(row._sum.qtyIn ?? null, row._sum.qtyOut ?? null)
+      );
+    }
+
+    return stores.map((store) => ({
+      store,
+      items: items.map((item) => ({
+        item,
+        balance: balanceByStoreItem.get(`${store.id}::${item.id}`) ?? "0",
+      })),
+    }));
   }
 }
 
