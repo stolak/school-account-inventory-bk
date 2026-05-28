@@ -181,6 +181,7 @@ export class PurchaseService {
             id: true,
             name: true,
             consumableAccountId: true,
+            assetAccountId: true,
           },
         },
       },
@@ -201,6 +202,58 @@ export class PurchaseService {
 
     const created = await this.prisma.$transaction(async (tx) => {
       // Todo: ensure post will go through before creating the rows
+      // first sum the total in cost of the items
+      const totalInCost = input.items.reduce((acc, it) => {
+        return acc.plus(new Prisma.Decimal(it.inCost as any));
+      }, new Prisma.Decimal(0));
+      console.log("totalInCost", totalInCost);
+      // if totalInCost is greater than 0, then ensure the supplier account exists
+      if (totalInCost.gt(0)) {
+        const supplierAccount = await tx.accountChart.findFirst({
+          where: { accountRef: supplierId },
+          select: { id: true },
+        });
+        if (!supplierAccount) {
+          throw new Error("Supplier account not found for supplierId");
+        }
+        // also ensure the  consumable account and asset account exists for the items
+        for (const it of input.items) {
+          const item = itemById.get(it.itemId);
+          if (!item) throw new Error(`Invalid itemId(s): ${it.itemId}`);
+          if (!item.category) throw new Error(`Category not configured for itemId ${item.name}`);
+          if (!item.category.consumableAccountId)
+            throw new Error(
+              `Expense account not configured for item ${item.name} in category ${item.category.name}`
+            );
+          if (!item.category.assetAccountId)
+            throw new Error(
+              `Asset account not configured for item ${item.name} in category ${item.category.name}`
+            );
+          // ensure the asset account and consumable account are different
+          if (item.category.consumableAccountId === item.category.assetAccountId)
+            throw new Error(
+              `Expense account and asset account cannot be the same for item ${item.name} in category ${item.category.name}`
+            );
+          // ensure the asset account and consumable account exists
+          const consumableAccount = await tx.accountChart.findFirst({
+            where: { id: item.category.consumableAccountId },
+            select: { id: true },
+          });
+          if (!consumableAccount)
+            throw new Error(
+              `Expense account not found for item ${item.name} in category ${item.category.name}`
+            );
+          const assetAccount = await tx.accountChart.findFirst({
+            where: { id: item.category.assetAccountId },
+            select: { id: true },
+          });
+          if (!assetAccount)
+            throw new Error(
+              `Asset account not found for item ${item.name} in category ${item.category.name}`
+            );
+        }
+      }
+
       const createdRows = await Promise.all(
         input.items.map((it) =>
           tx.inventoryTransaction.create({

@@ -322,14 +322,23 @@ async function main() {
     const privileges = [
       // —— Users (/users) ——
       priv("users.read", "List/view users, privileges, menus, store access (GET /users…)"),
-      priv("users.privileges.manage", "Assign user privileges (POST/DELETE /users/:userId/privileges)"),
-      priv("users.roles.manage", "Assign user application roles (POST/DELETE /users/:userId/roles)"),
+      priv(
+        "users.privileges.manage",
+        "Assign user privileges (POST/DELETE /users/:userId/privileges)"
+      ),
+      priv(
+        "users.roles.manage",
+        "Assign user application roles (POST/DELETE /users/:userId/roles)"
+      ),
 
       // —— App roles (/app-roles) ——
       priv("app_roles.read", "List/view roles, role menus (GET /app-roles…)"),
       priv("app_roles.write", "Create and update roles (POST/PUT /app-roles)"),
       priv("app_roles.delete", "Delete roles (DELETE /app-roles/:id)"),
-      priv("app_roles.privileges.manage", "Assign role privileges (POST/DELETE /app-roles/:id/privileges)"),
+      priv(
+        "app_roles.privileges.manage",
+        "Assign role privileges (POST/DELETE /app-roles/:id/privileges)"
+      ),
       priv("app_roles.menus.manage", "Assign role menus (POST/GET/DELETE /app-roles/:id/menus)"),
 
       priv("privileges.read", "List privilege definitions (GET /privileges)"),
@@ -357,12 +366,18 @@ async function main() {
         "Rollback transactions (DELETE /account-transactions/rollback/:ref)"
       ),
 
-      priv("default_subhead_settings.read", "View default subhead settings (GET /default-subhead-settings)"),
+      priv(
+        "default_subhead_settings.read",
+        "View default subhead settings (GET /default-subhead-settings)"
+      ),
       priv(
         "default_subhead_settings.write",
         "Update default subhead settings (PATCH /default-subhead-settings/:id)"
       ),
-      priv("default_account_settings.read", "View default account settings (GET /default-account-settings)"),
+      priv(
+        "default_account_settings.read",
+        "View default account settings (GET /default-account-settings)"
+      ),
       priv(
         "default_account_settings.write",
         "Update default account settings (PATCH /default-account-settings/:id)"
@@ -372,7 +387,11 @@ async function main() {
       ...crud("concession_discounts", "/concession-discounts", "Concession discounts"),
       ...crud("class_default_billings", "/class-default-billings", "Class default billings"),
       ...crud("student_billings", "/student-billings", "Student billings"),
-      ...crud("student_concession_discounts", "/student-concession-discounts", "Student concession discounts"),
+      ...crud(
+        "student_concession_discounts",
+        "/student-concession-discounts",
+        "Student concession discounts"
+      ),
       ...crud("temp_journal_transfers", "/temp-journal-transfers", "Temporary journal transfers"),
 
       ...crud("categories", "/categories", "Inventory categories"),
@@ -393,8 +412,14 @@ async function main() {
 
       priv("active_period.read", "View active period (GET /active-period)"),
       priv("active_period.write", "Set active period (PUT /active-period)"),
-      priv("default_billing_period.read", "View default billing period (GET /default-billing-period)"),
-      priv("default_billing_period.write", "Set default billing period (PUT /default-billing-period)"),
+      priv(
+        "default_billing_period.read",
+        "View default billing period (GET /default-billing-period)"
+      ),
+      priv(
+        "default_billing_period.write",
+        "Set default billing period (PUT /default-billing-period)"
+      ),
 
       ...crud("projects", "/projects", "Projects"),
       ...crud("project_collections", "/project-collections", "Project collections"),
@@ -635,6 +660,10 @@ async function main() {
       { route: "/student-collections", caption: "Student Collections" },
       { route: "/staff-collections", caption: "Staff Collections" },
       // Analytics
+      {
+        route: "/reports/store-inventory-balance-matrix",
+        caption: "Store inventory matrix",
+      },
       { route: "/reports/student-inventory", caption: "Student collections summary" },
       { route: "/reports/student-items-received", caption: "Student items received" },
       { route: "/reports/inventory-collections", caption: "Inventory Collections Report" },
@@ -2469,11 +2498,11 @@ async function main() {
         },
         create: st,
       });
-
-      const ledgerId = await ensureStudentLedgerAccount(student);
-      if (ledgerId) {
-        studentLedgerCount += 1;
-      }
+      // No need of creating ledger accounts for students
+      // const ledgerId = await ensureStudentLedgerAccount(student);
+      // if (ledgerId) {
+      //   studentLedgerCount += 1;
+      // }
     }
     console.log(`   ✓ ${students.length} students, ${studentLedgerCount} student ledger accounts`);
 
