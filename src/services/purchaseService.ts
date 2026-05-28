@@ -1,5 +1,13 @@
 import prisma from "../utils/prisma";
-import { InventoryTransactionStatus, InventoryTransactionType, Prisma } from "@prisma/client";
+import {
+  AccountChart,
+  InventoryCategoryType,
+  InventoryTransactionStatus,
+  InventoryTransactionType,
+  Prisma,
+} from "@prisma/client";
+import { accountTransactionService } from "./accountTransactionService";
+import { AccountChartService } from "./accountChartService";
 
 export interface PurchaseData {
   id: string;
@@ -182,6 +190,7 @@ export class PurchaseService {
             name: true,
             consumableAccountId: true,
             assetAccountId: true,
+            categoryType: true,
           },
         },
       },
@@ -201,14 +210,15 @@ export class PurchaseService {
     const itemById = new Map(existingItems.map((i) => [i.id, i]));
 
     const created = await this.prisma.$transaction(async (tx) => {
-      // Todo: ensure post will go through before creating the rows
-      // first sum the total in cost of the items
       const totalInCost = input.items.reduce((acc, it) => {
         return acc.plus(new Prisma.Decimal(it.inCost as any));
       }, new Prisma.Decimal(0));
-      console.log("totalInCost", totalInCost);
-      // if totalInCost is greater than 0, then ensure the supplier account exists
+
+      let supplierAccountNumber: string | null = null;
       if (totalInCost.gt(0)) {
+        if (!supplierId) {
+          throw new Error("supplierId is required when purchase total cost is greater than zero");
+        }
         const supplierAccount = await tx.accountChart.findFirst({
           where: { accountRef: supplierId },
           select: { id: true },
@@ -216,6 +226,7 @@ export class PurchaseService {
         if (!supplierAccount) {
           throw new Error("Supplier account not found for supplierId");
         }
+        supplierAccountNumber = String(supplierAccount.id);
         // also ensure the  consumable account and asset account exists for the items
         for (const it of input.items) {
           const item = itemById.get(it.itemId);
@@ -255,8 +266,9 @@ export class PurchaseService {
       }
 
       const createdRows = await Promise.all(
-        input.items.map((it) =>
-          tx.inventoryTransaction.create({
+        input.items.map(async (it) => {
+          const inCost = new Prisma.Decimal(it.inCost as any);
+          const row = await tx.inventoryTransaction.create({
             data: {
               itemId: it.itemId,
               storeId: input.storeId,
@@ -272,109 +284,58 @@ export class PurchaseService {
               createdById: input.createdById,
             },
             include: purchaseInclude,
-          })
-        )
-      );
-      console.log("createdRows", createdRows);
-      // Post ledger entries only for completed purchases.
-      if (status === InventoryTransactionStatus.completed) {
-        if (!supplierId) {
-          console.log("supplierId is required for accounting posting on completed purchases");
-          throw new Error("supplierId is required for accounting posting on completed purchases");
-        }
-        console.log("supplierId", supplierId);
-        const supplierAccount = await tx.accountChart.findFirst({
-          where: { accountRef: supplierId },
-          select: {
-            id: true,
-            groupId: true,
-            headId: true,
-            subheadId: true,
-            accountNo: true,
-            accountDescription: true,
-          },
-        });
-        if (!supplierAccount) {
-          throw new Error("Supplier account not found for supplierId");
-        }
-        const categoryAccountIds = new Set<number>();
-        // console.log("input.items", input.items);
-        for (const it of input.items) {
-          console.log("it", it);
-          const item = itemById.get(it.itemId);
-          console.log("item", item);
-          if (!item) throw new Error(`Invalid itemId(s): ${it.itemId}`);
-          if (!item.category) {
-            throw new Error(`Category not configured for itemId ${it.itemId}`);
-          }
-          if (!item.category.consumableAccountId) {
-            console.log("item.category.consumableAccountId", item.category.consumableAccountId);
-            throw new Error(`Category consumableAccountId not configured for itemId ${it.itemId}`);
-          }
-          categoryAccountIds.add(item.category.consumableAccountId);
-        }
-
-        const categoryAccounts = await tx.accountChart.findMany({
-          where: { id: { in: Array.from(categoryAccountIds) } },
-          select: {
-            id: true,
-            groupId: true,
-            headId: true,
-            subheadId: true,
-            accountNo: true,
-            accountDescription: true,
-          },
-        });
-        const categoryAccountById = new Map(categoryAccounts.map((a) => [a.id, a]));
-
-        let totalInCost = new Prisma.Decimal(0);
-        for (const it of input.items) {
-          const amount = new Prisma.Decimal(it.inCost as any);
-          totalInCost = totalInCost.plus(amount);
-
-          const item = itemById.get(it.itemId)!;
-          const consumableAccountId = item.category!.consumableAccountId!;
-          const consumableAccount = categoryAccountById.get(consumableAccountId);
-          if (!consumableAccount) {
-            throw new Error(`Category consumable account not found for itemId ${it.itemId}`);
-          }
-
-          await tx.accountTransaction.create({
-            data: {
-              groupId: consumableAccount.groupId,
-              headId: consumableAccount.headId,
-              subheadId: consumableAccount.subheadId,
-              accountId: consumableAccount.id,
-              accountCode: consumableAccount.accountNo?.trim() || String(consumableAccount.id),
-              accountSub: consumableAccount.accountDescription,
-              debit: amount,
-              credit: new Prisma.Decimal(0),
-              ref: referenceNo,
-              manualRef: referenceNo,
-              transactionDate: txDate,
-              postedBy: input.createdById,
-              remarks: `Purchase debit - ${item.name} - ${referenceNo}`,
-            },
           });
-        }
 
-        await tx.accountTransaction.create({
-          data: {
-            groupId: supplierAccount.groupId,
-            headId: supplierAccount.headId,
-            subheadId: supplierAccount.subheadId,
-            accountId: supplierAccount.id,
-            accountCode: supplierAccount.accountNo?.trim() || String(supplierAccount.id),
-            accountSub: supplierAccount.accountDescription,
-            debit: new Prisma.Decimal(0),
-            credit: totalInCost,
+          if (inCost.gt(0)) {
+            const item = itemById.get(it.itemId);
+            if (!item) throw new Error(`Invalid itemId(s): ${it.itemId}`);
+            if (!item.category) throw new Error(`Category not configured for itemId ${item.name}`);
+            if (!item.category.consumableAccountId)
+              throw new Error(
+                `Expense account not configured for item ${item.name} in category ${item.category.name}`
+              );
+
+            const debitAccountId =
+              item.category.categoryType === InventoryCategoryType.Consumable
+                ? item.category.consumableAccountId
+                : item.category.assetAccountId;
+
+            if (!debitAccountId)
+              throw new Error(
+                `Asset account not configured for item ${item.name} in category ${item.category.name}`
+              );
+
+            await accountTransactionService.debitAccount(
+              {
+                accountId: String(debitAccountId),
+                amount: inCost.toNumber(),
+                ref: referenceNo,
+                manualRef: referenceNo,
+                transactionDate: txDate.toISOString(),
+                postedBy: input.createdById,
+                remarks: `Purchase debit - ${item.name} - ${referenceNo}`,
+              },
+              tx
+            );
+          }
+
+          return row;
+        })
+      );
+
+      if (totalInCost.gt(0)) {
+        await accountTransactionService.creditAccount(
+          {
+            accountId: supplierAccountNumber ?? "",
+            amount: totalInCost.toNumber(),
             ref: referenceNo,
             manualRef: referenceNo,
-            transactionDate: txDate,
+            transactionDate: txDate.toISOString(),
             postedBy: input.createdById,
             remarks: `Purchase credit - supplier ${supplierId} - ${referenceNo}`,
           },
-        });
+          tx
+        );
       }
 
       return createdRows;
