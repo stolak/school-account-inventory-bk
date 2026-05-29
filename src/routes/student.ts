@@ -8,6 +8,7 @@ router.use(authenticateJWT);
 
 router.post("/", studentController.createStudent);
 router.get("/", studentController.listStudents);
+router.patch("/class/bulk", studentController.bulkUpdateStudentClassAndSubClassAndStatus);
 router.get("/:id", studentController.getStudentById);
 router.put("/:id", studentController.updateStudent);
 router.delete("/:id", studentController.deleteStudent);

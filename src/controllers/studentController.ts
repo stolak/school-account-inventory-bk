@@ -180,7 +180,9 @@ export const studentController = {
 
       const g = parseGender(gender);
       if (g === undefined) {
-        return res.status(400).json({ success: false, message: "gender must be male, female, or other" });
+        return res
+          .status(400)
+          .json({ success: false, message: "gender must be male, female, or other" });
       }
 
       const dob = parseIsoDate(dateOfBirth);
@@ -195,14 +197,17 @@ export const studentController = {
       if (status !== undefined && st === undefined) {
         return res.status(400).json({
           success: false,
-          message: "status must be Active, Inactive, Graduated, Transferred, Suspended, or Archived",
+          message:
+            "status must be Active, Inactive, Graduated, Transferred, Suspended, or Archived",
         });
       }
 
       let normalizedClassId: string | null | undefined = undefined;
       if (classId !== undefined && classId !== null) {
         if (typeof classId !== "string") {
-          return res.status(400).json({ success: false, message: "classId must be a string or null" });
+          return res
+            .status(400)
+            .json({ success: false, message: "classId must be a string or null" });
         }
         normalizedClassId = classId.trim() === "" ? null : classId.trim();
       }
@@ -341,7 +346,9 @@ export const studentController = {
       const result = await studentService.listStudents({
         q,
         ...(classId !== undefined && classId.trim() !== "" ? { classId: classId.trim() } : {}),
-        ...(subClassId !== undefined && subClassId.trim() !== "" ? { subClassId: subClassId.trim() } : {}),
+        ...(subClassId !== undefined && subClassId.trim() !== ""
+          ? { subClassId: subClassId.trim() }
+          : {}),
         status,
         page,
         limit,
@@ -358,6 +365,142 @@ export const studentController = {
         message: "Failed to retrieve students",
         error: error?.message,
       });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/students/class/bulk:
+   *   patch:
+   *     summary: Bulk update student class, subclass, and/or status
+   *     tags: [Students]
+   *     security:
+   *       - bearerAuth: []
+   *     description: Updates classId, subClassId, and/or status for every student in studentIds. Provide at least one of classId or subClassId (use null to clear). When only subClassId is set and the subclass is linked to a class, classId is set automatically. status may be included to change all listed students to the same status.
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [studentIds]
+   *             properties:
+   *               studentIds:
+   *                 type: array
+   *                 minItems: 1
+   *                 items:
+   *                   type: string
+   *                 description: Student ids to update (duplicates are ignored)
+   *               classId:
+   *                 type: string
+   *                 nullable: true
+   *                 description: School class id to assign, or null to clear. Omit to leave class unchanged.
+   *               subClassId:
+   *                 type: string
+   *                 nullable: true
+   *                 description: Sub class id to assign, or null to clear. Omit to leave subclass unchanged.
+   *               status:
+   *                 type: string
+   *                 enum: [Active, Inactive, Graduated, Transferred, Suspended, Archived]
+   *                 description: Optional. Student status to apply to every student in studentIds. Omit to leave status unchanged.
+   *     responses:
+   *       200:
+   *         description: Students updated
+   *       400:
+   *         description: Validation error
+   *       401:
+   *         description: Unauthorized
+   *       404:
+   *         description: Student, class, or subclass not found
+   *       500:
+   *         description: Server error
+   */
+  bulkUpdateStudentClassAndSubClassAndStatus: async (req: Request, res: Response) => {
+    try {
+      const { studentIds, classId, subClassId, status } = req.body ?? {};
+
+      if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "studentIds is required and must be a non-empty array",
+        });
+      }
+
+      const normalizedStudentIds: string[] = [];
+      for (const [idx, id] of studentIds.entries()) {
+        if (typeof id !== "string" || !id.trim()) {
+          return res.status(400).json({
+            success: false,
+            message: `studentIds[${idx}] must be a non-empty string`,
+          });
+        }
+        normalizedStudentIds.push(id.trim());
+      }
+
+      if (classId === undefined && subClassId === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "At least one of classId or subClassId must be provided",
+        });
+      }
+
+      let normalizedClassId: string | null | undefined = undefined;
+      if (classId !== undefined) {
+        if (classId !== null && typeof classId !== "string") {
+          return res
+            .status(400)
+            .json({ success: false, message: "classId must be a string or null" });
+        }
+        normalizedClassId =
+          classId === null || classId === ""
+            ? null
+            : typeof classId === "string"
+              ? classId.trim() || null
+              : null;
+      }
+
+      let normalizedSubClassId: string | null | undefined = undefined;
+      if (subClassId !== undefined) {
+        if (subClassId !== null && typeof subClassId !== "string") {
+          return res
+            .status(400)
+            .json({ success: false, message: "subClassId must be a string or null" });
+        }
+        normalizedSubClassId =
+          subClassId === null || subClassId === ""
+            ? null
+            : typeof subClassId === "string"
+              ? subClassId.trim() || null
+              : null;
+      }
+
+      const userId = (req as any).user?.id;
+      if (!userId) return res.status(401).json({ success: false, message: "Unauthorized" });
+
+      const updated = await studentService.bulkUpdateStudentClassAndSubClassAndStatus({
+        studentIds: normalizedStudentIds,
+        ...(normalizedClassId !== undefined ? { classId: normalizedClassId } : {}),
+        ...(normalizedSubClassId !== undefined ? { subClassId: normalizedSubClassId } : {}),
+        status: status as StudentStatus | undefined,
+      });
+
+      return res.json({
+        success: true,
+        message: "Students updated successfully",
+        data: updated,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to bulk update student class";
+      const statusCode =
+        message.startsWith("Student not found") ||
+        message === "Invalid classId" ||
+        message === "Invalid subClassId" ||
+        message === "subClassId does not belong to the specified classId"
+          ? 404
+          : message.includes("must be provided") || message.includes("must not be empty")
+            ? 400
+            : 500;
+      return res.status(statusCode).json({ success: false, message });
     }
   },
 
@@ -523,24 +666,33 @@ export const studentController = {
         status,
       } = body;
 
-      if (admissionNumber !== undefined && (typeof admissionNumber !== "string" || !admissionNumber.trim())) {
+      if (
+        admissionNumber !== undefined &&
+        (typeof admissionNumber !== "string" || !admissionNumber.trim())
+      ) {
         return res.status(400).json({
           success: false,
           message: "admissionNumber must be a non-empty string when provided",
         });
       }
       if (firstName !== undefined && (typeof firstName !== "string" || !firstName.trim())) {
-        return res.status(400).json({ success: false, message: "firstName must be a non-empty string when provided" });
+        return res
+          .status(400)
+          .json({ success: false, message: "firstName must be a non-empty string when provided" });
       }
       if (lastName !== undefined && (typeof lastName !== "string" || !lastName.trim())) {
-        return res.status(400).json({ success: false, message: "lastName must be a non-empty string when provided" });
+        return res
+          .status(400)
+          .json({ success: false, message: "lastName must be a non-empty string when provided" });
       }
 
       let genderParsed: Gender | undefined;
       if (gender !== undefined) {
         genderParsed = parseGender(gender);
         if (genderParsed === undefined) {
-          return res.status(400).json({ success: false, message: "gender must be male, female, or other" });
+          return res
+            .status(400)
+            .json({ success: false, message: "gender must be male, female, or other" });
         }
       }
 
@@ -560,17 +712,24 @@ export const studentController = {
       if (status !== undefined && st === undefined) {
         return res.status(400).json({
           success: false,
-          message: "status must be Active, Inactive, Graduated, Transferred, Suspended, or Archived",
+          message:
+            "status must be Active, Inactive, Graduated, Transferred, Suspended, or Archived",
         });
       }
 
       let normalizedClassId: string | null | undefined = undefined;
       if (classId !== undefined) {
         if (classId !== null && typeof classId !== "string") {
-          return res.status(400).json({ success: false, message: "classId must be a string or null" });
+          return res
+            .status(400)
+            .json({ success: false, message: "classId must be a string or null" });
         }
         normalizedClassId =
-          classId === null || classId === "" ? null : typeof classId === "string" ? classId.trim() || null : null;
+          classId === null || classId === ""
+            ? null
+            : typeof classId === "string"
+              ? classId.trim() || null
+              : null;
       }
 
       let normalizedSubClassId: string | null | undefined = undefined;

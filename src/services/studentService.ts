@@ -64,6 +64,45 @@ export class StudentService {
     if (!sub) throw new Error("Invalid subClassId");
   }
 
+  private async resolveClassAndSubClassForBulkUpdate(input: {
+    classId?: string | null;
+    subClassId?: string | null;
+    status?: StudentStatus;
+  }): Promise<{ classId?: string | null; subClassId?: string | null }> {
+    let classId = input.classId;
+    const subClassId = input.subClassId;
+
+    if (classId) await this.assertClassExists(classId);
+
+    if (subClassId) {
+      const sub = await this.prisma.subClass.findUnique({
+        where: { id: subClassId },
+        select: { id: true, classId: true },
+      });
+      if (!sub) throw new Error("Invalid subClassId");
+      if (sub.classId) {
+        if (classId !== undefined && classId !== null && classId !== sub.classId) {
+          throw new Error("subClassId does not belong to the specified classId");
+        }
+        if (classId === undefined) {
+          classId = sub.classId;
+        }
+      }
+    }
+
+    return {
+      ...(classId !== undefined ? { classId } : {}),
+      ...(subClassId !== undefined ? { subClassId } : {}),
+      ...(input.status !== undefined ? { status: input.status } : {}),
+    };
+  }
+
+  private readonly studentInclude = {
+    class: { select: { id: true, name: true } },
+    subClass: { select: { id: true, name: true, classId: true } },
+    createdBy: { select: { firstName: true, lastName: true } },
+  } as const;
+
   async createStudent(input: {
     admissionNumber: string;
     firstName: string;
@@ -269,6 +308,63 @@ export class StudentService {
       }
       throw e;
     }
+  }
+
+  async bulkUpdateStudentClassAndSubClassAndStatus(input: {
+    studentIds: string[];
+    classId?: string | null;
+    subClassId?: string | null;
+    status?: StudentStatus;
+  }): Promise<StudentData[]> {
+    if (
+      input.classId === undefined &&
+      input.subClassId === undefined &&
+      input.status === undefined
+    ) {
+      throw new Error("At least one of classId or subClassId or status must be provided");
+    }
+    if (!input.studentIds.length) {
+      throw new Error("studentIds must not be empty");
+    }
+
+    const studentIds = [
+      ...new Set(input.studentIds.map((id) => id.trim()).filter((id) => id.length > 0)),
+    ];
+    if (!studentIds.length) {
+      throw new Error("studentIds must not be empty");
+    }
+
+    const resolved = await this.resolveClassAndSubClassForBulkUpdate({
+      classId: input.classId,
+      subClassId: input.subClassId,
+      status: input.status,
+    });
+
+    const existing = await this.prisma.student.findMany({
+      where: { id: { in: studentIds } },
+      select: { id: true },
+    });
+    const existingSet = new Set(existing.map((s) => s.id));
+    const missing = studentIds.filter((id) => !existingSet.has(id));
+    if (missing.length) {
+      throw new Error(`Student not found: ${missing.join(", ")}`);
+    }
+
+    await this.prisma.student.updateMany({
+      where: { id: { in: studentIds } },
+      data: {
+        ...(resolved.classId !== undefined ? { classId: resolved.classId } : {}),
+        ...(resolved.subClassId !== undefined ? { subClassId: resolved.subClassId } : {}),
+        ...(input.status !== undefined ? { status: input.status } : {}),
+        updatedAt: new Date(),
+      },
+    });
+
+    return await this.prisma.student.findMany({
+      where: { id: { in: studentIds } },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+      include: this.studentInclude,
+    });
   }
 
   async deleteStudent(id: string): Promise<StudentData> {
