@@ -256,6 +256,20 @@ export class AccountChartService {
   }
 
   async delete(id: number): Promise<AccountChartWithRelations> {
+    // validate if the account chart is referenced by any transactions or journal lines
+    const transactions = await this.prisma.accountTransaction.findMany({
+      where: { accountId: id },
+    });
+    if (transactions.length > 0) {
+      throw new Error("Account chart cannot be deleted while transactions reference it");
+    }
+    const journalLines = await this.prisma.studentJournalTransfer.findMany({
+      where: { accountId: id },
+    });
+    if (journalLines.length > 0) {
+      throw new Error("Account chart cannot be deleted while journal lines reference it");
+    }
+
     try {
       return await this.prisma.accountChart.delete({
         where: { id },
