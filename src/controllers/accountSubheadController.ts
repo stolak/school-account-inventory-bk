@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { Status } from "@prisma/client";
 import { accountSubheadService } from "../services/accountSubheadService";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, parsePositiveIntParam } from "../utils/request";
 
 function rejectGroupIdInBody(body: unknown): string | null {
   if (body !== null && typeof body === "object") {
@@ -13,14 +13,6 @@ function rejectGroupIdInBody(body: unknown): string | null {
     }
   }
   return null;
-}
-
-function parsePositiveIntParam(raw: string | undefined): number | null {
-  const id = Number.parseInt(raw ?? "", 10);
-  if (!Number.isFinite(id) || id < 1) {
-    return null;
-  }
-  return id;
 }
 
 function parseStatusQuery(raw: unknown): Status | "All" | undefined {

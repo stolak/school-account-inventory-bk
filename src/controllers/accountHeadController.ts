@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { accountHeadService } from "../services/accountHeadService";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 /**
  * @openapi
@@ -226,8 +226,7 @@ export const accountHeadController = {
    */
   getById: async (req: Request, res: Response) => {
     try {
-      const raw = req.params.id;
-      const id = Number.parseInt(raw ?? "", 10);
+      const id = Number.parseInt(routeParam(req.params.id), 10);
       if (!Number.isFinite(id) || id < 1) {
         return res.status(400).json({
           success: false,
