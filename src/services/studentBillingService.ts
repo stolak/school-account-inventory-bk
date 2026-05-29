@@ -3,6 +3,7 @@ import prisma from "../utils/prisma";
 import { randomUUID } from "crypto";
 import { accountTransactionService } from "./accountTransactionService";
 import { emailService } from "./emailService";
+import { defaultAccountSettingsService } from "./defaultAccountSettingsService";
 
 export type StudentBillingRow = Prisma.StudentBillingGetPayload<Record<string, never>>;
 
@@ -630,6 +631,13 @@ export class StudentBillingService {
   }
 
   async postMany(input: BulkPostStudentBillingInput): Promise<{ count: number }> {
+    const studentReceivableAccountId =
+      await defaultAccountSettingsService.getAccountChartBySettingsId("STUDENT_ACCOUNT");
+    if (!studentReceivableAccountId.accountId) {
+      throw new Error(
+        "Student receivable account chart is required before posting student billings contact the system administrator"
+      );
+    }
     if (!Array.isArray(input.ids) || input.ids.length === 0) {
       throw new Error("ids must be a non-empty array");
     }
@@ -698,11 +706,6 @@ export class StudentBillingService {
       const postedAt = new Date();
 
       for (const row of toPost) {
-        const studentAccountId = studentAccountById.get(row.studentId);
-        if (!studentAccountId) {
-          throw new Error(`Student account chart is required before posting billing ID ${row.id}`);
-        }
-
         const billingAccountId = billingAccountById.get(row.billingId);
         if (!billingAccountId) {
           throw new Error(
@@ -724,7 +727,7 @@ export class StudentBillingService {
 
         await accountTransactionService.debitAccount(
           {
-            accountId: String(studentAccountId),
+            accountId: String(studentReceivableAccountId.accountId),
             amount,
             ref: reference,
             manualRef: manualReference,
@@ -773,7 +776,9 @@ export class StudentBillingService {
     const sessionId = this.normalizeRequiredString(input.sessionId, "sessionId");
     const termId = this.normalizeRequiredString(input.termId, "termId");
     const subclassId =
-      input.subclassId === undefined ? undefined : this.normalizeOptionalString(input.subclassId) ?? undefined;
+      input.subclassId === undefined
+        ? undefined
+        : (this.normalizeOptionalString(input.subclassId) ?? undefined);
 
     const student = await this.prisma.student.findUnique({
       where: { id: studentId },
@@ -821,11 +826,20 @@ export class StudentBillingService {
           concessionDiscount: { select: { name: true, code: true } },
         },
       }),
-      this.prisma.session.findUnique({ where: { id: sessionId }, select: { id: true, name: true } }),
+      this.prisma.session.findUnique({
+        where: { id: sessionId },
+        select: { id: true, name: true },
+      }),
       this.prisma.term.findUnique({ where: { id: termId }, select: { id: true, name: true } }),
-      this.prisma.schoolClass.findUnique({ where: { id: classId }, select: { id: true, name: true } }),
+      this.prisma.schoolClass.findUnique({
+        where: { id: classId },
+        select: { id: true, name: true },
+      }),
       subclassId
-        ? this.prisma.subClass.findUnique({ where: { id: subclassId }, select: { id: true, name: true } })
+        ? this.prisma.subClass.findUnique({
+            where: { id: subclassId },
+            select: { id: true, name: true },
+          })
         : Promise.resolve(null),
     ]);
 
