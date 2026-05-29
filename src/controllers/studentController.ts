@@ -437,10 +437,10 @@ export const studentController = {
         normalizedStudentIds.push(id.trim());
       }
 
-      if (classId === undefined && subClassId === undefined) {
+      if (classId === undefined && subClassId === undefined && status === undefined) {
         return res.status(400).json({
           success: false,
-          message: "At least one of classId or subClassId must be provided",
+          message: "At least one of classId or subClassId or status must be provided",
         });
       }
 
