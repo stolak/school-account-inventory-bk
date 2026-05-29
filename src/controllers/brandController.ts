@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { brandService } from "../services/brandService";
 import { Status } from "@prisma/client";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 /**
  * @openapi
@@ -215,7 +215,7 @@ export const brandController = {
    */
   getBrandById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({
@@ -249,7 +249,7 @@ export const brandController = {
 
   updateBrand: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const { name, status } = req.body ?? {};
 
       if (!id) {
@@ -300,7 +300,7 @@ export const brandController = {
 
   deleteBrand: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({

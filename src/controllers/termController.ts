@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { termService } from "../services/termService";
 import { Status } from "@prisma/client";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 /**
  * @openapi
@@ -209,7 +209,7 @@ export const termController = {
    */
   getTermById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const found = await termService.getTermById(id);
@@ -227,7 +227,7 @@ export const termController = {
 
   updateTerm: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const { name, status } = req.body ?? {};
@@ -264,7 +264,7 @@ export const termController = {
 
   deleteTerm: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const deleted = await termService.deleteTerm(id);

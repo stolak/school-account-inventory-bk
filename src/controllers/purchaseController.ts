@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { purchaseService } from "../services/purchaseService";
 import { InventoryTransactionStatus } from "@prisma/client";
-import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
+import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 /**
@@ -774,7 +774,7 @@ export const purchaseController = {
    */
   getPurchaseById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const purchase = await purchaseService.getPurchaseById(id);
@@ -794,7 +794,7 @@ export const purchaseController = {
 
   updatePurchase: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const {
         itemId,
         supplierId,
@@ -879,7 +879,7 @@ export const purchaseController = {
 
   deletePurchase: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const deleted = await purchaseService.deletePurchase(id);

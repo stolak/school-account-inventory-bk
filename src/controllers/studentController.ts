@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { studentService } from "../services/studentService";
 import { Gender, StudentStatus } from "@prisma/client";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 function parseIsoDate(v: unknown): Date | null {
   if (v === undefined || v === null) return null;
@@ -620,7 +620,7 @@ export const studentController = {
    */
   getStudentById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const createdById = (req as any).user?.id;
@@ -645,7 +645,7 @@ export const studentController = {
 
   updateStudent: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const body = req.body ?? {};
@@ -838,7 +838,7 @@ export const studentController = {
 
   deleteStudent: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const createdById = (req as any).user?.id;

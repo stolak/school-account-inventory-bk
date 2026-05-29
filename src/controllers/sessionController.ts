@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { sessionService } from "../services/sessionService";
 import { Status } from "@prisma/client";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 /**
  * @openapi
@@ -213,7 +213,7 @@ export const sessionController = {
    */
   getSessionById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const found = await sessionService.getSessionById(id);
@@ -231,7 +231,7 @@ export const sessionController = {
 
   updateSession: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const { name, status } = req.body ?? {};
@@ -268,7 +268,7 @@ export const sessionController = {
 
   deleteSession: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const deleted = await sessionService.deleteSession(id);

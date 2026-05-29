@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { Status } from "@prisma/client";
 import { projectService } from "../services/projectService";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 /**
  * @openapi
@@ -221,7 +221,7 @@ export const projectController = {
    */
   getProjectById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const row = await projectService.getProjectById(id);
       if (!row) return res.status(404).json({ success: false, message: "Project not found" });
@@ -237,7 +237,7 @@ export const projectController = {
 
   updateProject: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const { name, description, status } = req.body ?? {};
@@ -277,7 +277,7 @@ export const projectController = {
 
   deleteProject: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const deleted = await projectService.deleteProject(id);
       return res.json({ success: true, message: "Project deleted successfully", data: deleted });

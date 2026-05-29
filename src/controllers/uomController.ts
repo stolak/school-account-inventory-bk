@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { uomService } from "../services/uomService";
 import { Status } from "@prisma/client";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 /**
  * @openapi
@@ -228,7 +228,7 @@ export const uomController = {
    */
   getUomById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({
@@ -262,7 +262,7 @@ export const uomController = {
 
   updateUom: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const { name, symbol, status } = req.body ?? {};
 
       if (!id) {
@@ -321,7 +321,7 @@ export const uomController = {
 
   deleteUom: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({

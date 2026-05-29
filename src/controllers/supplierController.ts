@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { supplierService } from "../services/supplierService";
 import { Status } from "@prisma/client";
-import { isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
+import { isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
 
 /**
  * @openapi
@@ -295,7 +295,7 @@ export const supplierController = {
    */
   getSupplierById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const supplier = await supplierService.getSupplierById(id);
@@ -309,7 +309,7 @@ export const supplierController = {
 
   updateSupplier: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const {
         name,
         contactName,
@@ -371,7 +371,7 @@ export const supplierController = {
 
   deleteSupplier: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const existing = await supplierService.getSupplierById(id);

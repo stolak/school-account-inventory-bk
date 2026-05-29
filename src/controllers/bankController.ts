@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { routeParam } from "../utils/request";
 import { bankService } from "../services/bankService";
 
 /**
@@ -102,7 +103,7 @@ export const bankController = {
    */
   getBankById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({
@@ -176,7 +177,7 @@ export const bankController = {
    */
   getBankByCode: async (req: Request, res: Response) => {
     try {
-      const { bankCode } = req.params;
+      const bankCode = routeParam(req.params.bankCode);
 
       if (!bankCode) {
         return res.status(400).json({

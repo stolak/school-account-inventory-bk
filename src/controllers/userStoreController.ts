@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { Status } from "@prisma/client";
 import { userStoreService } from "../services/userStoreService";
 import { storeService } from "../services/storeService";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam, routeParamTrimmed } from "../utils/request";
 
 function httpStatusForUserStoreMutation(message: string): number {
   if (message === "Store not found" || message === "Invalid userId" || message === "User is not assigned to this store") {
@@ -137,12 +137,13 @@ export const userStoreController = {
    */
   getAssignment: async (req: Request, res: Response) => {
     try {
-      const { userId, storeId } = req.params;
-      if (!userId?.trim() || !storeId?.trim()) {
+      const userId = routeParamTrimmed(req.params.userId);
+      const storeId = routeParamTrimmed(req.params.storeId);
+      if (!userId || !storeId) {
         return res.status(400).json({ success: false, message: "userId and storeId are required" });
       }
 
-      const row = await userStoreService.getAssignment(userId.trim(), storeId.trim());
+      const row = await userStoreService.getAssignment(userId, storeId);
       if (!row) {
         return res.status(404).json({ success: false, message: "User is not assigned to this store" });
       }
@@ -182,12 +183,13 @@ export const userStoreController = {
    */
   revokeAccess: async (req: Request, res: Response) => {
     try {
-      const { userId, storeId } = req.params;
-      if (!userId?.trim() || !storeId?.trim()) {
+      const userId = routeParamTrimmed(req.params.userId);
+      const storeId = routeParamTrimmed(req.params.storeId);
+      if (!userId || !storeId) {
         return res.status(400).json({ success: false, message: "userId and storeId are required" });
       }
 
-      const data = await userStoreService.revokeAccess(userId.trim(), storeId.trim());
+      const data = await userStoreService.revokeAccess(userId, storeId);
       return res.json({ success: true, message: "User removed from store", data });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to revoke store access";
@@ -222,15 +224,15 @@ export const userStoreController = {
    */
   listStoresForUser: async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
-      if (!userId?.trim()) {
+      const userId = routeParamTrimmed(req.params.userId);
+      if (!userId) {
         return res.status(400).json({ success: false, message: "userId is required" });
       }
 
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
-      const data = await userStoreService.listStoresForUser(userId.trim(), { page, limit });
+      const data = await userStoreService.listStoresForUser(userId, { page, limit });
       return res.json({ success: true, message: "Stores for user retrieved", data });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to list stores for user";
@@ -265,8 +267,8 @@ export const userStoreController = {
    */
   listAccessibleStoresForUser: async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
-      if (!userId?.trim()) {
+      const userId = routeParamTrimmed(req.params.userId);
+      if (!userId) {
         return res.status(400).json({ success: false, message: "userId is required" });
       }
 
@@ -292,8 +294,8 @@ export const userStoreController = {
         });
       }
 
-      await userStoreService.ensureUserExists(userId.trim());
-      const data = await storeService.listStoresAccessibleByUser(userId.trim(), { q, status });
+      await userStoreService.ensureUserExists(userId);
+      const data = await storeService.listStoresAccessibleByUser(userId, { q, status });
       return res.json({ success: true, message: "Accessible stores retrieved", data });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to list accessible stores";
@@ -328,15 +330,15 @@ export const userStoreController = {
    */
   listUsersForStore: async (req: Request, res: Response) => {
     try {
-      const { storeId } = req.params;
-      if (!storeId?.trim()) {
+      const storeId = routeParamTrimmed(req.params.storeId);
+      if (!storeId) {
         return res.status(400).json({ success: false, message: "storeId is required" });
       }
 
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
-      const data = await userStoreService.listUsersForStore(storeId.trim(), { page, limit });
+      const data = await userStoreService.listUsersForStore(storeId, { page, limit });
       return res.json({ success: true, message: "Users for store retrieved", data });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to list users for store";

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { inventoryItemService } from "../services/inventoryItemService";
 import { Status } from "@prisma/client";
-import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
+import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 /**
@@ -803,7 +803,7 @@ export const inventoryItemController = {
    */
   getInventoryItemById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const item = await inventoryItemService.getInventoryItemById(id);
@@ -817,7 +817,7 @@ export const inventoryItemController = {
 
   updateInventoryItem: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const {
         sku,
         name,
@@ -893,7 +893,7 @@ export const inventoryItemController = {
 
   deleteInventoryItem: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const existing = await inventoryItemService.getInventoryItemById(id);

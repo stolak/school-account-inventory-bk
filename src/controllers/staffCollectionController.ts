@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { InventoryTransactionStatus } from "@prisma/client";
 import { staffCollectionService } from "../services/staffCollectionService";
-import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
+import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 function httpStatusForStaffCollectionCreate(message: string): number {
@@ -705,7 +705,7 @@ export const staffCollectionController = {
    */
   getStaffCollectionById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const row = await staffCollectionService.getStaffCollectionById(id);
       if (!row) return res.status(404).json({ success: false, message: "Staff collection not found" });
@@ -717,7 +717,7 @@ export const staffCollectionController = {
 
   updateStaffCollection: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const { itemId, staffId, qtyOut, outCost, referenceNo, notes, transactionDate } = req.body ?? {};
@@ -775,7 +775,7 @@ export const staffCollectionController = {
 
   deleteStaffCollection: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const deleted = await staffCollectionService.deleteStaffCollection(id);
       return res.json({ success: true, message: "Staff collection deleted successfully", data: deleted });

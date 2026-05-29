@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { subCategoryService } from "../services/subCategoryService";
 import { Status } from "@prisma/client";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 /**
  * @openapi
@@ -250,7 +250,7 @@ export const subCategoryController = {
    */
   getSubCategoryById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({
@@ -284,7 +284,7 @@ export const subCategoryController = {
 
   updateSubCategory: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const { name, description, categoryId, status } = req.body ?? {};
 
       if (!id) {
@@ -357,7 +357,7 @@ export const subCategoryController = {
 
   deleteSubCategory: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({

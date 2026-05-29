@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { InventoryTransactionStatus } from "@prisma/client";
 import { facilityCollectionService } from "../services/facilityCollectionService";
-import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
+import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 function httpStatusForFacilityCollectionCreate(message: string): number {
@@ -458,7 +458,7 @@ export const facilityCollectionController = {
 
   getFacilityCollectionById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const row = await facilityCollectionService.getFacilityCollectionById(id);
       if (!row) return res.status(404).json({ success: false, message: "Facility collection not found" });
@@ -474,7 +474,7 @@ export const facilityCollectionController = {
 
   updateFacilityCollection: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const { itemId, qtyOut, referenceNo, notes, transactionDate, facilityId, staffId, hostelId } = req.body ?? {};
@@ -636,7 +636,7 @@ export const facilityCollectionController = {
 
   deleteFacilityCollection: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const deleted = await facilityCollectionService.deleteFacilityCollection(id);
       return res.json({ success: true, message: "Facility collection deleted successfully", data: deleted });

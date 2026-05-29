@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { subClassService } from "../services/subClassService";
 import { Status } from "@prisma/client";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 /**
  * @openapi
@@ -270,7 +270,7 @@ export const subClassController = {
    */
   getSubClassById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const createdById = (req as any).user?.id;
@@ -291,7 +291,7 @@ export const subClassController = {
 
   updateSubClass: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const { name, classId, status } = req.body ?? {};
@@ -347,7 +347,7 @@ export const subClassController = {
 
   deleteSubClass: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const createdById = (req as any).user?.id;

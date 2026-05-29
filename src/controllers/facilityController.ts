@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { Status } from "@prisma/client";
 import { facilityService } from "../services/facilityService";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 /**
  * @openapi
@@ -230,7 +230,7 @@ export const facilityController = {
    */
   getFacilityById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const row = await facilityService.getFacilityById(id);
@@ -248,7 +248,7 @@ export const facilityController = {
 
   updateFacility: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const { name, description, status } = req.body ?? {};
@@ -288,7 +288,7 @@ export const facilityController = {
 
   deleteFacility: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const deleted = await facilityService.deleteFacility(id);

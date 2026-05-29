@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { InventoryTransactionStatus } from "@prisma/client";
 import { donationService } from "../services/donationService";
-import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
+import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 /**
@@ -799,7 +799,7 @@ export const donationController = {
    */
   getDonationById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const row = await donationService.getDonationById(id);
       if (!row) return res.status(404).json({ success: false, message: "Donation not found" });
@@ -811,7 +811,7 @@ export const donationController = {
 
   updateDonation: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const { itemId, qtyIn, referenceNo, notes, transactionDate } = req.body ?? {};
@@ -865,7 +865,7 @@ export const donationController = {
 
   deleteDonation: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const deleted = await donationService.deleteDonation(id);
       return res.json({ success: true, message: "Donation deleted successfully", data: deleted });

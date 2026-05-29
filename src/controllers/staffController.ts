@@ -3,7 +3,7 @@ import { staffService } from "../services/staffService";
 import { StaffPosition, Status, UserType } from "@prisma/client";
 
 const STAFF_POSITIONS = Object.values(StaffPosition) as string[];
-import { isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
+import { isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
 
 /**
  * @openapi
@@ -340,7 +340,7 @@ export const staffController = {
    */
   getStaffById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const staff = await staffService.getStaffById(id);
       if (!staff) return res.status(404).json({ success: false, message: "Staff not found" });
@@ -354,7 +354,7 @@ export const staffController = {
 
   updateStaff: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const { StaffNumber, email, name, position, status, profileImageUrl } = req.body ?? {};
@@ -411,7 +411,7 @@ export const staffController = {
 
   deleteStaff: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const deleted = await staffService.deleteStaff(id);
       return res.json({ success: true, message: "Staff deleted successfully", data: deleted });

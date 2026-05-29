@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { UserType } from "@prisma/client";
 import { userService } from "../services/userService";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 const USER_TYPES = new Set<string>(Object.values(UserType));
 
@@ -184,7 +184,7 @@ export const userController = {
    */
   getUserById: async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
+      const userId = routeParam(req.params.userId);
 
       if (!userId) {
         return res.status(400).json({
@@ -288,7 +288,7 @@ export const userController = {
    */
   getUserPrivileges: async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
+      const userId = routeParam(req.params.userId);
 
       if (!userId) {
         return res.status(400).json({ success: false, message: "userId parameter is required" });
@@ -359,7 +359,7 @@ export const userController = {
    */
   getUserMenus: async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
+      const userId = routeParam(req.params.userId);
 
       if (!userId) {
         return res.status(400).json({ success: false, message: "userId parameter is required" });
@@ -381,7 +381,7 @@ export const userController = {
 
   addPrivilegesToUser: async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
+      const userId = routeParam(req.params.userId);
       const privilegeIds = parsePrivilegeIds(req.body);
 
       if (!userId) {
@@ -442,7 +442,8 @@ export const userController = {
    */
   removePrivilegeFromUser: async (req: Request, res: Response) => {
     try {
-      const { userId, privilegeId } = req.params;
+      const userId = routeParam(req.params.userId);
+      const privilegeId = routeParam(req.params.privilegeId);
 
       if (!userId || !privilegeId) {
         return res.status(400).json({
@@ -510,7 +511,7 @@ export const userController = {
    */
   addAppRoleToUser: async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
+      const userId = routeParam(req.params.userId);
       const roleId = parseRoleId(req.body);
 
       if (!userId) {
@@ -569,7 +570,8 @@ export const userController = {
    */
   removeAppRoleFromUser: async (req: Request, res: Response) => {
     try {
-      const { userId, roleId } = req.params;
+      const userId = routeParam(req.params.userId);
+      const roleId = routeParam(req.params.roleId);
 
       if (!userId || !roleId) {
         return res.status(400).json({

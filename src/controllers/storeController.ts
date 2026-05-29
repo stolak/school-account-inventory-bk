@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { Status } from "@prisma/client";
 import { storeService } from "../services/storeService";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam, routeParamTrimmed } from "../utils/request";
 
 /**
  * @openapi
@@ -336,7 +336,7 @@ export const storeController = {
    */
   getStoreById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParamTrimmed(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const row = await storeService.getStoreById(id);
       if (!row) return res.status(404).json({ success: false, message: "Store not found" });
@@ -352,7 +352,7 @@ export const storeController = {
 
   updateStore: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParamTrimmed(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const { name, description, status, managerId } = req.body ?? {};
@@ -403,7 +403,7 @@ export const storeController = {
 
   deleteStore: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParamTrimmed(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const deleted = await storeService.deleteStore(id);
       return res.json({ success: true, message: "Store deleted successfully", data: deleted });
@@ -487,15 +487,15 @@ export const storeController = {
    */
   listStoreUsers: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
-      if (!id?.trim()) {
+      const id = routeParamTrimmed(req.params.id);
+      if (!id) {
         return res.status(400).json({ success: false, message: "id is required" });
       }
 
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
-      const data = await storeService.listUsersForStore(id.trim(), { page, limit });
+      const data = await storeService.listUsersForStore(id, { page, limit });
       return res.json({ success: true, message: "Store users retrieved successfully", data });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to list store users";
@@ -505,16 +505,16 @@ export const storeController = {
 
   addUserToStore: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParamTrimmed(req.params.id);
       const { userId } = req.body ?? {};
-      if (!id || typeof id !== "string" || !id.trim()) {
+      if (!id) {
         return res.status(400).json({ success: false, message: "id is required" });
       }
       if (!userId || typeof userId !== "string" || !userId.trim()) {
         return res.status(400).json({ success: false, message: "userId is required" });
       }
 
-      const data = await storeService.addUserToStore(id.trim(), userId.trim());
+      const data = await storeService.addUserToStore(id, userId.trim());
       return res.status(201).json({ success: true, message: "User added to store successfully", data });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to add user to store";
@@ -566,15 +566,16 @@ export const storeController = {
    */
   removeUserFromStore: async (req: Request, res: Response) => {
     try {
-      const { id, userId } = req.params;
-      if (!id || typeof id !== "string" || !id.trim()) {
+      const id = routeParamTrimmed(req.params.id);
+      const userId = routeParamTrimmed(req.params.userId);
+      if (!id) {
         return res.status(400).json({ success: false, message: "id is required" });
       }
-      if (!userId || typeof userId !== "string" || !userId.trim()) {
+      if (!userId) {
         return res.status(400).json({ success: false, message: "userId is required" });
       }
 
-      const data = await storeService.removeUserFromStore(id.trim(), userId.trim());
+      const data = await storeService.removeUserFromStore(id, userId);
       return res.json({ success: true, message: "User removed from store successfully", data });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to remove user from store";

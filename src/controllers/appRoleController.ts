@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { routeParam } from "../utils/request";
 import { appRoleService, AppRoleStatus } from "../services/appRoleService";
 
 const APP_ROLE_STATUSES: AppRoleStatus[] = ["active", "inactive"];
@@ -228,7 +229,7 @@ export const appRoleController = {
    */
   getAppRoleById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({
@@ -262,7 +263,7 @@ export const appRoleController = {
 
   updateAppRole: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const { name, status } = req.body ?? {};
 
       if (!id) {
@@ -314,7 +315,7 @@ export const appRoleController = {
 
   deleteAppRole: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({
@@ -383,7 +384,7 @@ export const appRoleController = {
    */
   addPrivilegesToRole: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const privilegeIds = parsePrivilegeIds(req.body);
 
       if (!id) {
@@ -446,7 +447,8 @@ export const appRoleController = {
    */
   removePrivilegeFromRole: async (req: Request, res: Response) => {
     try {
-      const { id, privilegeId } = req.params;
+      const id = routeParam(req.params.id);
+      const privilegeId = routeParam(req.params.privilegeId);
 
       if (!id || !privilegeId) {
         return res.status(400).json({
@@ -527,7 +529,7 @@ export const appRoleController = {
    */
   addMenusToRole: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const menuIds = parseMenuIds(req.body);
 
       if (!id) {
@@ -563,7 +565,7 @@ export const appRoleController = {
 
   listRoleMenus: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({
@@ -615,7 +617,8 @@ export const appRoleController = {
    */
   deleteRoleMenu: async (req: Request, res: Response) => {
     try {
-      const { id, roleMenuId } = req.params;
+      const id = routeParam(req.params.id);
+      const roleMenuId = routeParam(req.params.roleMenuId);
 
       if (!id || !roleMenuId) {
         return res.status(400).json({

@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { categoryService } from "../services/categoryService";
 import { InventoryCategoryType, Status } from "@prisma/client";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 function parseConsumableAccountIdInput(
   value: unknown
@@ -523,7 +523,7 @@ export const categoryController = {
    */
   getCategoryById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({
@@ -557,7 +557,7 @@ export const categoryController = {
 
   updateCategory: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const { name, description, status, categoryType, consumableAccountId, assetAccountId } =
         req.body ?? {};
 
@@ -639,7 +639,7 @@ export const categoryController = {
 
   deleteCategory: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({

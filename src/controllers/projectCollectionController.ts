@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { InventoryTransactionStatus } from "@prisma/client";
 import { projectCollectionService } from "../services/projectCollectionService";
-import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
+import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 function httpStatusForProjectCollectionCreate(message: string): number {
@@ -867,7 +867,7 @@ export const projectCollectionController = {
    */
   getProjectCollectionById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const row = await projectCollectionService.getProjectCollectionById(id);
       if (!row) return res.status(404).json({ success: false, message: "Project collection not found" });
@@ -883,7 +883,7 @@ export const projectCollectionController = {
 
   updateProjectCollection: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const { itemId, qtyOut, referenceNo, notes, transactionDate, projectId, staffId, hostelId } = req.body ?? {};
@@ -950,7 +950,7 @@ export const projectCollectionController = {
 
   deleteProjectCollection: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const deleted = await projectCollectionService.deleteProjectCollection(id);
       return res.json({ success: true, message: "Project collection deleted successfully", data: deleted });

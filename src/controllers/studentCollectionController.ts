@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { InventoryTransactionStatus } from "@prisma/client";
 import { studentCollectionService } from "../services/studentCollectionService";
-import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
+import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 function httpStatusForStudentCollectionCreate(message: string): number {
@@ -989,7 +989,7 @@ export const studentCollectionController = {
    */
   getStudentCollectionById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const row = await studentCollectionService.getStudentCollectionById(id);
@@ -1012,7 +1012,7 @@ export const studentCollectionController = {
 
   updateStudentCollection: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const { itemId, studentId, qtyOut, referenceNo, notes, transactionDate } = req.body ?? {};
 
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
@@ -1076,7 +1076,7 @@ export const studentCollectionController = {
 
   deleteStudentCollection: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const deleted = await studentCollectionService.deleteStudentCollection(id);

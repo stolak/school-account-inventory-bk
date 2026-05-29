@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { routeParam } from "../utils/request";
 import { Status } from "@prisma/client";
 import { menuService } from "../services/menuService";
 
@@ -221,7 +222,7 @@ export const menuController = {
    */
   getMenuById: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({
@@ -255,7 +256,7 @@ export const menuController = {
 
   updateMenu: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
       const { route, caption, status } = req.body ?? {};
 
       if (!id) {
@@ -321,7 +322,7 @@ export const menuController = {
 
   deleteMenu: async (req: Request, res: Response) => {
     try {
-      const { id } = req.params;
+      const id = routeParam(req.params.id);
 
       if (!id) {
         return res.status(400).json({
