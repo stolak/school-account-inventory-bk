@@ -5,6 +5,7 @@ import { getJwtSecret } from "../utils/env";
 import prisma from "../utils/prisma";
 import { emailService } from "./emailService";
 import { UserType } from "@prisma/client";
+import { auditService } from "./auditService";
 
 export interface AuthResponse {
   success: boolean;
@@ -145,7 +146,19 @@ export class AuthService {
       name,
       profileImageUrl: user.profileImageUrl ?? undefined,
     });
-
+    auditService.createAuditLog({
+      action: "LOGIN",
+      entityType: "user",
+      entityId: user.id,
+      performedById: user.id,
+      description: `User ${user.email} logged in`,
+      oldValues: {},
+      newValues: {},
+      // ipAddress: request.ip,
+      // userAgent: request.headers["user-agent"],
+      // requestId: request.headers["x-request-id"],
+      status: "SUCCESS",
+    });
     return {
       success: true,
       message: "Login successful",
