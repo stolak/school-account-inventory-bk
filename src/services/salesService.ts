@@ -178,7 +178,17 @@ export class SalesService {
     const salesIncomeAccountId = String(salesLedger.accountId);
     let staffAccountId = null;
     let studentAccountId = null;
+    if (input.staffId && input.stundentId) {
+      throw new Error("Only one of staffId or stundentId may be provided in the request, not both");
+    }
     if (input.staffId) {
+      const staff = await this.prisma.staff.findUnique({
+        where: { id: input.staffId },
+        select: { id: true },
+      });
+      if (!staff) {
+        throw new Error("Staff not found");
+      }
       staffAccountId =
         await defaultAccountSettingsService.getAccountChartBySettingsId("STAFF_ACCOUNT");
       if (!staffAccountId) {
@@ -187,6 +197,13 @@ export class SalesService {
       staffAccountId = String(staffAccountId.accountId);
     }
     if (input.stundentId) {
+      const student = await this.prisma.student.findUnique({
+        where: { id: input.stundentId },
+        select: { id: true },
+      });
+      if (!student) {
+        throw new Error("Student not found");
+      }
       studentAccountId =
         await defaultAccountSettingsService.getAccountChartBySettingsId("STUDENT_ACCOUNT");
       if (!studentAccountId) {

@@ -51,6 +51,7 @@ import facilityCollectionRouter from "./facilityCollection";
 import cashierRouter from "./cashier";
 import inventoryReceiveAcknowledgementRouter from "./inventoryReceiveAcknowledgement";
 import userRouter from "./user";
+import auditLogRouter from "./auditLog";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -107,6 +108,7 @@ router.use("/facility-collections", facilityCollectionRouter);
 router.use("/cashiers", cashierRouter);
 router.use("/inventory-receive-acknowledgements", inventoryReceiveAcknowledgementRouter);
 router.use("/users", userRouter);
+router.use("/audit-logs", auditLogRouter);
 
 router.use("/upload", uploadRouter);
 

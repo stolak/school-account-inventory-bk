@@ -3,6 +3,44 @@ import { salesService } from "../services/salesService";
 import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
+function normalizeOptionalString(v: unknown): string | null | undefined {
+  if (v === undefined) return undefined;
+  if (v === null || v === "") return null;
+  if (typeof v !== "string") return undefined;
+  const trimmed = v.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function httpStatusForSalesError(message: string): number {
+  if (
+    message === "Invalid storeId" ||
+    message.startsWith("Invalid itemId") ||
+    message.includes("not a cashier") ||
+    message.includes("does not have a ledger") ||
+    message.includes("ledger is not active") ||
+    message.includes("account not found") ||
+    message.includes("Default account settings not found")
+  ) {
+    return 404;
+  }
+  if (message.includes("Only one of staffId or stundentId")) {
+    return 400;
+  }
+  return 500;
+}
+
+function assertExclusiveStaffOrStudent(body: Record<string, unknown>): string | null {
+  const hasStaffKey = Object.prototype.hasOwnProperty.call(body, "staffId");
+  const hasStudentKey = Object.prototype.hasOwnProperty.call(body, "stundentId");
+  if (!hasStaffKey || !hasStudentKey) return null;
+  const staffVal = normalizeOptionalString(body.staffId);
+  const studentVal = normalizeOptionalString(body.stundentId);
+  if (staffVal && studentVal) {
+    return "Only one of staffId or stundentId may be provided in the request, not both";
+  }
+  return null;
+}
+
 /**
  * @openapi
  * /api/v1/sales/bulk:
@@ -14,6 +52,8 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *     description: |
  *       Creates InventoryTransaction rows with transactionType=sales (locked) and status=completed (locked).
  *       Each item line records qtyOut and outCost from qty and amount. All lines share the same reference, store, customer, and date.
+ *       Posts ledger entries: sale total debited to cashier ledger by default, or to STAFF_ACCOUNT / STUDENT_ACCOUNT when staffId or stundentId is provided (only one of those two, not both).
+ *       Requires the authenticated user to be an active cashier with a ledger account.
  *     requestBody:
  *       required: true
  *       content:
@@ -36,6 +76,16 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *               customerName:
  *                 type: string
  *                 nullable: true
+ *               staffId:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: Optional. When set, sale receipt is debited to the STAFF_ACCOUNT default ledger instead of the cashier ledger. Must not be sent together with stundentId.
+ *               stundentId:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *                 description: Optional student id. When set, sale receipt is debited to the STUDENT_ACCOUNT default ledger instead of the cashier ledger. Must not be sent together with staffId.
  *               transactionDate:
  *                 type: string
  *                 format: date-time
@@ -63,7 +113,7 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *       400:
  *         description: Validation error
  *       404:
- *         description: Store or item not found
+ *         description: Store, item, cashier, or default account not found
  *       500:
  *         description: Server error
  *   get:
@@ -109,7 +159,14 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
 export const salesController = {
   createBulkSales: async (req: Request, res: Response) => {
     try {
-      const { storeId, ref, note, customerName, transactionDate, items } = req.body ?? {};
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const exclusiveError = assertExclusiveStaffOrStudent(body);
+      if (exclusiveError) {
+        return res.status(400).json({ success: false, message: exclusiveError });
+      }
+
+      const { storeId, ref, note, customerName, transactionDate, staffId, stundentId, items } =
+        body;
 
       if (!storeId || typeof storeId !== "string" || !storeId.trim()) {
         return res.status(400).json({ success: false, message: "storeId is required" });
@@ -125,6 +182,17 @@ export const salesController = {
         return res
           .status(400)
           .json({ success: false, message: "customerName must be a string or null" });
+      }
+
+      const normalizedStaffId = normalizeOptionalString(staffId);
+      if (staffId !== undefined && normalizedStaffId === undefined) {
+        return res.status(400).json({ success: false, message: "staffId must be a string or null" });
+      }
+      const normalizedStundentId = normalizeOptionalString(stundentId);
+      if (stundentId !== undefined && normalizedStundentId === undefined) {
+        return res
+          .status(400)
+          .json({ success: false, message: "stundentId must be a string or null" });
       }
 
       if (transactionDate !== undefined && typeof transactionDate !== "string") {
@@ -194,10 +262,12 @@ export const salesController = {
 
       const created = await salesService.createBulkSales({
         storeId: storeId.trim(),
-        referenceNo: ref === undefined ? null : ref,
-        notes: note === undefined ? null : note,
-        customerName: customerName === undefined ? null : customerName,
+        referenceNo: ref === undefined ? null : (ref as string | null),
+        notes: note === undefined ? null : (note as string | null),
+        customerName: customerName === undefined ? null : (customerName as string | null),
         transactionDate: parsedDate ?? undefined,
+        ...(normalizedStaffId !== undefined ? { staffId: normalizedStaffId } : {}),
+        ...(normalizedStundentId !== undefined ? { stundentId: normalizedStundentId } : {}),
         createdById,
         items: normalizedItems,
       });
@@ -209,9 +279,7 @@ export const salesController = {
       });
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to create sales";
-      const code =
-        message === "Invalid storeId" || message.startsWith("Invalid itemId") ? 404 : 500;
-      return res.status(code).json({ success: false, message });
+      return res.status(httpStatusForSalesError(message)).json({ success: false, message });
     }
   },
 
