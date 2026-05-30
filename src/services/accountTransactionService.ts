@@ -1267,8 +1267,8 @@ export class AccountTransactionService {
     await this.validateProjectId(dbClient, input.projectId);
     const transactionDate = this.parseDateOrThrow(input.transactionDate);
 
-    const accountCode = account.accountNo?.trim() || String(account.id);
-    const accountSub = input.accountSub?.trim() || account.accountDescription.trim();
+    const accountCode = account.accountNo?.trim() ?? undefined;
+    const accountSub = input.accountSub?.trim() ?? undefined;
 
     return dbClient.accountTransaction.create({
       data: {

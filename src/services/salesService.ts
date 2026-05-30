@@ -6,6 +6,7 @@ import {
   Prisma,
   Status,
 } from "@prisma/client";
+import { accountTransactionService } from "./accountTransactionService";
 import { defaultAccountSettingsService } from "./defaultAccountSettingsService";
 
 export interface SaleData {
@@ -103,6 +104,8 @@ export class SalesService {
     notes?: string | null;
     customerName?: string | null;
     transactionDate?: Date;
+    staffId?: string | null;
+    stundentId?: string | null;
     createdById: string;
     items: Array<{ itemId: string; qty: string | number; amount: string | number }>;
   }): Promise<SaleData[]> {
@@ -169,9 +172,29 @@ export class SalesService {
       }
     }
 
-    // get sales leg
     const salesLedger =
       await defaultAccountSettingsService.getAccountChartBySettingsId("SALES_LEDGER");
+
+    const salesIncomeAccountId = String(salesLedger.accountId);
+    let staffAccountId = null;
+    let studentAccountId = null;
+    if (input.staffId) {
+      staffAccountId =
+        await defaultAccountSettingsService.getAccountChartBySettingsId("STAFF_ACCOUNT");
+      if (!staffAccountId) {
+        throw new Error("Staff account not found");
+      }
+      staffAccountId = String(staffAccountId.accountId);
+    }
+    if (input.stundentId) {
+      studentAccountId =
+        await defaultAccountSettingsService.getAccountChartBySettingsId("STUDENT_ACCOUNT");
+      if (!studentAccountId) {
+        throw new Error("Student account not found");
+      }
+      studentAccountId = String(studentAccountId.accountId);
+    }
+
     const txDate = input.transactionDate ?? new Date();
     const referenceNo =
       typeof input.referenceNo === "string" && input.referenceNo.trim().length > 0
@@ -181,29 +204,95 @@ export class SalesService {
       input.customerName === undefined || input.customerName === null
         ? null
         : String(input.customerName).trim() || null;
-    //calculate the sum of the amount of the items
-    const totalAmount = input.items.reduce((acc, it) => acc + Number(it.amount), 0);
 
-    // check if the user has a cashier
+    const totalSaleAmount = input.items.reduce(
+      (acc, it) => acc.plus(new Prisma.Decimal(it.amount as Prisma.Decimal.Value)),
+      new Prisma.Decimal(0)
+    );
+
     const cashier = await this.prisma.cashier.findFirst({
       where: { userId: input.createdById, status: Status.Active },
     });
     if (!cashier) {
       throw new Error("The user is not a cashier hence cannot create sales");
     }
-    // check if the cashier has a ledger
     if (!cashier.accountChartId) {
       throw new Error("The cashier does not have a ledger hence cannot create sales");
     }
-    // check if the ledger is active
+    const cashierAccountId = String(cashier.accountChartId);
+
     const ledger = await this.prisma.accountChart.findUnique({
       where: { id: cashier.accountChartId },
+      select: { id: true },
     });
     if (!ledger) {
       throw new Error("The cashier's ledger is not active hence cannot create sales");
     }
 
+    const itemById = new Map(existingItems.map((i) => [i.id, i]));
+    const txDateIso = txDate.toISOString();
+
     const created = await this.prisma.$transaction(async (tx) => {
+      if (totalSaleAmount.gt(0)) {
+        const cashierAccount = await tx.accountChart.findUnique({
+          where: { id: cashier.accountChartId! },
+          select: { id: true },
+        });
+        if (!cashierAccount) {
+          throw new Error("Cashier ledger account not found");
+        }
+        const salesIncomeAccount = await tx.accountChart.findUnique({
+          where: { id: salesLedger.accountId },
+          select: { id: true },
+        });
+        if (!salesIncomeAccount) {
+          throw new Error("Sales income account not found for SALES_LEDGER");
+        }
+      }
+
+      for (const it of input.items) {
+        const item = itemById.get(it.itemId);
+        if (!item) throw new Error(`Invalid itemId(s): ${it.itemId}`);
+
+        const qty = new Prisma.Decimal(it.qty as Prisma.Decimal.Value);
+        const lineCost = new Prisma.Decimal(item.costPrice as Prisma.Decimal.Value).mul(qty);
+        if (!lineCost.gt(0)) continue;
+
+        if (!item.category) throw new Error(`Category not configured for item ${item.name}`);
+        if (!item.category.consumableAccountId) {
+          throw new Error(
+            `Expense account not configured for item ${item.name} in category ${item.category.name}`
+          );
+        }
+
+        const consumableAccount = await tx.accountChart.findUnique({
+          where: { id: item.category.consumableAccountId },
+          select: { id: true },
+        });
+        if (!consumableAccount) {
+          throw new Error(
+            `Expense account not found for item ${item.name} in category ${item.category.name}`
+          );
+        }
+
+        if (item.category.categoryType === InventoryCategoryType.NonConsumable) {
+          if (!item.category.assetAccountId) {
+            throw new Error(
+              `Asset account not configured for item ${item.name} in category ${item.category.name}`
+            );
+          }
+          const assetAccount = await tx.accountChart.findUnique({
+            where: { id: item.category.assetAccountId },
+            select: { id: true },
+          });
+          if (!assetAccount) {
+            throw new Error(
+              `Asset account not found for item ${item.name} in category ${item.category.name}`
+            );
+          }
+        }
+      }
+
       const createdRows = await Promise.all(
         input.items.map(async (it) => {
           return tx.inventoryTransaction.create({
@@ -215,15 +304,125 @@ export class SalesService {
               outCost: it.amount as any,
               status: InventoryTransactionStatus.completed,
               referenceNo,
-              notes: input.notes ?? null,
+              notes: input.notes ?? `Sales - ${referenceNo} - ${customerMame}`,
               customerMame,
               transactionDate: txDate,
               createdById: input.createdById,
+              staffId: input.staffId ?? null,
+              studentId: input.stundentId ?? null,
             },
             include: saleInclude,
           });
         })
       );
+
+      for (const it of input.items) {
+        const item = itemById.get(it.itemId);
+        if (!item?.category) throw new Error(`Invalid itemId(s): ${it.itemId}`);
+
+        const qty = new Prisma.Decimal(it.qty as Prisma.Decimal.Value);
+        const lineCost = new Prisma.Decimal(item.costPrice as Prisma.Decimal.Value).mul(qty);
+        if (!lineCost.gt(0)) continue;
+
+        const costAmount = lineCost.toNumber();
+        const remarksSuffix = `${item.name} - ${referenceNo}`;
+
+        if (item.category.categoryType === InventoryCategoryType.Consumable) {
+          // Do nothing because the item cost have already been posted to the consumable account during entry
+          // await accountTransactionService.creditAccount(
+          //   {
+          //     accountId: String(item.category.consumableAccountId),
+          //     amount: costAmount,
+          //     ref: referenceNo,
+          //     manualRef: referenceNo,
+          //     transactionDate: txDateIso,
+          //     postedBy: input.createdById,
+          //     remarks: `Sales consumable credit - ${remarksSuffix}`,
+          //   },
+          //   tx
+          // );
+          // await accountTransactionService.debitAccount(
+          //   {
+          //     accountId: salesIncomeAccountId,
+          //     amount: costAmount,
+          //     ref: referenceNo,
+          //     manualRef: referenceNo,
+          //     transactionDate: txDateIso,
+          //     postedBy: input.createdById,
+          //     remarks: `Sales consumable COGS debit - ${remarksSuffix}`,
+          //   },
+          //   tx
+          // );
+        } else {
+          await accountTransactionService.debitAccount(
+            {
+              accountId: String(item.category.consumableAccountId),
+              amount: costAmount,
+              ref: referenceNo,
+              manualRef: referenceNo,
+              transactionDate: txDateIso,
+              postedBy: input.createdById,
+              remarks: `Sales non-consumable consumable debit - ${remarksSuffix}`,
+            },
+            tx
+          );
+          await accountTransactionService.creditAccount(
+            {
+              accountId: String(item.category.assetAccountId),
+              amount: costAmount,
+              ref: referenceNo,
+              manualRef: referenceNo,
+              transactionDate: txDateIso,
+              postedBy: input.createdById,
+              remarks: `Sales non-consumable asset credit - ${remarksSuffix}`,
+            },
+            tx
+          );
+        }
+      }
+
+      if (totalSaleAmount.gt(0)) {
+        let debitAccountId = cashierAccountId;
+        if (input.staffId) {
+          debitAccountId = staffAccountId!;
+        }
+        if (input.stundentId) {
+          debitAccountId = studentAccountId!;
+        }
+        const saleTotal = totalSaleAmount.toNumber();
+        const saleLineRemarks = input.items
+          .map((it) => {
+            const item = itemById.get(it.itemId);
+            return `${item?.name ?? it.itemId} - ${it.qty}`;
+          })
+          .join(", ");
+        await accountTransactionService.debitAccount(
+          {
+            accountId: debitAccountId,
+            amount: saleTotal,
+            ref: referenceNo,
+            manualRef: referenceNo,
+            transactionDate: txDateIso,
+            postedBy: input.createdById,
+            accountSub: input.staffId ?? input.stundentId ?? undefined,
+            remarks: `Sales receipt - ${saleLineRemarks} - ${referenceNo}`,
+          },
+          tx
+        );
+        await accountTransactionService.creditAccount(
+          {
+            accountId: salesIncomeAccountId,
+            amount: saleTotal,
+            ref: referenceNo,
+            manualRef: referenceNo,
+            transactionDate: txDateIso,
+            postedBy: input.createdById,
+            remarks: `Sales receipt - ${saleLineRemarks} - ${referenceNo}`,
+          },
+          tx
+        );
+      }
+
       return createdRows;
     });
 
