@@ -2,8 +2,11 @@ import prisma from "../utils/prisma";
 import {
   InventoryTransactionStatus,
   InventoryTransactionType,
+  InventoryCategoryType,
   Prisma,
+  Status,
 } from "@prisma/client";
+import { defaultAccountSettingsService } from "./defaultAccountSettingsService";
 
 export interface SaleData {
   id: string;
@@ -112,14 +115,63 @@ export class SalesService {
     const itemIds = [...new Set(input.items.map((i) => i.itemId))];
     const existingItems = await this.prisma.inventoryItem.findMany({
       where: { id: { in: itemIds } },
-      select: { id: true, name: true },
+      select: {
+        id: true,
+        name: true,
+        costPrice: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+            assetAccountId: true,
+            consumableAccountId: true,
+            assetAccount: {
+              select: {
+                id: true,
+                accountNo: true,
+                accountDescription: true,
+              },
+            },
+            consumableAccount: {
+              select: {
+                id: true,
+                accountNo: true,
+                accountDescription: true,
+              },
+            },
+            categoryType: true,
+          },
+        },
+      },
     });
     const existingSet = new Set(existingItems.map((i) => i.id));
     const missing = itemIds.filter((id) => !existingSet.has(id));
     if (missing.length) {
       throw new Error(`Invalid itemId(s): ${missing.join(", ")}`);
     }
+    // ensure each item has valid category with asset and consumable accounts
+    for (const item of existingItems) {
+      if (!item.category) {
+        throw new Error(`Item ${item.name} has no category`);
+      }
 
+      if (!item.category.consumableAccountId) {
+        throw new Error(`Item ${item.name} has no consumable account`);
+      }
+      if (item.category.categoryType === InventoryCategoryType.NonConsumable) {
+        if (!item.category.assetAccount) {
+          throw new Error(`Item ${item.name} has no asset account`);
+        }
+      }
+
+      if (!item.category.consumableAccount) {
+        throw new Error(`Item ${item.name} has no consumable account`);
+      }
+    }
+
+    // get sales leg
+    const salesLedger =
+      await defaultAccountSettingsService.getAccountChartBySettingsId("SALES_LEDGER");
     const txDate = input.transactionDate ?? new Date();
     const referenceNo =
       typeof input.referenceNo === "string" && input.referenceNo.trim().length > 0
@@ -129,6 +181,27 @@ export class SalesService {
       input.customerName === undefined || input.customerName === null
         ? null
         : String(input.customerName).trim() || null;
+    //calculate the sum of the amount of the items
+    const totalAmount = input.items.reduce((acc, it) => acc + Number(it.amount), 0);
+
+    // check if the user has a cashier
+    const cashier = await this.prisma.cashier.findFirst({
+      where: { userId: input.createdById, status: Status.Active },
+    });
+    if (!cashier) {
+      throw new Error("The user is not a cashier hence cannot create sales");
+    }
+    // check if the cashier has a ledger
+    if (!cashier.accountChartId) {
+      throw new Error("The cashier does not have a ledger hence cannot create sales");
+    }
+    // check if the ledger is active
+    const ledger = await this.prisma.accountChart.findUnique({
+      where: { id: cashier.accountChartId },
+    });
+    if (!ledger) {
+      throw new Error("The cashier's ledger is not active hence cannot create sales");
+    }
 
     const created = await this.prisma.$transaction(async (tx) => {
       const createdRows = await Promise.all(
@@ -269,9 +342,7 @@ export class SalesService {
         outCost: row.outCost.toString(),
         status: row.status,
       });
-      group.totalAmount = new Prisma.Decimal(group.totalAmount)
-        .plus(row.outCost)
-        .toString();
+      group.totalAmount = new Prisma.Decimal(group.totalAmount).plus(row.outCost).toString();
     }
 
     const grouped = Array.from(groupedMap.values());
