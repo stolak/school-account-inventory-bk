@@ -98,6 +98,7 @@ function inferRequiredPrivilege(req: Request): string | null {
     "inventory_items",
     "suppliers",
     "purchases",
+    "sales",
     "donations",
     "stores",
     "store_transfers",
@@ -119,6 +120,7 @@ function inferRequiredPrivilege(req: Request): string | null {
     "project_collections",
     "facilities",
     "facility_collections",
+    "cashiers",
     "student_collections",
     "staff_collections",
 

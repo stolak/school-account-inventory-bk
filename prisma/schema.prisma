@@ -121,6 +121,7 @@ model User {
   inventoryTransactions   InventoryTransaction[]
   privileges              Privilege[]
   auditLogs               AuditLog[]
+  cashiers                Cashier[]
 
   @@map("users")
 }
@@ -536,6 +537,7 @@ model Staff {
   userId                String?                @unique @db.Char(36)
   user                  User?                  @relation("StaffUser", fields: [userId], references: [id], onDelete: SetNull)
   inventoryTransactions InventoryTransaction[]
+  cashiers              Cashier[]
 
   @@index([userId])
   @@index([StaffNumber])
@@ -592,6 +594,7 @@ model InventoryTransaction {
   acknowledgedAt     DateTime?     @map("acknowledged_at") @db.DateTime
   acknowledgedBy     String?       @map("acknowledged_by") @db.Char(36)
   acknowledgedByUser User?         @relation(fields: [acknowledgedBy], references: [id], onDelete: SetNull)
+  customerMame       String?       @map("customer_name")
 
   @@index([itemId])
   @@index([supplierId])
@@ -746,6 +749,7 @@ model AccountChart {
   assetCategories         Category[]               @relation("CategoryAssetAccount")
   studentJournalTransfers StudentJournalTransfer[]
   // suppliers               Supplier[]
+  cashiers                Cashier[]
 
   @@index([groupId])
   @@index([headId])
@@ -1065,4 +1069,21 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model Cashier {
+  id             String        @id @default(uuid()) @db.Char(36)
+  name           String
+  staffId        String?
+  Staff          Staff?        @relation(fields: [staffId], references: [id])
+  accountChartId Int?
+  ledger         AccountChart? @relation(fields: [accountChartId], references: [id])
+  status         Status
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id])
+
+  @@index([staffId])
+  @@index([accountChartId])
+  @@index([userId])
+  @@map("cashiers")
 }

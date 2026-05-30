@@ -91,6 +91,8 @@ const options: swaggerJSDoc.Options = {
       { name: "Users", description: "User listing and profile (authenticated)" },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
+      { name: "Sales", description: "Inventory sales transactions (bulk create, list, grouped by reference)" },
+      { name: "Cashiers", description: "Cashier records linked to staff and ledger accounts (CRUD)" },
       { name: "Dashboard", description: "Dashboard endpoints" },
       { name: "Email", description: "Email management" },
       { name: "Helper", description: "Helper utilities" },
