@@ -1,18 +1,14 @@
 import { Request, Response } from "express";
 import { Status } from "@prisma/client";
 import { accountChartService } from "../services/accountChartService";
+import { parseAccountTypeFromQuery } from "../utils/accountType";
 import { parseIntOrUndefined, parsePositiveIntParam } from "../utils/request";
 
 function rejectGroupOrHeadInBody(body: unknown): string | null {
   if (body === null || typeof body !== "object") {
     return null;
   }
-  if (
-    "groupId" in body ||
-    "headId" in body ||
-    "group_id" in body ||
-    "head_id" in body
-  ) {
+  if ("groupId" in body || "headId" in body || "group_id" in body || "head_id" in body) {
     return "groupId and headId must not be sent; they are derived from subheadId";
   }
   return null;
@@ -77,6 +73,12 @@ const statusValues = `${Status.Active}, ${Status.Inactive}, ${Status.Archived}`;
  *       - in: query
  *         name: status
  *         schema: { type: string, enum: [Active, Inactive, Archived, All] }
+ *       - in: query
+ *         name: accountType
+ *         schema:
+ *           type: string
+ *           enum: [Cash, NonCash]
+ *         description: Filter by parent subhead account type. Alias query param accountType is also accepted.
  *     responses:
  *       200: { description: List }
  *       400: { description: Bad query }
@@ -105,8 +107,7 @@ export const accountChartController = {
         });
       }
 
-      const desc =
-        typeof body.accountDescription === "string" ? body.accountDescription : "";
+      const desc = typeof body.accountDescription === "string" ? body.accountDescription : "";
       if (!desc.trim()) {
         return res.status(400).json({
           success: false,
@@ -144,7 +145,11 @@ export const accountChartController = {
         }
       }
 
-      if (body.accountRef !== undefined && body.accountRef !== null && typeof body.accountRef !== "string") {
+      if (
+        body.accountRef !== undefined &&
+        body.accountRef !== null &&
+        typeof body.accountRef !== "string"
+      ) {
         return res.status(400).json({
           success: false,
           message: "accountRef must be a string or null",
@@ -249,11 +254,17 @@ export const accountChartController = {
         });
       }
 
+      const accountTypeParsed = parseAccountTypeFromQuery(req.query as Record<string, unknown>);
+      if (accountTypeParsed.error) {
+        return res.status(400).json({ success: false, message: accountTypeParsed.error });
+      }
+
       const rows = await accountChartService.list({
         ...(groupId !== undefined ? { groupId } : {}),
         ...(headId !== undefined ? { headId } : {}),
         ...(subheadId !== undefined ? { subheadId } : {}),
         ...(status !== undefined ? { status } : {}),
+        ...(accountTypeParsed.value !== undefined ? { accountType: accountTypeParsed.value } : {}),
       });
 
       return res.json({
@@ -409,7 +420,10 @@ export const accountChartController = {
         subheadId = n;
       }
 
-      if (hasDesc && (typeof body.accountDescription !== "string" || !body.accountDescription.trim())) {
+      if (
+        hasDesc &&
+        (typeof body.accountDescription !== "string" || !body.accountDescription.trim())
+      ) {
         return res.status(400).json({
           success: false,
           message: "accountDescription must be a non-empty string when provided",

@@ -1,4 +1,4 @@
-import { Prisma, Status } from "@prisma/client";
+import { AccountType, Prisma, Status } from "@prisma/client";
 import prisma from "../utils/prisma";
 
 const accountSubheadInclude = {
@@ -14,6 +14,7 @@ export type ListAccountSubheadsFilters = {
   groupId?: number;
   headId?: number;
   status?: Status | "All";
+  accountType?: AccountType;
 };
 
 function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
@@ -81,6 +82,7 @@ export class AccountSubheadService {
     rank?: number;
     afs?: string | null;
     paymentMethod?: string | null;
+    accountType?: AccountType;
   }): Promise<AccountSubheadWithRelations> {
     const nameTrimmed = typeof input.name === "string" ? input.name.trim() : "";
     if (!nameTrimmed) {
@@ -110,6 +112,7 @@ export class AccountSubheadService {
         rank: input.rank ?? 0,
         afs: input.afs === undefined ? null : input.afs,
         paymentMethod: input.paymentMethod === undefined ? null : input.paymentMethod,
+        ...(input.accountType !== undefined ? { accountType: input.accountType } : {}),
       },
       include: accountSubheadInclude,
     });
@@ -127,6 +130,9 @@ export class AccountSubheadService {
       where.status = Status.Active;
     } else if (filters.status !== "All") {
       where.status = filters.status;
+    }
+    if (filters.accountType !== undefined) {
+      where.accountType = filters.accountType;
     }
 
     return this.prisma.accountSubhead.findMany({
@@ -153,6 +159,7 @@ export class AccountSubheadService {
       rank?: number;
       afs?: string | null;
       paymentMethod?: string | null;
+      accountType?: AccountType;
     }
   ): Promise<AccountSubheadWithRelations> {
     const current = await this.prisma.accountSubhead.findUnique({
@@ -206,6 +213,9 @@ export class AccountSubheadService {
     }
     if (input.paymentMethod !== undefined) {
       data.paymentMethod = input.paymentMethod;
+    }
+    if (input.accountType !== undefined) {
+      data.accountType = input.accountType;
     }
 
     try {

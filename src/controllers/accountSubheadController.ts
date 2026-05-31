@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { Status } from "@prisma/client";
 import { accountSubheadService } from "../services/accountSubheadService";
+import { parseAccountTypeFromBody, parseAccountTypeFromQuery } from "../utils/accountType";
 import { parseIntOrUndefined, parsePositiveIntParam } from "../utils/request";
 
 function rejectGroupIdInBody(body: unknown): string | null {
@@ -70,6 +71,10 @@ const statusValues = `${Status.Active}, ${Status.Inactive}, ${Status.Archived}`;
  *               paymentMethod:
  *                 type: string
  *                 nullable: true
+ *               accountType:
+ *                 type: string
+ *                 enum: [Cash, NonCash]
+ *                 description: Account type (stored as accountType / account_type). Defaults to Cash. Alias body field accountType is also accepted.
  *     responses:
  *       201:
  *         description: Subhead created
@@ -103,6 +108,12 @@ const statusValues = `${Status.Active}, ${Status.Inactive}, ${Status.Archived}`;
  *           type: string
  *           enum: [Active, Inactive, Archived, All]
  *         description: Defaults to Active only; use All for every status
+ *       - in: query
+ *         name: accountType
+ *         schema:
+ *           type: string
+ *           enum: [Cash, NonCash]
+ *         description: Filter by subhead account type. Alias query param accountType is also accepted.
  *     responses:
  *       200:
  *         description: List of subheads with group and head
@@ -183,6 +194,14 @@ export const accountSubheadController = {
         });
       }
 
+      const createAccountType = parseAccountTypeFromBody(body as Record<string, unknown>);
+      if (createAccountType === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "accountType must be one of: Cash, NonCash",
+        });
+      }
+
       const created = await accountSubheadService.create({
         headId,
         name: name.trim(),
@@ -198,6 +217,7 @@ export const accountSubheadController = {
           : {}),
         ...(body.afs !== undefined ? { afs: body.afs } : {}),
         ...(body.paymentMethod !== undefined ? { paymentMethod: body.paymentMethod } : {}),
+        ...(createAccountType !== undefined ? { accountType: createAccountType } : {}),
       });
 
       return res.status(201).json({
@@ -265,10 +285,16 @@ export const accountSubheadController = {
         });
       }
 
+      const accountTypeParsed = parseAccountTypeFromQuery(req.query as Record<string, unknown>);
+      if (accountTypeParsed.error) {
+        return res.status(400).json({ success: false, message: accountTypeParsed.error });
+      }
+
       const rows = await accountSubheadService.list({
         ...(groupId !== undefined ? { groupId } : {}),
         ...(headId !== undefined ? { headId } : {}),
         ...(status !== undefined ? { status } : {}),
+        ...(accountTypeParsed.value !== undefined ? { accountType: accountTypeParsed.value } : {}),
       });
 
       return res.json({
@@ -331,10 +357,10 @@ export const accountSubheadController = {
    *               headId:
    *                 type: integer
    *                 minimum: 1
- *               code:
- *                 type: string
- *                 nullable: true
- *               name:
+   *               code:
+   *                 type: string
+   *                 nullable: true
+   *               name:
    *                 type: string
    *               status:
    *                 type: string
@@ -347,18 +373,22 @@ export const accountSubheadController = {
    *               paymentMethod:
    *                 type: string
    *                 nullable: true
+   *               accountType:
+   *                 type: string
+   *                 enum: [Cash, NonCash]
+   *                 description: Account type (stored as accountType). Alias body field accountType is also accepted.
    *     responses:
    *       200:
    *         description: Updated subhead
    *       400:
    *         description: Validation error or no fields to update
- *       404:
- *         description: Subhead or head not found
- *       409:
- *         description: Duplicate name for this head or duplicate code globally
- *       500:
- *         description: Server error
- *   delete:
+   *       404:
+   *         description: Subhead or head not found
+   *       409:
+   *         description: Duplicate name for this head or duplicate code globally
+   *       500:
+   *         description: Server error
+   *   delete:
    *     summary: Delete an account subhead
    *     tags: [AccountSubheads]
    *     parameters:
@@ -434,8 +464,18 @@ export const accountSubheadController = {
       const hasRank = body.rank !== undefined;
       const hasAfs = body.afs !== undefined;
       const hasPaymentMethod = body.paymentMethod !== undefined;
+      const hasAccountType = body.accountType !== undefined || body.accountType !== undefined;
 
-      if (!hasHeadId && !hasCode && !hasName && !hasStatus && !hasRank && !hasAfs && !hasPaymentMethod) {
+      if (
+        !hasHeadId &&
+        !hasCode &&
+        !hasName &&
+        !hasStatus &&
+        !hasRank &&
+        !hasAfs &&
+        !hasPaymentMethod &&
+        !hasAccountType
+      ) {
         return res.status(400).json({
           success: false,
           message: "At least one field must be provided to update",
@@ -499,6 +539,15 @@ export const accountSubheadController = {
           message: "paymentMethod must be a string or null",
         });
       }
+      const updateAccountType = hasAccountType
+        ? parseAccountTypeFromBody(body as Record<string, unknown>)
+        : undefined;
+      if (updateAccountType === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "accountType must be one of: Cash, NonCash",
+        });
+      }
 
       const existing = await accountSubheadService.getById(id);
       if (!existing) {
@@ -529,6 +578,7 @@ export const accountSubheadController = {
           : {}),
         ...(hasAfs ? { afs: body.afs as string | null } : {}),
         ...(hasPaymentMethod ? { paymentMethod: body.paymentMethod as string | null } : {}),
+        ...(updateAccountType !== undefined ? { accountType: updateAccountType } : {}),
       });
 
       return res.json({

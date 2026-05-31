@@ -1,4 +1,4 @@
-import { Prisma, Status } from "@prisma/client";
+import { AccountType, Prisma, Status } from "@prisma/client";
 import prisma from "../utils/prisma";
 
 const accountChartInclude = {
@@ -16,6 +16,7 @@ export type ListAccountChartsFilters = {
   headId?: number;
   subheadId?: number;
   status?: Status | "All";
+  accountType?: AccountType;
 };
 
 function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
@@ -143,6 +144,9 @@ export class AccountChartService {
       where.status = Status.Active;
     } else if (filters.status !== "All") {
       where.status = filters.status;
+    }
+    if (filters.accountType !== undefined) {
+      where.subhead = { accountType: filters.accountType };
     }
 
     return this.prisma.accountChart.findMany({
