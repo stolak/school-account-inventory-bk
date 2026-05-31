@@ -90,6 +90,8 @@ const options: swaggerJSDoc.Options = {
       },
       { name: "Users", description: "User listing and profile (authenticated)" },
       { name: "AuditLogs", description: "Audit log listing (current user and admin-style filters)" },
+      { name: "Departments", description: "Department master data (CRUD)" },
+      { name: "GradeLevels", description: "Grade level master data (CRUD)" },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
       { name: "Sales", description: "Inventory sales transactions (bulk create, list, grouped by reference)" },

@@ -142,9 +142,10 @@ model PasswordResetToken {
 }
 
 model Bank {
-  id       String @id @default(uuid()) @db.Char(36)
-  bankCode String @unique
-  bankName String
+  id               String             @id @default(uuid()) @db.Char(36)
+  bankCode         String             @unique
+  bankName         String
+  staffBankDetails StaffBankDetails[]
 }
 
 enum RecordStatus {
@@ -519,25 +520,42 @@ model DefaultBillingPeriod {
   @@map("default_billing_period")
 }
 
+enum EmploymentType {
+  Permanent
+  Contractual
+  Casual
+  Internship
+  Volunteer
+  PartTime
+  Temporary
+  Seasonal
+  ProjectBased
+  Other
+}
+
 model Staff {
   id String @id @default(uuid()) @db.Char(36)
 
-  StaffNumber     String        @unique @map("staff_number") @db.Char(36)
-  email           String        @unique
-  name            String
-  position        StaffPosition @default(teacher)
-  status          Status        @default(Active)
-  profileImageUrl String?       @map("profile_image_url")
-  createdById     String        @map("created_by") @db.Char(36)
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @default(now()) @map("updated_at")
-
-  createdBy User @relation("StaffCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-
+  StaffNumber           String                 @unique @map("staff_number") @db.Char(36)
+  email                 String                 @unique
+  name                  String
+  position              StaffPosition          @default(teacher)
+  employmentType        EmploymentType         @default(Permanent)
+  status                Status                 @default(Active)
+  profileImageUrl       String?                @map("profile_image_url")
+  createdById           String                 @map("created_by") @db.Char(36)
+  createdAt             DateTime               @default(now()) @map("created_at")
+  updatedAt             DateTime               @default(now()) @map("updated_at")
+  gradeLevelId          String?                @map("grade_level_id") @db.Char(36)
+  gradeLevel            GradeLevel?            @relation(fields: [gradeLevelId], references: [id], onDelete: SetNull)
+  createdBy             User                   @relation("StaffCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  departmentId          String?                @map("department_id") @db.Char(36)
+  department            Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   userId                String?                @unique @db.Char(36)
   user                  User?                  @relation("StaffUser", fields: [userId], references: [id], onDelete: SetNull)
   inventoryTransactions InventoryTransaction[]
   cashiers              Cashier[]
+  staffBankDetails      StaffBankDetails[]
 
   @@index([userId])
   @@index([StaffNumber])
@@ -1095,10 +1113,36 @@ model Cashier {
 }
 
 model Department {
-  id     String @id @default(uuid()) @db.Char(36)
+  id     String  @id @default(uuid()) @db.Char(36)
   name   String
-  status Status @default(Active)
+  status Status  @default(Active)
+  staff  Staff[]
 
   @@index([id])
   @@map("departments")
+}
+
+model GradeLevel {
+  id     String  @id @default(uuid()) @db.Char(36)
+  name   String
+  status Status  @default(Active)
+  staff  Staff[]
+
+  @@index([id])
+  @@map("grade_levels")
+}
+
+model StaffBankDetails {
+  id            String  @id @default(uuid()) @db.Char(36)
+  staffId       String  @map("staff_id") @db.Char(36)
+  staff         Staff   @relation(fields: [staffId], references: [id])
+  bankId        String  @map("bank_id") @db.Char(36)
+  bank          Bank    @relation(fields: [bankId], references: [id])
+  accountNumber String  @map("account_number")
+  isPrimary     Boolean @default(false) @map("is_primary")
+  status        Status  @default(Active)
+
+  @@index([staffId])
+  @@index([bankId])
+  @@map("staff_bank_details")
 }

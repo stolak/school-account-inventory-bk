@@ -52,6 +52,8 @@ import cashierRouter from "./cashier";
 import inventoryReceiveAcknowledgementRouter from "./inventoryReceiveAcknowledgement";
 import userRouter from "./user";
 import auditLogRouter from "./auditLog";
+import departmentRouter from "./department";
+import gradeLevelRouter from "./gradeLevel";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -109,6 +111,8 @@ router.use("/cashiers", cashierRouter);
 router.use("/inventory-receive-acknowledgements", inventoryReceiveAcknowledgementRouter);
 router.use("/users", userRouter);
 router.use("/audit-logs", auditLogRouter);
+router.use("/departments", departmentRouter);
+router.use("/grade-levels", gradeLevelRouter);
 
 router.use("/upload", uploadRouter);
 
