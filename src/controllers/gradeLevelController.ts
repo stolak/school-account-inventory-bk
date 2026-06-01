@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { Status } from "@prisma/client";
 import { gradeLevelService } from "../services/gradeLevelService";
-import { parseIntOrUndefined, routeParam } from "../utils/request";
+import { routeParam } from "../utils/request";
 
 function parseStatusQuery(raw: unknown): Status | "All" | undefined {
   if (typeof raw !== "string") {
@@ -71,22 +71,9 @@ function parseBodyStatus(raw: unknown): Status | undefined {
  *           type: string
  *           enum: [Active, Inactive, Archived, All]
  *         description: Defaults to Active only. Use All for every status.
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *       - in: query
- *         name: limit
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 20
  *     responses:
  *       200:
- *         description: Paginated grade levels list
+ *         description: Grade levels list (all matching rows, no pagination)
  *       400:
  *         description: Invalid query parameters
  *       500:
@@ -144,10 +131,7 @@ export const gradeLevelController = {
         });
       }
 
-      const page = parseIntOrUndefined(req.query.page);
-      const limit = parseIntOrUndefined(req.query.limit);
-
-      const result = await gradeLevelService.list({ q, status, page, limit });
+      const result = await gradeLevelService.list({ q, status });
 
       return res.json({
         success: true,

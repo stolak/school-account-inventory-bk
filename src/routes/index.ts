@@ -54,6 +54,7 @@ import userRouter from "./user";
 import auditLogRouter from "./auditLog";
 import departmentRouter from "./department";
 import gradeLevelRouter from "./gradeLevel";
+import staffBankDetailsRouter from "./staffBankDetails";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -113,6 +114,7 @@ router.use("/users", userRouter);
 router.use("/audit-logs", auditLogRouter);
 router.use("/departments", departmentRouter);
 router.use("/grade-levels", gradeLevelRouter);
+router.use("/staff-bank-details", staffBankDetailsRouter);
 
 router.use("/upload", uploadRouter);
 

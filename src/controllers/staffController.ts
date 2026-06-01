@@ -1,9 +1,77 @@
 import { Request, Response } from "express";
-import { staffService } from "../services/staffService";
-import { StaffPosition, Status, UserType } from "@prisma/client";
+import { staffService, parseStaffDateOnly } from "../services/staffService";
+import { EmploymentType, StaffPosition, Status, UserType } from "@prisma/client";
+import { isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
 
 const STAFF_POSITIONS = Object.values(StaffPosition) as string[];
-import { isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
+const EMPLOYMENT_TYPES = Object.values(EmploymentType) as string[];
+
+const STAFF_DATE_FIELDS = [
+  "dateOfBirth",
+  "dateOfAppointment",
+  "dateOfResignation",
+  "dateOfTermination",
+] as const;
+
+type StaffDateField = (typeof STAFF_DATE_FIELDS)[number];
+
+function parseOptionalUuid(raw: unknown): string | null | undefined | "invalid" {
+  if (raw === undefined) return undefined;
+  if (raw === null || raw === "") return null;
+  if (typeof raw !== "string" || !raw.trim()) return "invalid";
+  return raw.trim();
+}
+
+function parseStaffDates(body: Record<string, unknown>): {
+  dates?: Partial<Record<StaffDateField, Date | null>>;
+  error?: string;
+} {
+  const dates: Partial<Record<StaffDateField, Date | null>> = {};
+  for (const field of STAFF_DATE_FIELDS) {
+    if (!(field in body)) continue;
+    const parsed = parseStaffDateOnly(body[field]);
+    if (parsed === "invalid") {
+      return { error: `${field} must be YYYY-MM-DD, ISO date-time, or null` };
+    }
+    if (parsed !== undefined) {
+      dates[field] = parsed;
+    }
+  }
+  return { dates };
+}
+
+function parseSalaryInput(raw: unknown): string | number | undefined | "invalid" {
+  if (raw === undefined) return undefined;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string" && raw.trim() !== "") return raw.trim();
+  return "invalid";
+}
+
+function parseStepInput(raw: unknown): number | undefined | "invalid" {
+  if (raw === undefined) return undefined;
+  const n =
+    typeof raw === "number" && Number.isInteger(raw)
+      ? raw
+      : typeof raw === "string"
+        ? Number.parseInt(raw, 10)
+        : NaN;
+  if (!Number.isFinite(n) || n < 0) return "invalid";
+  return n;
+}
+
+function httpStatusForStaffError(message: string): number {
+  if (message === "Staff not found" || message === "App role not found") return 404;
+  if (message.includes("already exists")) return 409;
+  if (
+    message.includes("required") ||
+    message.includes("must be") ||
+    message.includes("Invalid ") ||
+    message.includes("invalid")
+  ) {
+    return 400;
+  }
+  return 500;
+}
 
 /**
  * @openapi
@@ -17,7 +85,7 @@ import { isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../u
  *       Creates a User and a Staff row linked via Staff.userId.
  *       Email is checked on users and staff; StaffNumber must be unique on staff.
  *       Optional `appRoleId` is an AppRole id (UUID) — when provided, a UserRole row is created for the new user.
- *       Password defaults to `12345` if omitted. Staff `position` defaults to teacher when omitted.
+ *       Password defaults to `12345` if omitted. Staff `position` defaults to teacher and `employmentType` defaults to Permanent when omitted.
  *     requestBody:
  *       required: true
  *       content:
@@ -39,12 +107,47 @@ import { isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../u
  *                 type: string
  *                 enum: [class_teacher, assistant_teacher, subject_teacher, principal, vice_principal, teacher, admin, other]
  *                 description: Staff job position (defaults to teacher)
+ *               employmentType:
+ *                 type: string
+ *                 enum: [Permanent, Contractual, Casual, Internship, Volunteer, PartTime, Temporary, Seasonal, ProjectBased, Other]
+ *                 description: Employment type (defaults to Permanent)
  *               status:
  *                 type: string
  *                 enum: [Active, Inactive, Archived]
  *                 description: Staff record status (defaults to Active)
  *               profileImageUrl:
  *                 type: string
+ *                 nullable: true
+ *               gradeLevelId:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               departmentId:
+ *                 type: string
+ *                 format: uuid
+ *                 nullable: true
+ *               step:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: Salary step (defaults to 0)
+ *               salary:
+ *                 oneOf: [{ type: string }, { type: number }]
+ *                 description: Monthly salary (defaults to 0)
+ *               dateOfBirth:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *               dateOfAppointment:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *               dateOfResignation:
+ *                 type: string
+ *                 format: date
+ *                 nullable: true
+ *               dateOfTermination:
+ *                 type: string
+ *                 format: date
  *                 nullable: true
  *               password:
  *                 type: string
@@ -75,7 +178,7 @@ import { isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../u
  *       401:
  *         description: Unauthorized
  *       404:
- *         description: App role not found
+ *         description: App role, grade level, or department not found
  *       409:
  *         description: Duplicate StaffNumber or email
  *       500:
@@ -97,6 +200,24 @@ import { isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../u
  *           enum: [class_teacher, assistant_teacher, subject_teacher, principal, vice_principal, teacher, admin, other]
  *         description: Filter by Staff.position
  *       - in: query
+ *         name: employmentType
+ *         schema:
+ *           type: string
+ *           enum: [Permanent, Contractual, Casual, Internship, Volunteer, PartTime, Temporary, Seasonal, ProjectBased, Other]
+ *         description: Filter by employment type
+ *       - in: query
+ *         name: departmentId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by department
+ *       - in: query
+ *         name: gradeLevelId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         description: Filter by grade level
+ *       - in: query
  *         name: status
  *         schema:
  *           type: string
@@ -111,17 +232,21 @@ import { isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../u
  *     responses:
  *       200:
  *         description: Staff list
+ *       400:
+ *         description: Invalid query parameters
  *       500:
  *         description: Server error
  */
 export const staffController = {
   createStaff: async (req: Request, res: Response) => {
     try {
+      const body = (req.body ?? {}) as Record<string, unknown>;
       const {
         StaffNumber,
         email,
         name,
         position,
+        employmentType,
         appRoleId,
         status,
         profileImageUrl,
@@ -131,7 +256,11 @@ export const staffController = {
         isVerified,
         isEmailVerified,
         userType,
-      } = req.body ?? {};
+        gradeLevelId,
+        departmentId,
+        step,
+        salary,
+      } = body;
 
       if (!StaffNumber || typeof StaffNumber !== "string" || !StaffNumber.trim()) {
         return res.status(400).json({ success: false, message: "StaffNumber is required" });
@@ -142,12 +271,15 @@ export const staffController = {
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ success: false, message: "name is required" });
       }
-      if (
-        position !== undefined &&
-        position !== null &&
-        !STAFF_POSITIONS.includes(position)
-      ) {
+      if (position !== undefined && position !== null && !STAFF_POSITIONS.includes(position as string)) {
         return res.status(400).json({ success: false, message: "Invalid position" });
+      }
+      if (
+        employmentType !== undefined &&
+        employmentType !== null &&
+        !EMPLOYMENT_TYPES.includes(employmentType as string)
+      ) {
+        return res.status(400).json({ success: false, message: "Invalid employmentType" });
       }
       if (
         appRoleId !== undefined &&
@@ -180,55 +312,88 @@ export const staffController = {
       if (password !== undefined && typeof password !== "string") {
         return res.status(400).json({ success: false, message: "password must be a string" });
       }
-      if (userType !== undefined && !Object.values(UserType).includes(userType)) {
+      if (userType !== undefined && !Object.values(UserType).includes(userType as UserType)) {
         return res.status(400).json({
           success: false,
           message: "userType must be SuperAdmin, Staff, Student, or Parent",
         });
       }
 
-      const createdById = (req as any).user?.id;
+      const parsedGradeLevelId = parseOptionalUuid(gradeLevelId);
+      if (parsedGradeLevelId === "invalid") {
+        return res.status(400).json({ success: false, message: "gradeLevelId must be a uuid or null" });
+      }
+      const parsedDepartmentId = parseOptionalUuid(departmentId);
+      if (parsedDepartmentId === "invalid") {
+        return res.status(400).json({ success: false, message: "departmentId must be a uuid or null" });
+      }
+
+      const parsedStep = parseStepInput(step);
+      if (parsedStep === "invalid") {
+        return res.status(400).json({ success: false, message: "step must be a non-negative integer" });
+      }
+      const parsedSalary = parseSalaryInput(salary);
+      if (parsedSalary === "invalid") {
+        return res.status(400).json({ success: false, message: "salary must be a number or numeric string" });
+      }
+
+      const { dates, error: dateError } = parseStaffDates(body);
+      if (dateError) {
+        return res.status(400).json({ success: false, message: dateError });
+      }
+
+      const createdById = (req as { user?: { id: string } }).user?.id;
       if (!createdById) return res.status(401).json({ success: false, message: "Unauthorized" });
 
       const created = await staffService.createStaffWithUser({
         StaffNumber: StaffNumber.trim(),
         email: email.trim(),
         name: name.trim(),
-        ...(position !== undefined && position !== null ? { position } : {}),
-        ...(status !== undefined && status !== null ? { status } : {}),
+        ...(position !== undefined && position !== null ? { position: position as StaffPosition } : {}),
+        ...(employmentType !== undefined && employmentType !== null
+          ? { employmentType: employmentType as EmploymentType }
+          : {}),
+        ...(status !== undefined && status !== null ? { status: status as Status } : {}),
         profileImageUrl:
           profileImageUrl === undefined
             ? undefined
             : profileImageUrl === ""
               ? null
-              : profileImageUrl,
+              : (profileImageUrl as string | null),
         createdById,
         ...(typeof password === "string" ? { password } : {}),
         ...(phoneNumber !== undefined
-          ? { phoneNumber: phoneNumber === "" ? null : phoneNumber }
+          ? { phoneNumber: phoneNumber === "" ? null : (phoneNumber as string | null) }
           : {}),
         ...(typeof isActive === "boolean" ? { isActive } : {}),
         ...(typeof isVerified === "boolean" ? { isVerified } : {}),
         ...(typeof isEmailVerified === "boolean" ? { isEmailVerified } : {}),
         ...(appRoleId !== undefined && appRoleId !== null
-          ? { appRoleId: appRoleId.trim() }
+          ? { appRoleId: (appRoleId as string).trim() }
           : {}),
-        ...(userType !== undefined ? { userType } : {}),
+        ...(userType !== undefined ? { userType: userType as UserType } : {}),
+        ...(parsedGradeLevelId !== undefined ? { gradeLevelId: parsedGradeLevelId } : {}),
+        ...(parsedDepartmentId !== undefined ? { departmentId: parsedDepartmentId } : {}),
+        ...(parsedStep !== undefined ? { step: parsedStep } : {}),
+        ...(parsedSalary !== undefined ? { salary: parsedSalary } : {}),
+        ...(dates?.dateOfBirth !== undefined ? { dateOfBirth: dates.dateOfBirth } : {}),
+        ...(dates?.dateOfAppointment !== undefined
+          ? { dateOfAppointment: dates.dateOfAppointment }
+          : {}),
+        ...(dates?.dateOfResignation !== undefined
+          ? { dateOfResignation: dates.dateOfResignation }
+          : {}),
+        ...(dates?.dateOfTermination !== undefined
+          ? { dateOfTermination: dates.dateOfTermination }
+          : {}),
       });
 
       return res
         .status(201)
         .json({ success: true, message: "Staff created successfully", data: created });
-    } catch (error: any) {
-      const message = error?.message ?? "Failed to create staff";
-      const status = message.includes("already exists")
-        ? 409
-        : message === "App role not found"
-          ? 404
-          : message.includes("required") || message.includes("must be")
-            ? 400
-            : 500;
-      return res.status(status).json({ success: false, message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to create staff";
+      return res.status(httpStatusForStaffError(message)).json({ success: false, message });
     }
   },
 
@@ -244,6 +409,21 @@ export const staffController = {
       if (positionRaw !== undefined && position === undefined) {
         return res.status(400).json({ success: false, message: "Invalid position" });
       }
+
+      const employmentTypeRaw =
+        typeof req.query.employmentType === "string" ? req.query.employmentType : undefined;
+      const employmentType =
+        employmentTypeRaw && EMPLOYMENT_TYPES.includes(employmentTypeRaw)
+          ? (employmentTypeRaw as EmploymentType)
+          : undefined;
+      if (employmentTypeRaw !== undefined && employmentType === undefined) {
+        return res.status(400).json({ success: false, message: "Invalid employmentType" });
+      }
+
+      const departmentId =
+        typeof req.query.departmentId === "string" ? req.query.departmentId.trim() : undefined;
+      const gradeLevelId =
+        typeof req.query.gradeLevelId === "string" ? req.query.gradeLevelId.trim() : undefined;
 
       const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
       const status =
@@ -265,12 +445,23 @@ export const staffController = {
       const page = parseIntOrUndefined(req.query.page);
       const limit = parseIntOrUndefined(req.query.limit);
 
-      const result = await staffService.listStaff({ q, position, status, page, limit });
+      const result = await staffService.listStaff({
+        q,
+        position,
+        employmentType,
+        ...(departmentId ? { departmentId } : {}),
+        ...(gradeLevelId ? { gradeLevelId } : {}),
+        status,
+        page,
+        limit,
+      });
       return res.json({ success: true, message: "Staff retrieved successfully", data: result });
-    } catch (error: any) {
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to retrieve staff", error: error?.message });
+    } catch (error: unknown) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve staff",
+        error: error instanceof Error ? error.message : undefined,
+      });
     }
   },
 
@@ -286,9 +477,9 @@ export const staffController = {
    *       - in: path
    *         name: id
    *         required: true
-   *         schema: { type: string }
+   *         schema: { type: string, format: uuid }
    *     responses:
-   *       200: { description: Staff found }
+   *       200: { description: Staff found (includes gradeLevel and department when set) }
    *       404: { description: Staff not found }
    *   put:
    *     summary: Update staff
@@ -299,7 +490,7 @@ export const staffController = {
    *       - in: path
    *         name: id
    *         required: true
-   *         schema: { type: string }
+   *         schema: { type: string, format: uuid }
    *     requestBody:
    *       required: true
    *       content:
@@ -309,20 +500,52 @@ export const staffController = {
    *             properties:
    *               StaffNumber: { type: string }
    *               email: { type: string }
- *               name: { type: string }
- *               position:
- *                 type: string
- *                 enum: [class_teacher, assistant_teacher, subject_teacher, principal, vice_principal, teacher, admin, other]
- *               status:
+   *               name: { type: string }
+   *               position:
+   *                 type: string
+   *                 enum: [class_teacher, assistant_teacher, subject_teacher, principal, vice_principal, teacher, admin, other]
+   *               employmentType:
+   *                 type: string
+   *                 enum: [Permanent, Contractual, Casual, Internship, Volunteer, PartTime, Temporary, Seasonal, ProjectBased, Other]
+   *               status:
    *                 type: string
    *                 enum: [Active, Inactive, Archived]
    *               profileImageUrl:
    *                 type: string
    *                 nullable: true
+   *               gradeLevelId:
+   *                 type: string
+   *                 format: uuid
+   *                 nullable: true
+   *               departmentId:
+   *                 type: string
+   *                 format: uuid
+   *                 nullable: true
+   *               step:
+   *                 type: integer
+   *                 minimum: 0
+   *               salary:
+   *                 oneOf: [{ type: string }, { type: number }]
+   *               dateOfBirth:
+   *                 type: string
+   *                 format: date
+   *                 nullable: true
+   *               dateOfAppointment:
+   *                 type: string
+   *                 format: date
+   *                 nullable: true
+   *               dateOfResignation:
+   *                 type: string
+   *                 format: date
+   *                 nullable: true
+   *               dateOfTermination:
+   *                 type: string
+   *                 format: date
+   *                 nullable: true
    *     responses:
    *       200: { description: Staff updated }
    *       400: { description: Validation error }
-   *       404: { description: Staff not found }
+   *       404: { description: Staff, grade level, or department not found }
    *       409: { description: Duplicate StaffNumber/email }
    *   delete:
    *     summary: Delete staff
@@ -333,7 +556,7 @@ export const staffController = {
    *       - in: path
    *         name: id
    *         required: true
-   *         schema: { type: string }
+   *         schema: { type: string, format: uuid }
    *     responses:
    *       200: { description: Staff deleted }
    *       404: { description: Staff not found }
@@ -345,10 +568,12 @@ export const staffController = {
       const staff = await staffService.getStaffById(id);
       if (!staff) return res.status(404).json({ success: false, message: "Staff not found" });
       return res.json({ success: true, message: "Staff retrieved successfully", data: staff });
-    } catch (error: any) {
-      return res
-        .status(500)
-        .json({ success: false, message: "Failed to retrieve staff", error: error?.message });
+    } catch (error: unknown) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve staff",
+        error: error instanceof Error ? error.message : undefined,
+      });
     }
   },
 
@@ -357,7 +582,42 @@ export const staffController = {
       const id = routeParam(req.params.id);
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
-      const { StaffNumber, email, name, position, status, profileImageUrl } = req.body ?? {};
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      const {
+        StaffNumber,
+        email,
+        name,
+        position,
+        employmentType,
+        status,
+        profileImageUrl,
+        gradeLevelId,
+        departmentId,
+        step,
+        salary,
+      } = body;
+
+      const hasAnyField =
+        StaffNumber !== undefined ||
+        email !== undefined ||
+        name !== undefined ||
+        position !== undefined ||
+        employmentType !== undefined ||
+        status !== undefined ||
+        profileImageUrl !== undefined ||
+        gradeLevelId !== undefined ||
+        departmentId !== undefined ||
+        step !== undefined ||
+        salary !== undefined ||
+        STAFF_DATE_FIELDS.some((field) => field in body);
+
+      if (!hasAnyField) {
+        return res.status(400).json({
+          success: false,
+          message: "At least one field must be provided to update",
+        });
+      }
+
       if (StaffNumber !== undefined && (typeof StaffNumber !== "string" || !StaffNumber.trim())) {
         return res
           .status(400)
@@ -371,8 +631,15 @@ export const staffController = {
       if (name !== undefined && (typeof name !== "string" || !name.trim())) {
         return res.status(400).json({ success: false, message: "name must be a non-empty string" });
       }
-      if (position !== undefined && position !== null && !STAFF_POSITIONS.includes(position)) {
+      if (position !== undefined && position !== null && !STAFF_POSITIONS.includes(position as string)) {
         return res.status(400).json({ success: false, message: "Invalid position" });
+      }
+      if (
+        employmentType !== undefined &&
+        employmentType !== null &&
+        !EMPLOYMENT_TYPES.includes(employmentType as string)
+      ) {
+        return res.status(400).json({ success: false, message: "Invalid employmentType" });
       }
       if (
         status !== undefined &&
@@ -389,23 +656,61 @@ export const staffController = {
           .json({ success: false, message: "profileImageUrl must be a string or null" });
       }
 
+      const parsedGradeLevelId = parseOptionalUuid(gradeLevelId);
+      if (parsedGradeLevelId === "invalid") {
+        return res.status(400).json({ success: false, message: "gradeLevelId must be a uuid or null" });
+      }
+      const parsedDepartmentId = parseOptionalUuid(departmentId);
+      if (parsedDepartmentId === "invalid") {
+        return res.status(400).json({ success: false, message: "departmentId must be a uuid or null" });
+      }
+
+      const parsedStep = parseStepInput(step);
+      if (parsedStep === "invalid") {
+        return res.status(400).json({ success: false, message: "step must be a non-negative integer" });
+      }
+      const parsedSalary = parseSalaryInput(salary);
+      if (parsedSalary === "invalid") {
+        return res.status(400).json({ success: false, message: "salary must be a number or numeric string" });
+      }
+
+      const { dates, error: dateError } = parseStaffDates(body);
+      if (dateError) {
+        return res.status(400).json({ success: false, message: dateError });
+      }
+
       const updated = await staffService.updateStaff(id, {
-        ...(StaffNumber !== undefined ? { StaffNumber } : {}),
-        ...(email !== undefined ? { email } : {}),
-        ...(name !== undefined ? { name } : {}),
-        ...(position !== undefined && position !== null ? { position } : {}),
-        ...(status !== undefined ? { status } : {}),
+        ...(StaffNumber !== undefined ? { StaffNumber: StaffNumber as string } : {}),
+        ...(email !== undefined ? { email: email as string } : {}),
+        ...(name !== undefined ? { name: name as string } : {}),
+        ...(position !== undefined && position !== null ? { position: position as StaffPosition } : {}),
+        ...(employmentType !== undefined && employmentType !== null
+          ? { employmentType: employmentType as EmploymentType }
+          : {}),
+        ...(status !== undefined ? { status: status as Status } : {}),
         ...(profileImageUrl !== undefined
-          ? { profileImageUrl: profileImageUrl === "" ? null : profileImageUrl }
+          ? { profileImageUrl: profileImageUrl === "" ? null : (profileImageUrl as string | null) }
+          : {}),
+        ...(parsedGradeLevelId !== undefined ? { gradeLevelId: parsedGradeLevelId } : {}),
+        ...(parsedDepartmentId !== undefined ? { departmentId: parsedDepartmentId } : {}),
+        ...(parsedStep !== undefined ? { step: parsedStep } : {}),
+        ...(parsedSalary !== undefined ? { salary: parsedSalary } : {}),
+        ...(dates?.dateOfBirth !== undefined ? { dateOfBirth: dates.dateOfBirth } : {}),
+        ...(dates?.dateOfAppointment !== undefined
+          ? { dateOfAppointment: dates.dateOfAppointment }
+          : {}),
+        ...(dates?.dateOfResignation !== undefined
+          ? { dateOfResignation: dates.dateOfResignation }
+          : {}),
+        ...(dates?.dateOfTermination !== undefined
+          ? { dateOfTermination: dates.dateOfTermination }
           : {}),
       });
 
       return res.json({ success: true, message: "Staff updated successfully", data: updated });
-    } catch (error: any) {
-      const message = error?.message ?? "Failed to update staff";
-      const code =
-        message === "Staff not found" ? 404 : message.includes("already exists") ? 409 : 500;
-      return res.status(code).json({ success: false, message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to update staff";
+      return res.status(httpStatusForStaffError(message)).json({ success: false, message });
     }
   },
 
@@ -415,10 +720,9 @@ export const staffController = {
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
       const deleted = await staffService.deleteStaff(id);
       return res.json({ success: true, message: "Staff deleted successfully", data: deleted });
-    } catch (error: any) {
-      const message = error?.message ?? "Failed to delete staff";
-      const code = message === "Staff not found" ? 404 : 500;
-      return res.status(code).json({ success: false, message });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to delete staff";
+      return res.status(httpStatusForStaffError(message)).json({ success: false, message });
     }
   },
 };

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { StudentStatus } from "@prisma/client";
+import { Status, StudentStatus } from "@prisma/client";
 import { accountTransactionService } from "../services/accountTransactionService";
 import { parseIntOrUndefined } from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
@@ -209,6 +209,33 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *       500:
  *         description: Server error
  *
+ * /api/v1/account-transactions/staff-balance:
+ *   get:
+ *     summary: Staff account balance as at a selected date
+ *     description: |
+ *       Returns staff balance from inception through the selected date (inclusive):
+ *       `sum(credit) - sum(debit)` for rows where `accountSub = staffId` and `transactionDate <= asAtDate`.
+ *     tags: [AccountTransactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: staffId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: asAtDate
+ *         required: false
+ *         schema: { type: string, format: date }
+ *         description: Date or date-time. If omitted, defaults to end of today UTC. Date-only values are treated as end of that UTC day.
+ *     responses:
+ *       200:
+ *         description: Staff balance as at the selected date
+ *       400:
+ *         description: Invalid staffId or asAtDate
+ *       500:
+ *         description: Server error
+ *
  * /api/v1/account-transactions/student-balances:
  *   get:
  *     summary: List student balances with filtering, sorting and pagination
@@ -255,6 +282,58 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *       500:
  *         description: Server error
  *
+ * /api/v1/account-transactions/staff-balances:
+ *   get:
+ *     summary: List staff balances with filtering, sorting and pagination
+ *     description: |
+ *       Returns staff balances up to `asAtDate` (inclusive), where balance = `sum(credit) - sum(debit)`
+ *       from inception for transactions matched by `accountSub = staffId`.
+ *       Supports optional staff `status`, `departmentId`, `gradeLevelId`, ordering, and pagination.
+ *       Default order is by name, then staff number. No classId filter (staff have no class).
+ *     tags: [AccountTransactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: asAtDate
+ *         required: false
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema: { type: string, enum: [Active, Inactive, Archived] }
+ *       - in: query
+ *         name: departmentId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: gradeLevelId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: orderBy
+ *         required: false
+ *         schema: { type: string, enum: [name, StaffNumber, balance] }
+ *       - in: query
+ *         name: orderDirection
+ *         required: false
+ *         schema: { type: string, enum: [asc, desc], default: asc }
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Staff balances retrieved successfully
+ *       400:
+ *         description: Invalid query parameters
+ *       500:
+ *         description: Server error
+ *
  * /api/v1/account-transactions/student-transaction-log:
  *   get:
  *     summary: Student account transaction log
@@ -284,6 +363,48 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         description: Invalid query parameters
  *       404:
  *         description: Student not found
+ *       500:
+ *         description: Server error
+ *
+ * /api/v1/account-transactions/staff-transaction-log:
+ *   get:
+ *     summary: Staff account transaction log
+ *     description: |
+ *       Returns account transactions for a staff member (`accountSub = staffId`) within a date window,
+ *       plus opening balance before `datefrom` computed as `sum(credit) - sum(debit)`.
+ *       `staffId` is required.
+ *       If no dates are provided, defaults to one year back from today through end of today UTC.
+ *     tags: [AccountTransactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: staffId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: datefrom
+ *         required: false
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: dateTo
+ *         required: false
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: transactionDateFrom
+ *         required: false
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: transactionDateTo
+ *         required: false
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Staff opening balance and transactions in range
+ *       400:
+ *         description: Invalid query parameters
+ *       404:
+ *         description: Staff not found
  *       500:
  *         description: Server error
  *
@@ -352,6 +473,78 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         description: Validation error
  *       404:
  *         description: Student or configured STUDENT_ACCOUNT not found
+ *       500:
+ *         description: Server error
+ *
+ * /api/v1/account-transactions/staff-journal-transfer:
+ *   get:
+ *     summary: Query staff journal transfers
+ *     description: |
+ *       Returns grouped staff journal transfer summaries.
+ *       Optional filters: `staffId`, `dateFrom`, `dateTo`.
+ *     tags: [AccountTransactions]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: staffId
+ *         required: false
+ *         schema: { type: string, format: uuid }
+ *       - in: query
+ *         name: dateFrom
+ *         required: false
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: dateTo
+ *         required: false
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Staff journal transfers retrieved successfully
+ *       400:
+ *         description: Invalid query parameters
+ *       500:
+ *         description: Server error
+ *   post:
+ *     summary: Post staff journal transfer (double entry)
+ *     description: |
+ *       Accepts global `staffId`, `manualRef`, `transactionDate` and an `entries` array.
+ *       For each entry:
+ *       1) First leg posts to the entry account using `transactionType` (`credit` or `debit`)
+ *       2) Second leg posts opposite side to account from `STAFF_ACCOUNT` setting,
+ *          with `accountSub = staffId`.
+ *     tags: [AccountTransactions]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [staffId, manualRef, transactionDate, entries]
+ *             properties:
+ *               staffId: { type: string, format: uuid }
+ *               manualRef: { type: string }
+ *               transactionDate: { type: string, format: date-time }
+ *               entries:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required: [amount, accountId, transactionType]
+ *                   properties:
+ *                     amount: { type: number, minimum: 0.01 }
+ *                     accountId: { type: string }
+ *                     transactionType: { type: string, enum: [credit, debit] }
+ *                     remarks: { type: string, nullable: true }
+ *     responses:
+ *       201:
+ *         description: Staff journal transfer posted successfully
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Staff or configured STAFF_ACCOUNT not found
  *       500:
  *         description: Server error
  */
@@ -507,6 +700,159 @@ export const accountTransactionController = {
     }
   },
 
+  listStaffJournalTransfer: async (req: Request, res: Response) => {
+    try {
+      const staffIdRaw = typeof req.query.staffId === "string" ? req.query.staffId.trim() : undefined;
+      if (typeof req.query.staffId === "string" && !staffIdRaw) {
+        return res.status(400).json({ success: false, message: "staffId cannot be empty" });
+      }
+
+      const fromSource =
+        req.query.dateFrom !== undefined
+          ? req.query.dateFrom
+          : req.query.datefrom !== undefined
+            ? req.query.datefrom
+            : req.query.transactionDateFrom;
+      const toSource =
+        req.query.dateTo !== undefined ? req.query.dateTo : req.query.transactionDateTo;
+
+      const fromRaw = parseQueryDateStart(fromSource);
+      const toRaw = parseQueryDateEndInclusive(toSource);
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "dateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "dateTo is invalid" });
+      }
+
+      const data = await accountTransactionService.listStaffJournalTransfers({
+        ...(staffIdRaw !== undefined ? { staffId: staffIdRaw } : {}),
+        ...(fromRaw === "missing" ? {} : { dateFrom: fromRaw }),
+        ...(toRaw === "missing" ? {} : { dateTo: toRaw }),
+      });
+
+      return res.json({
+        success: true,
+        message: "Staff journal transfer retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to retrieve staff journal transfer";
+      const code = message.includes("empty") || message.includes("invalid") ? 400 : 500;
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  postStaffJournalTransfer: async (req: Request, res: Response) => {
+    try {
+      const body = req.body ?? {};
+      const staffId = typeof body.staffId === "string" ? body.staffId.trim() : "";
+      const manualRef = typeof body.manualRef === "string" ? body.manualRef.trim() : "";
+      const transactionDate =
+        typeof body.transactionDate === "string" || body.transactionDate instanceof Date
+          ? new Date(body.transactionDate)
+          : new Date(NaN);
+
+      if (!staffId) {
+        return res.status(400).json({ success: false, message: "staffId is required" });
+      }
+      if (!manualRef) {
+        return res.status(400).json({ success: false, message: "manualRef is required" });
+      }
+      if (Number.isNaN(transactionDate.getTime())) {
+        return res.status(400).json({ success: false, message: "transactionDate must be a valid date" });
+      }
+      if (!Array.isArray(body.entries) || body.entries.length === 0) {
+        return res.status(400).json({ success: false, message: "entries must be a non-empty array" });
+      }
+
+      const entries: Array<{
+        amount: number;
+        accountId: string;
+        transactionType: unknown;
+        remarks?: string;
+      }> = body.entries.map((entry: Record<string, unknown>) => ({
+        amount:
+          typeof entry?.amount === "number"
+            ? entry.amount
+            : typeof entry?.amount === "string"
+              ? Number.parseFloat(entry.amount)
+              : Number.NaN,
+        accountId:
+          typeof entry?.accountId === "string"
+            ? entry.accountId.trim()
+            : typeof entry?.accountId === "number"
+              ? String(entry.accountId)
+              : "",
+        transactionType: entry?.transactionType,
+        remarks:
+          entry?.remarks === undefined || entry?.remarks === null
+            ? undefined
+            : typeof entry.remarks === "string"
+              ? entry.remarks
+              : undefined,
+      }));
+
+      const hasInvalid = entries.some(
+        (e) =>
+          !Number.isFinite(e.amount) ||
+          e.amount <= 0 ||
+          !e.accountId ||
+          (e.transactionType !== "credit" && e.transactionType !== "debit")
+      );
+      if (hasInvalid) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Each entry must include valid amount (>0), accountId, and transactionType (credit|debit)",
+        });
+      }
+
+      const postedByRaw = (req as { user?: { id?: unknown } }).user?.id;
+      const postedBy =
+        typeof postedByRaw === "string" && postedByRaw.trim() ? postedByRaw.trim() : "SYSTEM";
+
+      const data = await accountTransactionService.postStaffJournalTransfer({
+        staffId,
+        manualRef,
+        transactionDate,
+        postedBy,
+        entries: entries.map((e) => ({
+          amount: e.amount,
+          accountId: e.accountId,
+          transactionType: e.transactionType as "credit" | "debit",
+          ...(e.remarks !== undefined ? { remarks: e.remarks } : {}),
+        })),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Staff journal transfer posted successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to post staff journal transfer";
+      const code =
+        message.includes("required") || message.includes("must be") || message.includes("non-empty")
+          ? 400
+          : message.includes("not found")
+            ? 404
+            : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
   getStudentAccountTransactionLog: async (req: Request, res: Response) => {
     try {
       const studentIdRaw = typeof req.query.studentId === "string" ? req.query.studentId.trim() : "";
@@ -545,6 +891,56 @@ export const accountTransactionController = {
         message === "Student not found for studentId"
           ? 404
           : message === "studentId is required" ||
+              message === "transactionDateFrom must be before or equal to transactionDateTo"
+            ? 400
+            : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getStaffAccountTransactionLog: async (req: Request, res: Response) => {
+    try {
+      const staffIdRaw = typeof req.query.staffId === "string" ? req.query.staffId.trim() : "";
+      if (!staffIdRaw) {
+        return res.status(400).json({ success: false, message: "staffId is required" });
+      }
+
+      const fromSource =
+        req.query.datefrom !== undefined ? req.query.datefrom : req.query.transactionDateFrom;
+      const toSource = req.query.dateTo !== undefined ? req.query.dateTo : req.query.transactionDateTo;
+
+      const fromRaw = parseQueryDateStart(fromSource);
+      const toRaw = parseQueryDateEndInclusive(toSource);
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "datefrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "dateTo is invalid" });
+      }
+
+      const data = await accountTransactionService.getStaffAccountTransactionLog({
+        staffId: staffIdRaw,
+        ...(fromRaw === "missing" ? {} : { transactionDateFrom: fromRaw }),
+        ...(toRaw === "missing" ? {} : { transactionDateTo: toRaw }),
+      });
+
+      return res.json({
+        success: true,
+        message: "Staff account transaction log retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to retrieve staff account transaction log";
+      const code =
+        message === "Staff not found for staffId"
+          ? 404
+          : message === "staffId is required" ||
               message === "transactionDateFrom must be before or equal to transactionDateTo"
             ? 400
             : 500;
@@ -659,6 +1055,131 @@ export const accountTransactionController = {
       const message =
         error instanceof Error ? error.message : "Failed to retrieve student account balance as at date";
       const code = message === "studentId is required" ? 400 : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getStaffBalances: async (req: Request, res: Response) => {
+    try {
+      const asAtDateRaw = parseQueryDateEndInclusive(req.query.asAtDate);
+      if (asAtDateRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "asAtDate is invalid" });
+      }
+
+      const departmentIdRaw =
+        typeof req.query.departmentId === "string" ? req.query.departmentId.trim() : undefined;
+      if (typeof req.query.departmentId === "string" && !departmentIdRaw) {
+        return res.status(400).json({ success: false, message: "departmentId cannot be empty" });
+      }
+
+      const gradeLevelIdRaw =
+        typeof req.query.gradeLevelId === "string" ? req.query.gradeLevelId.trim() : undefined;
+      if (typeof req.query.gradeLevelId === "string" && !gradeLevelIdRaw) {
+        return res.status(400).json({ success: false, message: "gradeLevelId cannot be empty" });
+      }
+
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === Status.Active || statusRaw === Status.Inactive || statusRaw === Status.Archived
+          ? statusRaw
+          : undefined;
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be one of Active, Inactive, or Archived",
+        });
+      }
+
+      const orderByRaw = typeof req.query.orderBy === "string" ? req.query.orderBy : undefined;
+      const orderBy =
+        orderByRaw === "name" || orderByRaw === "StaffNumber" || orderByRaw === "balance"
+          ? orderByRaw
+          : undefined;
+      if (orderByRaw !== undefined && orderBy === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "orderBy must be name, StaffNumber, or balance",
+        });
+      }
+
+      const orderDirectionRaw =
+        typeof req.query.orderDirection === "string" ? req.query.orderDirection : undefined;
+      const orderDirection =
+        orderDirectionRaw === undefined
+          ? undefined
+          : orderDirectionRaw === "asc" || orderDirectionRaw === "desc"
+            ? orderDirectionRaw
+            : undefined;
+      if (orderDirectionRaw !== undefined && orderDirection === undefined) {
+        return res.status(400).json({ success: false, message: "orderDirection must be asc or desc" });
+      }
+
+      const page = parseIntOrUndefined(req.query.page);
+      const limit = parseIntOrUndefined(req.query.limit);
+      if (page !== undefined && page < 1) {
+        return res.status(400).json({ success: false, message: "page must be >= 1" });
+      }
+      if (limit !== undefined && (limit < 1 || limit > 100)) {
+        return res.status(400).json({ success: false, message: "limit must be between 1 and 100" });
+      }
+
+      const data = await accountTransactionService.listStaffBalances({
+        ...(asAtDateRaw === "missing" ? {} : { asAtDate: asAtDateRaw }),
+        ...(status !== undefined ? { status } : {}),
+        ...(departmentIdRaw !== undefined ? { departmentId: departmentIdRaw } : {}),
+        ...(gradeLevelIdRaw !== undefined ? { gradeLevelId: gradeLevelIdRaw } : {}),
+        ...(orderBy !== undefined ? { orderBy } : {}),
+        ...(orderDirection !== undefined ? { orderDirection } : {}),
+        ...(page !== undefined ? { page } : {}),
+        ...(limit !== undefined ? { limit } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Staff balances retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve staff balances";
+      return res.status(500).json({
+        success: false,
+        message,
+        ...(error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getStaffAccountBalanceAsAtDate: async (req: Request, res: Response) => {
+    try {
+      const staffIdRaw = typeof req.query.staffId === "string" ? req.query.staffId.trim() : "";
+      if (!staffIdRaw) {
+        return res.status(400).json({ success: false, message: "staffId is required" });
+      }
+
+      const asAtDateRaw = parseQueryDateEndInclusive(req.query.asAtDate);
+      if (asAtDateRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "asAtDate is invalid" });
+      }
+
+      const data = await accountTransactionService.getStaffAccountBalanceAsAtDate({
+        staffId: staffIdRaw,
+        ...(asAtDateRaw === "missing" ? {} : { asAtDate: asAtDateRaw }),
+      });
+
+      return res.json({
+        success: true,
+        message: "Staff account balance as at date retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to retrieve staff account balance as at date";
+      const code = message === "staffId is required" ? 400 : 500;
 
       return res.status(code).json({
         success: false,

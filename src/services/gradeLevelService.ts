@@ -10,12 +10,6 @@ export interface GradeLevelData {
 export interface ListGradeLevelsParams {
   q?: string;
   status?: Status | "All";
-  page?: number;
-  limit?: number;
-}
-
-function clampInt(n: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, n));
 }
 
 function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
@@ -56,12 +50,8 @@ export class GradeLevelService {
 
   async list(params: ListGradeLevelsParams = {}): Promise<{
     gradeLevels: GradeLevelData[];
-    pagination: { page: number; limit: number; total: number; totalPages: number };
+    count: number;
   }> {
-    const page = clampInt(params.page ?? 1, 1, 1_000_000);
-    const limit = clampInt(params.limit ?? 20, 1, 100);
-    const skip = (page - 1) * limit;
-
     const where: Prisma.GradeLevelWhereInput = {};
 
     if (params.status === undefined) {
@@ -74,18 +64,12 @@ export class GradeLevelService {
       where.name = { contains: params.q.trim() };
     }
 
-    const [total, rows] = await Promise.all([
-      this.prisma.gradeLevel.count({ where }),
-      this.prisma.gradeLevel.findMany({
-        where,
-        orderBy: { name: "asc" },
-        skip,
-        take: limit,
-      }),
-    ]);
+    const rows = await this.prisma.gradeLevel.findMany({
+      where,
+      orderBy: { name: "asc" },
+    });
 
-    const totalPages = Math.max(1, Math.ceil(total / limit));
-    return { gradeLevels: rows, pagination: { page, limit, total, totalPages } };
+    return { gradeLevels: rows, count: rows.length };
   }
 
   async getById(id: string): Promise<GradeLevelData | null> {

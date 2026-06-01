@@ -77,6 +77,20 @@ export interface StudentAccountBalanceAsAtDateResult {
   sumDebit: string;
 }
 
+export interface StaffAccountBalanceAsAtDateParams {
+  staffId: string;
+  asAtDate?: Date;
+}
+
+export interface StaffAccountBalanceAsAtDateResult {
+  staffId: string;
+  asAtDate: Date;
+  /** Sum(credit) − sum(debit) for rows with transactionDate <= asAtDate and accountSub = staffId. */
+  balanceAsAtDate: string;
+  sumCredit: string;
+  sumDebit: string;
+}
+
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
@@ -113,6 +127,47 @@ export interface ListStudentBalancesResult {
   orderBy: "classId" | "balance";
   orderDirection: "asc" | "desc";
   rows: StudentBalanceRow[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface ListStaffBalancesParams {
+  asAtDate?: Date;
+  status?: Status;
+  departmentId?: string;
+  gradeLevelId?: string;
+  orderBy?: "name" | "StaffNumber" | "balance";
+  orderDirection?: "asc" | "desc";
+  page?: number;
+  limit?: number;
+}
+
+export interface StaffBalanceRow {
+  staffId: string;
+  StaffNumber: string;
+  name: string;
+  email: string;
+  position: string;
+  status: Status;
+  departmentId: string | null;
+  gradeLevelId: string | null;
+  department: { id: string; name: string } | null;
+  gradeLevel: { id: string; name: string } | null;
+  sumCredit: string;
+  sumDebit: string;
+  balance: string;
+}
+
+export interface ListStaffBalancesResult {
+  asAtDate: Date;
+  status: Status | "All";
+  orderBy: "name" | "StaffNumber" | "balance";
+  orderDirection: "asc" | "desc";
+  rows: StaffBalanceRow[];
   pagination: {
     page: number;
     limit: number;
@@ -160,6 +215,29 @@ export interface StudentAccountTransactionLogResult {
     lastName: string;
     classId: string | null;
     subClassId: string | null;
+  };
+  transactionDateFrom: Date;
+  transactionDateTo: Date;
+  /** Sum(credit) − sum(debit) with transactionDate strictly before `transactionDateFrom`. */
+  balanceBeforeDateFrom: string;
+  transactions: AccountTransactionLogRow[];
+}
+
+export interface StaffAccountTransactionLogParams {
+  staffId: string;
+  transactionDateFrom?: Date;
+  transactionDateTo?: Date;
+}
+
+export interface StaffAccountTransactionLogResult {
+  staff: {
+    id: string;
+    StaffNumber: string;
+    name: string;
+    email: string;
+    position: string;
+    departmentId: string | null;
+    gradeLevelId: string | null;
   };
   transactionDateFrom: Date;
   transactionDateTo: Date;
@@ -273,6 +351,53 @@ export interface StudentJournalTransferGroupedResult {
   record: StudentJournalTransferRecordItem[];
 }
 
+export type StaffJournalTransferEntryInput = {
+  amount: number;
+  accountId: string;
+  transactionType: "credit" | "debit";
+  remarks?: string;
+};
+
+export interface StaffJournalTransferInput {
+  staffId: string;
+  manualRef: string;
+  transactionDate: Date;
+  postedBy: string;
+  entries: StaffJournalTransferEntryInput[];
+}
+
+export interface StaffJournalTransferResult {
+  staffId: string;
+  ref: string;
+  manualRef: string;
+  transactionDate: Date;
+  postedCount: number;
+}
+
+export interface ListStaffJournalTransfersParams {
+  staffId?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+}
+
+export interface StaffJournalTransferRecordItem {
+  account: {
+    id: number;
+    name: string;
+  };
+  transactionType: "Debit" | "Credit";
+  amount: number;
+  remarks: string | null;
+}
+
+export interface StaffJournalTransferGroupedResult {
+  staffId: string;
+  ref: string;
+  manualRef: string;
+  transactionDate: Date;
+  record: StaffJournalTransferRecordItem[];
+}
+
 type DbClient = Pick<Prisma.TransactionClient, "accountChart" | "project" | "accountTransaction">;
 
 export class AccountTransactionService {
@@ -284,6 +409,14 @@ export class AccountTransactionService {
     const m = String(d.getUTCMonth() + 1).padStart(2, "0");
     const day = String(d.getUTCDate()).padStart(2, "0");
     return `SJT-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
+  }
+
+  private generateStaffJournalTransferRef(): string {
+    const d = new Date();
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(d.getUTCDate()).padStart(2, "0");
+    return `STJT-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
   }
 
   private defaultYearIntervalToToday(): { from: Date; to: Date } {
@@ -443,6 +576,147 @@ export class AccountTransactionService {
     };
   }
 
+  async listStaffBalances(params: ListStaffBalancesParams = {}): Promise<ListStaffBalancesResult> {
+    const asAtDate = params.asAtDate ?? endOfUtcDay(new Date());
+    const page = clampInt(params.page ?? 1, 1, 1_000_000);
+    const limit = clampInt(params.limit ?? 20, 1, 100);
+    const orderDirection = params.orderDirection ?? "asc";
+    const orderBy = params.orderBy ?? "name";
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.StaffWhereInput = {
+      ...(params.status !== undefined ? { status: params.status } : {}),
+      ...(params.departmentId !== undefined ? { departmentId: params.departmentId } : {}),
+      ...(params.gradeLevelId !== undefined ? { gradeLevelId: params.gradeLevelId } : {}),
+    };
+
+    const total = await this.prisma.staff.count({ where });
+    const totalPages = Math.max(1, Math.ceil(total / limit));
+
+    if (total === 0) {
+      return {
+        asAtDate,
+        status: params.status ?? "All",
+        orderBy,
+        orderDirection,
+        rows: [],
+        pagination: { page, limit, total, totalPages },
+      };
+    }
+
+    const staffSelect = Prisma.validator<Prisma.StaffSelect>()({
+      id: true,
+      StaffNumber: true,
+      name: true,
+      email: true,
+      position: true,
+      status: true,
+      departmentId: true,
+      gradeLevelId: true,
+      department: { select: { id: true, name: true } },
+      gradeLevel: { select: { id: true, name: true } },
+    });
+
+    const staffList =
+      orderBy === "balance"
+        ? await this.prisma.staff.findMany({
+            where,
+            select: staffSelect,
+          })
+        : await this.prisma.staff.findMany({
+            where,
+            skip,
+            take: limit,
+            orderBy:
+              orderBy === "StaffNumber"
+                ? [{ StaffNumber: orderDirection }, { name: "asc" }]
+                : [{ name: orderDirection }, { StaffNumber: "asc" }],
+            select: staffSelect,
+          });
+
+    const staffIds = staffList.map((x) => x.id);
+
+    const balances =
+      staffIds.length === 0
+        ? []
+        : await this.prisma.accountTransaction.groupBy({
+            by: ["accountSub"],
+            where: {
+              accountSub: { in: staffIds },
+              transactionDate: { lte: asAtDate },
+            },
+            _sum: { credit: true, debit: true },
+          });
+
+    const balanceMap = new Map<
+      string,
+      { credit: Prisma.Decimal; debit: Prisma.Decimal; balance: Prisma.Decimal }
+    >();
+
+    for (const row of balances) {
+      if (!row.accountSub) continue;
+      const credit = row._sum.credit ?? new Prisma.Decimal(0);
+      const debit = row._sum.debit ?? new Prisma.Decimal(0);
+      balanceMap.set(row.accountSub, {
+        credit,
+        debit,
+        balance: credit.minus(debit),
+      });
+    }
+
+    const rows: StaffBalanceRow[] = staffList.map((staff) => {
+      const sums = balanceMap.get(staff.id) ?? {
+        credit: new Prisma.Decimal(0),
+        debit: new Prisma.Decimal(0),
+        balance: new Prisma.Decimal(0),
+      };
+
+      return {
+        staffId: staff.id,
+        StaffNumber: staff.StaffNumber,
+        name: staff.name,
+        email: staff.email,
+        position: staff.position,
+        status: staff.status,
+        departmentId: staff.departmentId,
+        gradeLevelId: staff.gradeLevelId,
+        department: staff.department ? { id: staff.department.id, name: staff.department.name } : null,
+        gradeLevel: staff.gradeLevel ? { id: staff.gradeLevel.id, name: staff.gradeLevel.name } : null,
+        sumCredit: sums.credit.toString(),
+        sumDebit: sums.debit.toString(),
+        balance: sums.balance.toString(),
+      };
+    });
+
+    if (orderBy === "balance") {
+      rows.sort((a, b) => {
+        const balanceCmp = new Prisma.Decimal(a.balance).comparedTo(new Prisma.Decimal(b.balance));
+
+        if (balanceCmp !== 0) {
+          return orderDirection === "asc" ? balanceCmp : -balanceCmp;
+        }
+
+        const nameCmp = a.name.localeCompare(b.name);
+        if (nameCmp !== 0) {
+          return nameCmp;
+        }
+
+        return a.StaffNumber.localeCompare(b.StaffNumber);
+      });
+    }
+
+    const pagedRows = orderBy === "balance" ? rows.slice(skip, skip + limit) : rows;
+
+    return {
+      asAtDate,
+      status: params.status ?? "All",
+      orderBy,
+      orderDirection,
+      rows: pagedRows,
+      pagination: { page, limit, total, totalPages },
+    };
+  }
+
   /**
    * Student account balance as at a date: sum(credit) − sum(debit) from inception through the selected date (inclusive),
    * filtered by `accountSub = studentId`.
@@ -469,6 +743,39 @@ export class AccountTransactionService {
 
     return {
       studentId,
+      asAtDate,
+      balanceAsAtDate,
+      sumCredit: sumCredit.toString(),
+      sumDebit: sumDebit.toString(),
+    };
+  }
+
+  /**
+   * Staff account balance as at a date: sum(credit) − sum(debit) from inception through the selected date (inclusive),
+   * filtered by `accountSub = staffId`.
+   */
+  async getStaffAccountBalanceAsAtDate(
+    params: StaffAccountBalanceAsAtDateParams
+  ): Promise<StaffAccountBalanceAsAtDateResult> {
+    const staffId = params.staffId.trim();
+    if (!staffId) throw new Error("staffId is required");
+
+    const asAtDate = params.asAtDate ?? endOfUtcDay(new Date());
+
+    const agg = await this.prisma.accountTransaction.aggregate({
+      where: {
+        accountSub: staffId,
+        transactionDate: { lte: asAtDate },
+      },
+      _sum: { credit: true, debit: true },
+    });
+
+    const sumCredit = agg._sum.credit ?? new Prisma.Decimal(0);
+    const sumDebit = agg._sum.debit ?? new Prisma.Decimal(0);
+    const balanceAsAtDate = sumCredit.minus(sumDebit).toString();
+
+    return {
+      staffId,
       asAtDate,
       balanceAsAtDate,
       sumCredit: sumCredit.toString(),
@@ -888,6 +1195,93 @@ export class AccountTransactionService {
     };
   }
 
+  async getStaffAccountTransactionLog(
+    params: StaffAccountTransactionLogParams
+  ): Promise<StaffAccountTransactionLogResult> {
+    const staffId = params.staffId.trim();
+    if (!staffId) throw new Error("staffId is required");
+
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+      select: {
+        id: true,
+        StaffNumber: true,
+        name: true,
+        email: true,
+        position: true,
+        departmentId: true,
+        gradeLevelId: true,
+      },
+    });
+    if (!staff) throw new Error("Staff not found for staffId");
+
+    let from: Date;
+    let to: Date;
+    if (params.transactionDateFrom !== undefined && params.transactionDateTo !== undefined) {
+      from = params.transactionDateFrom;
+      to = params.transactionDateTo;
+    } else if (params.transactionDateFrom !== undefined) {
+      from = params.transactionDateFrom;
+      to = endOfUtcDay(new Date());
+    } else if (params.transactionDateTo !== undefined) {
+      to = params.transactionDateTo;
+      from = new Date(
+        Date.UTC(to.getUTCFullYear() - 1, to.getUTCMonth(), to.getUTCDate(), 0, 0, 0, 0)
+      );
+    } else {
+      ({ from, to } = this.defaultYearIntervalToToday());
+    }
+
+    if (from.getTime() > to.getTime()) {
+      throw new Error("transactionDateFrom must be before or equal to transactionDateTo");
+    }
+
+    const [balanceAgg, rows] = await Promise.all([
+      this.prisma.accountTransaction.aggregate({
+        where: {
+          accountSub: staffId,
+          transactionDate: { lt: from },
+        },
+        _sum: { credit: true, debit: true },
+      }),
+      this.prisma.accountTransaction.findMany({
+        where: {
+          accountSub: staffId,
+          transactionDate: { gte: from, lte: to },
+        },
+        orderBy: [{ transactionDate: "asc" }, { createdAt: "asc" }, { id: "asc" }],
+        include: {
+          project: { select: { id: true, name: true } },
+        },
+      }),
+    ]);
+
+    const balanceBeforeDateFrom = (balanceAgg._sum.credit ?? new Prisma.Decimal(0))
+      .minus(balanceAgg._sum.debit ?? new Prisma.Decimal(0))
+      .toString();
+
+    const transactions: AccountTransactionLogRow[] = rows.map((row) => ({
+      id: row.id,
+      debit: row.debit.toString(),
+      credit: row.credit.toString(),
+      remarks: row.remarks,
+      ref: row.ref,
+      manualRef: row.manualRef,
+      transactionDate: row.transactionDate,
+      postedBy: row.postedBy,
+      createdAt: row.createdAt,
+      project: row.project,
+    }));
+
+    return {
+      staff,
+      transactionDateFrom: from,
+      transactionDateTo: to,
+      balanceBeforeDateFrom,
+      transactions,
+    };
+  }
+
   async postStudentJournalTransfer(
     input: StudentJournalTransferInput
   ): Promise<StudentJournalTransferResult> {
@@ -1168,6 +1562,276 @@ export class AccountTransactionService {
       if (!existing) {
         grouped.set(key, {
           studentId: row.studentId,
+          ref: row.ref,
+          manualRef: row.manualRef ?? "",
+          transactionDate: new Date(row.transactionDate),
+          record: [child],
+        });
+      } else {
+        existing.record.push(child);
+      }
+    }
+
+    return Array.from(grouped.values());
+  }
+
+  async postStaffJournalTransfer(
+    input: StaffJournalTransferInput
+  ): Promise<StaffJournalTransferResult> {
+    const staffId = input.staffId.trim();
+    if (!staffId) {
+      throw new Error("staffId is required");
+    }
+
+    const manualRef = input.manualRef.trim();
+    if (!manualRef) {
+      throw new Error("manualRef is required");
+    }
+
+    if (!(input.transactionDate instanceof Date) || Number.isNaN(input.transactionDate.getTime())) {
+      throw new Error("transactionDate must be a valid date");
+    }
+
+    const postedBy = input.postedBy.trim();
+    if (!postedBy) {
+      throw new Error("postedBy is required");
+    }
+
+    if (!Array.isArray(input.entries) || input.entries.length === 0) {
+      throw new Error("entries must be a non-empty array");
+    }
+
+    const staff = await this.prisma.staff.findUnique({
+      where: { id: staffId },
+      select: { id: true },
+    });
+    if (!staff) {
+      throw new Error("Staff not found for staffId");
+    }
+
+    const staffAccount =
+      await defaultAccountSettingsService.getAccountChartBySettingsId("STAFF_ACCOUNT");
+    const staffAccountId = String(staffAccount.accountId);
+    const txDate = input.transactionDate.toISOString();
+    const ref = this.generateStaffJournalTransferRef();
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const postedAt = new Date();
+        for (const entry of input.entries) {
+          const amount = entry.amount;
+          if (!Number.isFinite(amount) || amount <= 0) {
+            throw new Error("Each entry amount must be a positive number");
+          }
+
+          const accountId = entry.accountId.trim();
+          if (!accountId) {
+            throw new Error("Each entry accountId is required");
+          }
+          const parsedAccountId = Number.parseInt(accountId, 10);
+          if (!Number.isFinite(parsedAccountId) || parsedAccountId < 1) {
+            throw new Error("Each entry accountId must be a positive integer");
+          }
+
+          if (entry.transactionType !== "credit" && entry.transactionType !== "debit") {
+            throw new Error("Each entry transactionType must be credit or debit");
+          }
+
+          const remarks = entry.remarks?.trim() || "";
+          const staffLegRemarks = remarks
+            ? `Staff journal transfer - ${remarks}`
+            : "Staff journal transfer";
+          const transType =
+            entry.transactionType === "debit"
+              ? JournalTransferType.Debit
+              : JournalTransferType.Credit;
+          const debitAmount = entry.transactionType === "debit" ? amount : 0;
+          const creditAmount = entry.transactionType === "credit" ? amount : 0;
+
+          await tx.staffJournalTransfer.create({
+            data: {
+              transType,
+              staffId,
+              accountId: parsedAccountId,
+              debit: debitAmount,
+              credit: creditAmount,
+              status: Status.Active,
+              batchStatus: BatchStatus.Processed,
+              referenceNo: ref,
+              manualReferenceNo: manualRef,
+              transactionDate: input.transactionDate,
+              postedAt,
+              postedBy,
+              remarks: remarks || null,
+              finalPostedAt: postedAt,
+              finalPostedBy: postedBy,
+            },
+          });
+
+          if (entry.transactionType === "debit") {
+            await this.debitAccount(
+              {
+                accountId,
+                amount,
+                ref,
+                manualRef,
+                transactionDate: txDate,
+                postedBy,
+                remarks,
+              },
+              tx
+            );
+          } else {
+            await this.creditAccount(
+              {
+                accountId,
+                amount,
+                ref,
+                manualRef,
+                transactionDate: txDate,
+                postedBy,
+                remarks,
+              },
+              tx
+            );
+          }
+
+          if (entry.transactionType === "debit") {
+            await this.creditAccount(
+              {
+                accountId: staffAccountId,
+                amount,
+                ref,
+                manualRef,
+                transactionDate: txDate,
+                postedBy,
+                accountSub: staffId,
+                remarks: staffLegRemarks,
+              },
+              tx
+            );
+          } else {
+            await this.debitAccount(
+              {
+                accountId: staffAccountId,
+                amount,
+                ref,
+                manualRef,
+                transactionDate: txDate,
+                postedBy,
+                accountSub: staffId,
+                remarks: staffLegRemarks,
+              },
+              tx
+            );
+          }
+        }
+      });
+    } catch (error) {
+      await this.rollBack(ref).catch(() => ({ count: 0 }));
+
+      const reason = error instanceof Error ? error.message : "Unknown error";
+      throw new Error(`Staff journal transfer could not be completed: ${reason}`);
+    }
+
+    return {
+      staffId,
+      ref,
+      manualRef,
+      transactionDate: input.transactionDate,
+      postedCount: input.entries.length * 2,
+    };
+  }
+
+  async listStaffJournalTransfers(
+    params: ListStaffJournalTransfersParams = {}
+  ): Promise<StaffJournalTransferGroupedResult[]> {
+    const clauses: Prisma.Sql[] = [Prisma.sql`sjt.reference_no IS NOT NULL`];
+
+    if (params.staffId !== undefined) {
+      const staffId = params.staffId.trim();
+      if (!staffId) {
+        throw new Error("staffId cannot be empty");
+      }
+      clauses.push(Prisma.sql`sjt.staff_id = ${staffId}`);
+    }
+
+    if (params.dateFrom !== undefined) {
+      clauses.push(Prisma.sql`sjt.transaction_date >= ${params.dateFrom}`);
+    }
+    if (params.dateTo !== undefined) {
+      clauses.push(Prisma.sql`sjt.transaction_date <= ${params.dateTo}`);
+    }
+
+    const whereSql = clauses.length
+      ? Prisma.sql`WHERE ${Prisma.join(clauses, " AND ")}`
+      : Prisma.empty;
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        id: number;
+        staffId: string;
+        ref: string;
+        manualRef: string | null;
+        transactionDate: Date;
+        accountId: number;
+        accountName: string;
+        transactionType: "Debit" | "Credit";
+        debit: unknown;
+        credit: unknown;
+        remarks: string | null;
+      }>
+    >(Prisma.sql`
+      SELECT
+        sjt.id AS id,
+        sjt.staff_id AS staffId,
+        sjt.reference_no AS ref,
+        sjt.manual_reference_no AS manualRef,
+        sjt.transaction_date AS transactionDate,
+        sjt.accountid AS accountId,
+        ac.account_description AS accountName,
+        sjt.transaction_type AS transactionType,
+        sjt.debit AS debit,
+        sjt.credit AS credit,
+        sjt.remarks AS remarks
+      FROM staff_journal_transfer sjt
+      INNER JOIN account_charts ac ON ac.id = sjt.accountid
+      ${whereSql}
+      ORDER BY sjt.transaction_date DESC, sjt.reference_no DESC, sjt.id ASC
+    `);
+
+    const grouped = new Map<string, StaffJournalTransferGroupedResult>();
+
+    const toNumber = (value: unknown): number => {
+      if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+      if (typeof value === "string") {
+        const n = Number.parseFloat(value);
+        return Number.isFinite(n) ? n : 0;
+      }
+      if (typeof value === "object" && value !== null && "toString" in value) {
+        const n = Number.parseFloat(String(value));
+        return Number.isFinite(n) ? n : 0;
+      }
+      return 0;
+    };
+
+    for (const row of rows) {
+      const key = `${row.staffId}::${row.ref}::${row.manualRef ?? ""}`;
+      const existing = grouped.get(key);
+      const amount = toNumber(row.debit) > 0 ? toNumber(row.debit) : toNumber(row.credit);
+      const child: StaffJournalTransferRecordItem = {
+        account: {
+          id: row.accountId,
+          name: row.accountName,
+        },
+        transactionType: row.transactionType,
+        amount,
+        remarks: row.remarks,
+      };
+
+      if (!existing) {
+        grouped.set(key, {
+          staffId: row.staffId,
           ref: row.ref,
           manualRef: row.manualRef ?? "",
           transactionDate: new Date(row.transactionDate),

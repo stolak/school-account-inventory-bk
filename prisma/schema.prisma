@@ -122,6 +122,7 @@ model User {
   privileges              Privilege[]
   auditLogs               AuditLog[]
   cashiers                Cashier[]
+  staffJournalTransfers   StaffJournalTransfer[]
 
   @@map("users")
 }
@@ -534,8 +535,7 @@ enum EmploymentType {
 }
 
 model Staff {
-  id String @id @default(uuid()) @db.Char(36)
-
+  id                    String                 @id @default(uuid()) @db.Char(36)
   StaffNumber           String                 @unique @map("staff_number") @db.Char(36)
   email                 String                 @unique
   name                  String
@@ -548,6 +548,8 @@ model Staff {
   updatedAt             DateTime               @default(now()) @map("updated_at")
   gradeLevelId          String?                @map("grade_level_id") @db.Char(36)
   gradeLevel            GradeLevel?            @relation(fields: [gradeLevelId], references: [id], onDelete: SetNull)
+  step                  Int                    @default(0) @map("step")
+  salary                Decimal                @default(0) @map("salary") @db.Decimal(12, 2)
   createdBy             User                   @relation("StaffCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   departmentId          String?                @map("department_id") @db.Char(36)
   department            Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
@@ -556,6 +558,11 @@ model Staff {
   inventoryTransactions InventoryTransaction[]
   cashiers              Cashier[]
   staffBankDetails      StaffBankDetails[]
+  dateOfBirth           DateTime?              @map("date_of_birth") @db.Date
+  dateOfAppointment     DateTime?              @map("date_of_appointment") @db.Date
+  dateOfResignation     DateTime?              @map("date_of_resignation") @db.Date
+  dateOfTermination     DateTime?              @map("date_of_termination") @db.Date
+  staffJournalTransfers StaffJournalTransfer[]
 
   @@index([userId])
   @@index([StaffNumber])
@@ -774,6 +781,7 @@ model AccountChart {
   studentJournalTransfers StudentJournalTransfer[]
   // suppliers               Supplier[]
   cashiers                Cashier[]
+  staffJournalTransfers   StaffJournalTransfer[]
 
   @@index([groupId])
   @@index([headId])
@@ -1145,4 +1153,35 @@ model StaffBankDetails {
   @@index([staffId])
   @@index([bankId])
   @@map("staff_bank_details")
+}
+
+model StaffJournalTransfer {
+  id                Int                 @id @default(autoincrement())
+  transType         JournalTransferType @map("transaction_type")
+  staffId           String              @map("staff_id") @db.Char(36)
+  staff             Staff?              @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  accountId         Int                 @map("accountid")
+  debit             Decimal             @default(0) @db.Decimal(14, 2)
+  credit            Decimal             @default(0) @db.Decimal(14, 2)
+  status            Status              @default(Active)
+  batchStatus       BatchStatus         @default(Pending) @map("batch_status")
+  referenceNo       String?             @map("reference_no")
+  manualReferenceNo String?             @map("manual_reference_no")
+  transactionDate   DateTime            @map("transaction_date")
+  postedAt          DateTime?           @map("posted_at")
+  postedBy          String?             @map("posted_by")
+  remarks           String?             @map("remarks")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  finalPostedAt     DateTime?           @map("final_posted_at")
+  finalPostedBy     String?             @map("final_posted_by")
+  updatedAt         DateTime            @default(now()) @map("updated_at")
+  createdById       String?             @map("created_by") @db.Char(36)
+  createdBy         User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  account           AccountChart        @relation(fields: [accountId], references: [id], onDelete: Restrict)
+
+  @@index([staffId])
+  @@index([accountId])
+  @@index([transactionDate])
+  @@index([batchStatus])
+  @@map("staff_journal_transfer")
 }
