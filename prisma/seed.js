@@ -1354,6 +1354,73 @@ async function main() {
         status: "Active",
         rank: 29,
       },
+      // Category inventory asset ledgers (subhead 3 — Inventory)
+      {
+        id: 30,
+        groupId: 1,
+        headId: 1,
+        subheadId: 3,
+        accountNo: "1103002",
+        accountRef: "INV-OFFICE",
+        accountDescription: "Inventory - Office Supplies",
+        status: "Active",
+        rank: 30,
+      },
+      {
+        id: 31,
+        groupId: 1,
+        headId: 1,
+        subheadId: 3,
+        accountNo: "1103003",
+        accountRef: "INV-STATIONERY",
+        accountDescription: "Inventory - Stationery",
+        status: "Active",
+        rank: 31,
+      },
+      {
+        id: 32,
+        groupId: 1,
+        headId: 1,
+        subheadId: 3,
+        accountNo: "1103004",
+        accountRef: "INV-CLEANING",
+        accountDescription: "Inventory - Cleaning Supplies",
+        status: "Active",
+        rank: 32,
+      },
+      {
+        id: 33,
+        groupId: 1,
+        headId: 1,
+        subheadId: 3,
+        accountNo: "1103005",
+        accountRef: "INV-LAB",
+        accountDescription: "Inventory - Laboratory Supplies",
+        status: "Active",
+        rank: 33,
+      },
+      {
+        id: 34,
+        groupId: 1,
+        headId: 1,
+        subheadId: 3,
+        accountNo: "1103006",
+        accountRef: "INV-SPORTS",
+        accountDescription: "Inventory - Sports and PE Equipment",
+        status: "Active",
+        rank: 34,
+      },
+      {
+        id: 35,
+        groupId: 1,
+        headId: 1,
+        subheadId: 3,
+        accountNo: "1103007",
+        accountRef: "INV-MAINT",
+        accountDescription: "Inventory - Building and Maintenance",
+        status: "Active",
+        rank: 35,
+      },
     ];
 
     for (const c of accountCharts) {
@@ -1747,8 +1814,8 @@ async function main() {
 
     // Inventory categories
     console.log("📦 Seeding categories...");
-    // Account chart IDs (see accountCharts seed): 4 INV-GENERAL, 5 FA-FURN, 6 FA-ICT,
-    // 13 EXP-CONS, 15 EXP-MAINT
+    // Account chart IDs: 13 EXP-CONS, 15 EXP-MAINT, 5 FA-FURN, 6 FA-ICT,
+    // 30–35 category inventory/asset ledgers (see accountCharts seed)
     const categories = [
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901001",
@@ -1757,6 +1824,7 @@ async function main() {
         status: "Active",
         categoryType: "Consumable",
         consumableAccountId: 13, // 4102001 Consumable Expenses
+        assetAccountId: 30, // 1103002 Inventory - Office Supplies
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901002",
@@ -1764,7 +1832,8 @@ async function main() {
         description: "Student and staff stationery items",
         status: "Active",
         categoryType: "Consumable",
-        consumableAccountId: 13, // 4102001 Consumable Expenses
+        consumableAccountId: 13,
+        assetAccountId: 31, // 1103003 Inventory - Stationery
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901003",
@@ -1772,7 +1841,8 @@ async function main() {
         description: "Janitorial and hygiene consumables",
         status: "Active",
         categoryType: "Consumable",
-        consumableAccountId: 13, // 4102001 Consumable Expenses
+        consumableAccountId: 13,
+        assetAccountId: 32, // 1103004 Inventory - Cleaning Supplies
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901004",
@@ -1780,7 +1850,8 @@ async function main() {
         description: "Science lab consumables and chemicals",
         status: "Active",
         categoryType: "Consumable",
-        consumableAccountId: 13, // 4102001 Consumable Expenses
+        consumableAccountId: 13,
+        assetAccountId: 33, // 1103005 Inventory - Laboratory Supplies
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901005",
@@ -1788,7 +1859,8 @@ async function main() {
         description: "Computers, peripherals, and durable IT assets",
         status: "Active",
         categoryType: "NonConsumable",
-        consumableAccountId: 6, // 1202001 ICT Equipment (fixed asset)
+        consumableAccountId: 13, // expense on issue / sale
+        assetAccountId: 6, // 1202001 ICT Equipment
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901006",
@@ -1796,7 +1868,8 @@ async function main() {
         description: "Desks, chairs, cabinets, and fixtures",
         status: "Active",
         categoryType: "NonConsumable",
-        consumableAccountId: 5, // 1201001 Furniture and Fixtures
+        consumableAccountId: 13,
+        assetAccountId: 5, // 1201001 Furniture and Fixtures
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901007",
@@ -1804,7 +1877,8 @@ async function main() {
         description: "Sports equipment and physical education gear",
         status: "Active",
         categoryType: "NonConsumable",
-        consumableAccountId: 4, // 1103001 Inventory - General Stock
+        consumableAccountId: 13,
+        assetAccountId: 34, // 1103006 Inventory - Sports and PE Equipment
       },
       {
         id: "a1b2c3d4-e5f6-4789-a012-345678901008",
@@ -1813,6 +1887,7 @@ async function main() {
         status: "Active",
         categoryType: "NonConsumable",
         consumableAccountId: 15, // 4104001 Maintenance Expense
+        assetAccountId: 35, // 1103007 Inventory - Building and Maintenance
       },
     ];
 
@@ -1824,6 +1899,7 @@ async function main() {
           status: c.status,
           categoryType: c.categoryType,
           consumableAccountId: c.consumableAccountId,
+          assetAccountId: c.assetAccountId,
         },
         create: c,
       });
