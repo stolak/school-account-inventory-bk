@@ -292,6 +292,52 @@ export type AccountTransactionByHeadSubheadReportResult = Record<
   AccountTransactionHeadSubheadRow
 >;
 
+/** Seeded chart of accounts — Expenses (group 4 / head 6) and Incomes (group 5 / head 7). */
+export const PL_EXPENSE_GROUP_ID = 4;
+export const PL_INCOME_GROUP_ID = 5;
+export const PL_EXPENSE_HEAD_ID = 6;
+export const PL_INCOME_HEAD_ID = 7;
+
+export interface ProfitAndLossLine {
+  accountId: number;
+  accountNo: string | null;
+  accountRef: string | null;
+  accountDescription: string;
+  subheadId: number;
+  subheadName: string;
+  subheadCode: string | null;
+  amount: string;
+}
+
+export interface ProfitAndLossSubheadTotal {
+  subheadId: number;
+  subheadName: string;
+  subheadCode: string | null;
+  amount: string;
+}
+
+export interface ProfitAndLossSection {
+  groupId: number;
+  groupName: string;
+  headId: number;
+  headCode: string;
+  headName: string;
+  lines: ProfitAndLossLine[];
+  subheadTotals: ProfitAndLossSubheadTotal[];
+  total: string;
+}
+
+export interface ProfitAndLossReportResult {
+  transactionDateFrom: Date | null;
+  transactionDateTo: Date | null;
+  income: ProfitAndLossSection;
+  expenses: ProfitAndLossSection;
+  totalIncome: string;
+  totalExpenses: string;
+  netProfit: string;
+  resultLabel: "Net Profit" | "Net Loss";
+}
+
 type EntryInput = {
   accountId: string;
   amount: number;
@@ -1014,6 +1060,196 @@ export class AccountTransactionService {
     }
 
     return data;
+  }
+
+  /**
+   * Profit & loss for the seeded income (group 5) and expense (group 4) sections.
+   * Income line amount = sum(credit) − sum(debit); expense = sum(debit) − sum(credit).
+   */
+  async getProfitAndLossReport(
+    params: AccountTransactionByAccountReportParams = {}
+  ): Promise<ProfitAndLossReportResult> {
+    const from = params.transactionDateFrom;
+    const to = params.transactionDateTo;
+
+    if (from && to && from.getTime() > to.getTime()) {
+      throw new Error("transactionDateFrom must be before or equal to transactionDateTo");
+    }
+
+    const dateWhere =
+      from || to
+        ? {
+            transactionDate: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lte: to } : {}),
+            },
+          }
+        : {};
+
+    const grouped = await this.prisma.accountTransaction.groupBy({
+      by: ["accountId"],
+      where: {
+        groupId: { in: [PL_EXPENSE_GROUP_ID, PL_INCOME_GROUP_ID] },
+        ...(Object.keys(dateWhere).length ? dateWhere : {}),
+      },
+      _sum: { credit: true, debit: true },
+    });
+
+    const balanceByAccountId = new Map<
+      number,
+      { credit: Prisma.Decimal; debit: Prisma.Decimal }
+    >();
+    for (const row of grouped) {
+      balanceByAccountId.set(row.accountId, {
+        credit: row._sum.credit ?? new Prisma.Decimal(0),
+        debit: row._sum.debit ?? new Prisma.Decimal(0),
+      });
+    }
+
+    const [incomeSection, expenseSection] = await Promise.all([
+      this.buildProfitAndLossSection(
+        PL_INCOME_GROUP_ID,
+        PL_INCOME_HEAD_ID,
+        balanceByAccountId,
+        "credit"
+      ),
+      this.buildProfitAndLossSection(
+        PL_EXPENSE_GROUP_ID,
+        PL_EXPENSE_HEAD_ID,
+        balanceByAccountId,
+        "debit"
+      ),
+    ]);
+
+    const totalIncome = new Prisma.Decimal(incomeSection.total);
+    const totalExpenses = new Prisma.Decimal(expenseSection.total);
+    const net = totalIncome.minus(totalExpenses);
+
+    return {
+      transactionDateFrom: from ?? null,
+      transactionDateTo: to ?? null,
+      income: incomeSection,
+      expenses: expenseSection,
+      totalIncome: incomeSection.total,
+      totalExpenses: expenseSection.total,
+      netProfit: net.toString(),
+      resultLabel: net.gte(0) ? "Net Profit" : "Net Loss",
+    };
+  }
+
+  async getProfitAndLossSummary(
+    params: AccountTransactionByAccountReportParams = {}
+  ): Promise<
+    Pick<
+      ProfitAndLossReportResult,
+      | "transactionDateFrom"
+      | "transactionDateTo"
+      | "totalIncome"
+      | "totalExpenses"
+      | "netProfit"
+      | "resultLabel"
+    >
+  > {
+    const report = await this.getProfitAndLossReport(params);
+    return {
+      transactionDateFrom: report.transactionDateFrom,
+      transactionDateTo: report.transactionDateTo,
+      totalIncome: report.totalIncome,
+      totalExpenses: report.totalExpenses,
+      netProfit: report.netProfit,
+      resultLabel: report.resultLabel,
+    };
+  }
+
+  private async buildProfitAndLossSection(
+    groupId: number,
+    headId: number,
+    balanceByAccountId: Map<number, { credit: Prisma.Decimal; debit: Prisma.Decimal }>,
+    normalBalance: "credit" | "debit"
+  ): Promise<ProfitAndLossSection> {
+    const head = await this.prisma.accountHead.findUnique({
+      where: { id: headId },
+      select: {
+        id: true,
+        code: true,
+        name: true,
+        group: { select: { id: true, name: true } },
+      },
+    });
+    if (!head || head.group.id !== groupId) {
+      throw new Error("Profit and loss chart head configuration is missing or invalid");
+    }
+
+    const accounts = await this.prisma.accountChart.findMany({
+      where: { groupId, headId, status: "Active" },
+      select: {
+        id: true,
+        accountNo: true,
+        accountRef: true,
+        accountDescription: true,
+        rank: true,
+        subheadId: true,
+        subhead: { select: { id: true, code: true, name: true, rank: true } },
+      },
+      orderBy: [{ subhead: { rank: "asc" } }, { rank: "asc" }, { id: "asc" }],
+    });
+
+    const lines: ProfitAndLossLine[] = accounts.map((account) => {
+      const sums = balanceByAccountId.get(account.id) ?? {
+        credit: new Prisma.Decimal(0),
+        debit: new Prisma.Decimal(0),
+      };
+      const amount =
+        normalBalance === "credit"
+          ? sums.credit.minus(sums.debit)
+          : sums.debit.minus(sums.credit);
+
+      return {
+        accountId: account.id,
+        accountNo: account.accountNo,
+        accountRef: account.accountRef,
+        accountDescription: account.accountDescription,
+        subheadId: account.subheadId,
+        subheadName: account.subhead.name,
+        subheadCode: account.subhead.code,
+        amount: amount.toString(),
+      };
+    });
+
+    const subheadMap = new Map<number, ProfitAndLossSubheadTotal>();
+    for (const line of lines) {
+      const existing = subheadMap.get(line.subheadId);
+      const lineAmount = new Prisma.Decimal(line.amount);
+      if (existing) {
+        subheadMap.set(line.subheadId, {
+          ...existing,
+          amount: new Prisma.Decimal(existing.amount).plus(lineAmount).toString(),
+        });
+      } else {
+        subheadMap.set(line.subheadId, {
+          subheadId: line.subheadId,
+          subheadName: line.subheadName,
+          subheadCode: line.subheadCode,
+          amount: line.amount,
+        });
+      }
+    }
+
+    const subheadTotals = [...subheadMap.values()].sort((a, b) => a.subheadId - b.subheadId);
+    const total = lines
+      .reduce((acc, line) => acc.plus(new Prisma.Decimal(line.amount)), new Prisma.Decimal(0))
+      .toString();
+
+    return {
+      groupId: head.group.id,
+      groupName: head.group.name,
+      headId: head.id,
+      headCode: head.code,
+      headName: head.name,
+      lines,
+      subheadTotals,
+      total,
+    };
   }
 
   async getAccountTransactionLog(

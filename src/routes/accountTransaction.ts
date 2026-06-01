@@ -19,6 +19,8 @@ router.get(
   "/report-by-head-subhead",
   accountTransactionController.getAccountTransactionByHeadSubheadReport
 );
+router.get("/profit-and-loss", accountTransactionController.getProfitAndLossReport);
+router.get("/profit-and-loss/summary", accountTransactionController.getProfitAndLossSummary);
 router.get("/transaction-log", accountTransactionController.getAccountTransactionLog);
 router.post("/debit", accountTransactionController.debitAccount);
 router.post("/credit", accountTransactionController.creditAccount);

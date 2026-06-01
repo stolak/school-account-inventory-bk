@@ -157,6 +157,51 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *       500:
  *         description: Server error
  *
+ * /api/v1/account-transactions/profit-and-loss:
+ *   get:
+ *     summary: Profit and loss statement
+ *     description: |
+ *       Returns a P&amp;L for the fixed chart sections seeded in the application:
+ *       **Incomes** (account group 5 / head 51) and **Expenses** (group 4 / head 41).
+ *       Line amounts use `AccountTransaction` in the optional date window:
+ *       income = sum(credit) − sum(debit); expense = sum(debit) − sum(credit).
+ *       Includes subhead subtotals and net profit (income − expenses).
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: transactionDateFrom
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: transactionDateTo
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Full P&amp;L with income and expense sections
+ *       400:
+ *         description: Invalid date parameters or date range
+ *       500:
+ *         description: Server error
+ *
+ * /api/v1/account-transactions/profit-and-loss/summary:
+ *   get:
+ *     summary: Profit and loss totals only
+ *     description: Same filters as profit-and-loss; returns total income, total expenses, and net profit only.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: transactionDateFrom
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: transactionDateTo
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: P&amp;L summary totals
+ *       400:
+ *         description: Invalid date parameters or date range
+ *       500:
+ *         description: Server error
+ *
  * /api/v1/account-transactions/balance-as-at:
  *   get:
  *     summary: Account balance as at a selected date
@@ -1257,6 +1302,89 @@ export const accountTransactionController = {
       const message = error instanceof Error ? error.message : "Failed to retrieve account report by account";
       const code =
         message === "transactionDateFrom must be before or equal to transactionDateTo" ? 400 : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getProfitAndLossReport: async (req: Request, res: Response) => {
+    try {
+      const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
+      const toRaw = parseQueryDateEndInclusive(req.query.transactionDateTo);
+
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+
+      const data = await accountTransactionService.getProfitAndLossReport({
+        ...(transactionDateFrom !== undefined ? { transactionDateFrom } : {}),
+        ...(transactionDateTo !== undefined ? { transactionDateTo } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Profit and loss report retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve profit and loss report";
+      const code =
+        message === "transactionDateFrom must be before or equal to transactionDateTo" ||
+        message.includes("Profit and loss chart")
+          ? 400
+          : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getProfitAndLossSummary: async (req: Request, res: Response) => {
+    try {
+      const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
+      const toRaw = parseQueryDateEndInclusive(req.query.transactionDateTo);
+
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+
+      const data = await accountTransactionService.getProfitAndLossSummary({
+        ...(transactionDateFrom !== undefined ? { transactionDateFrom } : {}),
+        ...(transactionDateTo !== undefined ? { transactionDateTo } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Profit and loss summary retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to retrieve profit and loss summary";
+      const code =
+        message === "transactionDateFrom must be before or equal to transactionDateTo" ||
+        message.includes("Profit and loss chart")
+          ? 400
+          : 500;
 
       return res.status(code).json({
         success: false,
