@@ -3136,6 +3136,196 @@ async function main() {
       `   ✓ ${classDefaultBillings.length} class default billings (2025/2026, Third Term)`
     );
 
+    // Donated inventory (stock-in via donation transactions)
+    console.log("🎁 Seeding donated inventory transactions...");
+    const STORE_MAIN = "a3a4b5c6-d7e8-4890-a012-345678904001";
+    const STORE_ANNEX = "a3a4b5c6-d7e8-4890-a012-345678904002";
+    const ITEM_EXERCISE_BOOK = "f2a3b4c5-d6e7-4890-a012-345678903004";
+    const ITEM_PENCIL_PACK = "f2a3b4c5-d6e7-4890-a012-345678903005";
+    const ITEM_A4_PAPER = "f2a3b4c5-d6e7-4890-a012-345678903001";
+    const ITEM_DESKTOP = "f2a3b4c5-d6e7-4890-a012-345678903009";
+    const ITEM_MOUSE = "f2a3b4c5-d6e7-4890-a012-345678903010";
+    const ITEM_FOOTBALL = "f2a3b4c5-d6e7-4890-a012-345678903013";
+    const ITEM_CHAIR = "f2a3b4c5-d6e7-4890-a012-345678903012";
+    const ITEM_HAND_SOAP = "f2a3b4c5-d6e7-4890-a012-345678903006";
+    const ITEM_LED_BULB = "f2a3b4c5-d6e7-4890-a012-345678903014";
+    const ITEM_BALLPOINT = "f2a3b4c5-d6e7-4890-a012-345678903002";
+
+    const donationTransactions = [
+      {
+        id: "a1b2c3d4-e5f6-4890-d012-345678909001",
+        itemId: ITEM_EXERCISE_BOOK,
+        storeId: STORE_MAIN,
+        qtyIn: 500,
+        referenceNo: "DON-20260315-PTA001",
+        notes: "PTA book drive for junior secondary students",
+        supplierReceiver: "School PTA",
+        transactionDate: new Date("2026-03-15T10:00:00.000Z"),
+        isAcknowledged: true,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4890-d012-345678909002",
+        itemId: ITEM_PENCIL_PACK,
+        storeId: STORE_MAIN,
+        qtyIn: 40,
+        referenceNo: "DON-20260315-PTA001",
+        notes: "PTA stationery donation (HB pencil packs)",
+        supplierReceiver: "School PTA",
+        transactionDate: new Date("2026-03-15T10:05:00.000Z"),
+        isAcknowledged: true,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4890-d012-345678909003",
+        itemId: ITEM_BALLPOINT,
+        storeId: STORE_MAIN,
+        qtyIn: 25,
+        referenceNo: "DON-20260315-PTA001",
+        notes: "PTA ballpoint pen cartons for exam term",
+        supplierReceiver: "School PTA",
+        transactionDate: new Date("2026-03-15T10:10:00.000Z"),
+        isAcknowledged: true,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4890-d012-345678909004",
+        itemId: ITEM_A4_PAPER,
+        storeId: STORE_MAIN,
+        qtyIn: 30,
+        referenceNo: "DON-20260401-ALUMNI01",
+        notes: "Alumni association office paper donation",
+        supplierReceiver: "Old Students Association",
+        transactionDate: new Date("2026-04-01T09:00:00.000Z"),
+        isAcknowledged: true,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4890-d012-345678909005",
+        itemId: ITEM_DESKTOP,
+        storeId: STORE_ANNEX,
+        qtyIn: 5,
+        referenceNo: "DON-20260401-ALUMNI01",
+        notes: "Refurbished desktops for ICT laboratory",
+        supplierReceiver: "Old Students Association",
+        transactionDate: new Date("2026-04-01T09:30:00.000Z"),
+        isAcknowledged: false,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4890-d012-345678909006",
+        itemId: ITEM_MOUSE,
+        storeId: STORE_ANNEX,
+        qtyIn: 20,
+        referenceNo: "DON-20260401-ALUMNI01",
+        notes: "Wireless mice donated with alumni computer batch",
+        supplierReceiver: "Old Students Association",
+        transactionDate: new Date("2026-04-01T09:35:00.000Z"),
+        isAcknowledged: false,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4890-d012-345678909007",
+        itemId: ITEM_FOOTBALL,
+        storeId: STORE_MAIN,
+        qtyIn: 30,
+        referenceNo: "DON-20260510-ROTARY01",
+        notes: "Inter-house sports equipment donation",
+        supplierReceiver: "Rotary Club Lagos",
+        customerMame: "Rotary Club Lagos",
+        transactionDate: new Date("2026-05-10T14:00:00.000Z"),
+        isAcknowledged: true,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4890-d012-345678909008",
+        itemId: ITEM_CHAIR,
+        storeId: STORE_MAIN,
+        qtyIn: 50,
+        referenceNo: "DON-20260510-ROTARY01",
+        notes: "Classroom chairs for expanded JSS block",
+        supplierReceiver: "Rotary Club Lagos",
+        customerMame: "Rotary Club Lagos",
+        transactionDate: new Date("2026-05-10T14:15:00.000Z"),
+        isAcknowledged: true,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4890-d012-345678909009",
+        itemId: ITEM_HAND_SOAP,
+        storeId: STORE_MAIN,
+        qtyIn: 12,
+        referenceNo: "DON-20260601-HYGIENE",
+        notes: "Hygiene supplies for dormitories and washrooms",
+        supplierReceiver: "Wellness Foundation NGO",
+        transactionDate: new Date("2026-06-01T11:00:00.000Z"),
+        isAcknowledged: true,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4890-d012-345678909010",
+        itemId: ITEM_LED_BULB,
+        storeId: STORE_ANNEX,
+        qtyIn: 100,
+        referenceNo: "DON-20260601-HYGIENE",
+        notes: "LED bulbs for maintenance energy-saving upgrade",
+        supplierReceiver: "Wellness Foundation NGO",
+        transactionDate: new Date("2026-06-01T11:20:00.000Z"),
+        isAcknowledged: false,
+      },
+    ];
+
+    for (const row of donationTransactions) {
+      await prisma.inventoryTransaction.upsert({
+        where: { id: row.id },
+        update: {
+          itemId: row.itemId,
+          storeId: row.storeId,
+          transactionType: "donation",
+          qtyIn: row.qtyIn,
+          qtyOut: 0,
+          inCost: 0,
+          outCost: 0,
+          amountPaid: 0,
+          status: "completed",
+          referenceNo: row.referenceNo,
+          notes: row.notes,
+          supplierReceiver: row.supplierReceiver,
+          ...(row.customerMame !== undefined ? { customerMame: row.customerMame } : {}),
+          sessionId: seededSession.id,
+          termId: seededTerm.id,
+          transactionDate: row.transactionDate,
+          createdById: adminUserId,
+          isAcknowledged: row.isAcknowledged,
+          ...(row.isAcknowledged
+            ? {
+                acknowledgedAt: row.transactionDate,
+                acknowledgedBy: adminUserId,
+              }
+            : { acknowledgedAt: null, acknowledgedBy: null }),
+        },
+        create: {
+          id: row.id,
+          itemId: row.itemId,
+          storeId: row.storeId,
+          transactionType: "donation",
+          qtyIn: row.qtyIn,
+          qtyOut: 0,
+          inCost: 0,
+          outCost: 0,
+          amountPaid: 0,
+          status: "completed",
+          referenceNo: row.referenceNo,
+          notes: row.notes,
+          supplierReceiver: row.supplierReceiver,
+          ...(row.customerMame !== undefined ? { customerMame: row.customerMame } : {}),
+          sessionId: seededSession.id,
+          termId: seededTerm.id,
+          transactionDate: row.transactionDate,
+          createdById: adminUserId,
+          isAcknowledged: row.isAcknowledged,
+          ...(row.isAcknowledged
+            ? {
+                acknowledgedAt: row.transactionDate,
+                acknowledgedBy: adminUserId,
+              }
+            : {}),
+        },
+      });
+    }
+    console.log(`   ✓ ${donationTransactions.length} donation transactions (4 reference batches)`);
+
     // Create merchant users for each merchant
   } catch (error) {
     console.error("❌ Error during seeding:", error);

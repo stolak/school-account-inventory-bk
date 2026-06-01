@@ -2,6 +2,7 @@ import { Prisma, StudentBillingStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { randomUUID } from "crypto";
 import { accountTransactionService } from "./accountTransactionService";
+import { defaultAccountSettingsService } from "./defaultAccountSettingsService";
 
 export type StudentConcessionDiscountRow = Prisma.StudentConcessionDiscountGetPayload<
   Record<string, never>
@@ -413,12 +414,16 @@ export class StudentConcessionDiscountService {
 
       const postedAt = new Date();
 
+      // ge
+      const studentReceivableAccountId =
+        await defaultAccountSettingsService.getAccountChartBySettingsId("STUDENT_ACCOUNT");
+      if (!studentReceivableAccountId.accountId) {
+        throw new Error(
+          "Student receivable account chart is required before posting student billings contact the system administrator"
+        );
+      }
+      let studentAccountId = studentReceivableAccountId.accountId;
       for (const row of toPost) {
-        const studentAccountId = studentAccountById.get(row.studentId);
-        if (!studentAccountId) {
-          throw new Error(`Student account chart is required before posting discount ID ${row.id}`);
-        }
-
         const discountAccountId = discountAccountById.get(row.concessionDiscountId);
         if (!discountAccountId) {
           throw new Error(
