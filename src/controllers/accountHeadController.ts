@@ -114,7 +114,7 @@ export const accountHeadController = {
       }
 
       const accountHeads = await accountHeadService.getAll(
-        groupId !== undefined ? { groupId } : undefined,
+        groupId !== undefined ? { groupId } : undefined
       );
 
       return res.json({

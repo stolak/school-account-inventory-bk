@@ -147,6 +147,8 @@ model Bank {
   bankCode         String             @unique
   bankName         String
   staffBankDetails StaffBankDetails[]
+
+  @@map("banks")
 }
 
 enum RecordStatus {

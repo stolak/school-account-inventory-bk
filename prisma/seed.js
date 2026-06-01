@@ -240,6 +240,56 @@ async function upsertStaffWithUser(hashedPassword, input) {
   });
 }
 
+/** Seed Bank rows from banks.json (bankCode, bankName; optional id from file). */
+async function seedBanks() {
+  const banksPath = path.join(__dirname, "..", "banks.json");
+  if (!fs.existsSync(banksPath)) {
+    console.warn("   ⚠ banks.json not found — skipping bank seed");
+    return { seeded: 0, skipped: 0 };
+  }
+
+  const raw = JSON.parse(fs.readFileSync(banksPath, "utf8"));
+  if (!Array.isArray(raw)) {
+    throw new Error("banks.json must be a JSON array");
+  }
+
+  const seenCodes = new Set();
+  let seeded = 0;
+  let skipped = 0;
+
+  for (const row of raw) {
+    const bankCode = String(row.bankCode ?? "").trim();
+    const bankName = String(row.bankName ?? "").trim();
+    if (!bankCode || !bankName) {
+      skipped += 1;
+      continue;
+    }
+    if (seenCodes.has(bankCode)) {
+      skipped += 1;
+      continue;
+    }
+    seenCodes.add(bankCode);
+
+    const id =
+      typeof row.id === "string" && /^[0-9a-f-]{36}$/i.test(row.id.trim())
+        ? row.id.trim()
+        : undefined;
+
+    await prisma.bank.upsert({
+      where: { bankCode },
+      update: { bankName },
+      create: {
+        ...(id ? { id } : {}),
+        bankCode,
+        bankName,
+      },
+    });
+    seeded += 1;
+  }
+
+  return { seeded, skipped };
+}
+
 async function main() {
   console.log("🌱 Starting database seeding...");
 
@@ -306,6 +356,10 @@ async function main() {
         status: "active",
       },
     });
+
+    console.log("🏦 Seeding banks from banks.json...");
+    const { seeded: banksSeeded, skipped: banksSkipped } = await seedBanks();
+    console.log(`   ✓ ${banksSeeded} banks (${banksSkipped} skipped)`);
 
     // Privileges (RBAC) — derived from API routes in src/routes (excludes auth)
     console.log("🔐 Seeding privileges...");
