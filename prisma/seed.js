@@ -994,6 +994,17 @@ async function main() {
         status: "Active",
         rank: 18,
       },
+      // Liabilities — payroll (head 3)
+      {
+        id: 19,
+        groupId: 2,
+        headId: 3,
+        code: "2103",
+        name: "Payroll Liabilities",
+        accountType: "NonCash",
+        status: "Active",
+        rank: 19,
+      },
     ];
 
     for (const s of accountSubheads) {
@@ -1228,6 +1239,120 @@ async function main() {
         status: "Active",
         rank: 19,
       },
+      // Payroll expenses (subhead 11 — Salaries and Wages)
+      {
+        id: 20,
+        groupId: 4,
+        headId: 6,
+        subheadId: 11,
+        accountNo: "4101002",
+        accountRef: "EXP-SALARY",
+        accountDescription: "Salary Expense",
+        status: "Active",
+        rank: 20,
+      },
+      {
+        id: 21,
+        groupId: 4,
+        headId: 6,
+        subheadId: 11,
+        accountNo: "4101003",
+        accountRef: "EXP-HOUSING",
+        accountDescription: "Housing Allowance Expense",
+        status: "Active",
+        rank: 21,
+      },
+      {
+        id: 22,
+        groupId: 4,
+        headId: 6,
+        subheadId: 11,
+        accountNo: "4101004",
+        accountRef: "EXP-TRANSPORT",
+        accountDescription: "Transport Allowance Expense",
+        status: "Active",
+        rank: 22,
+      },
+      // Payroll liabilities (subhead 19)
+      {
+        id: 23,
+        groupId: 2,
+        headId: 3,
+        subheadId: 19,
+        accountNo: "2103001",
+        accountRef: "AP-SALARIES",
+        accountDescription: "Salaries Payable",
+        status: "Active",
+        rank: 23,
+      },
+      {
+        id: 24,
+        groupId: 2,
+        headId: 3,
+        subheadId: 19,
+        accountNo: "2103002",
+        accountRef: "AP-PAYE",
+        accountDescription: "PAYE Tax Payable",
+        status: "Active",
+        rank: 24,
+      },
+      {
+        id: 25,
+        groupId: 2,
+        headId: 3,
+        subheadId: 19,
+        accountNo: "2103003",
+        accountRef: "AP-PEN-EMP",
+        accountDescription: "Employee Pension Payable",
+        status: "Active",
+        rank: 25,
+      },
+      {
+        id: 26,
+        groupId: 2,
+        headId: 3,
+        subheadId: 19,
+        accountNo: "2103004",
+        accountRef: "AP-PEN-ER",
+        accountDescription: "Employer Pension Payable",
+        status: "Active",
+        rank: 26,
+      },
+      {
+        id: 27,
+        groupId: 2,
+        headId: 3,
+        subheadId: 19,
+        accountNo: "2103005",
+        accountRef: "AP-NHF",
+        accountDescription: "NHF Payable",
+        status: "Active",
+        rank: 27,
+      },
+      // Staff loan receivable (subhead 2 — Accounts Receivable)
+      {
+        id: 28,
+        groupId: 1,
+        headId: 1,
+        subheadId: 2,
+        accountNo: "1102002",
+        accountRef: "AR-STAFF-LOAN",
+        accountDescription: "Staff Loan Receivable",
+        status: "Active",
+        rank: 28,
+      },
+      // Bank (subhead 1 — Cash and Bank)
+      {
+        id: 29,
+        groupId: 1,
+        headId: 1,
+        subheadId: 1,
+        accountNo: "1101003",
+        accountRef: "BANK-ACCOUNT",
+        accountDescription: "Bank Account",
+        status: "Active",
+        rank: 29,
+      },
     ];
 
     for (const c of accountCharts) {
@@ -1331,6 +1456,252 @@ async function main() {
       });
     }
     console.log(`   ✓ ${defaultAccountSettings.length} default account settings`);
+
+    // Billing items (fee types for student / class billing)
+    console.log("🧾 Seeding billing items...");
+    const billingItems = [
+      {
+        id: 1,
+        code: "TUIT",
+        name: "Tuition Fee",
+        category: "TUITION",
+        optional: false,
+        status: "Active",
+        accountId: 17,
+      },
+      {
+        id: 2,
+        code: "REG",
+        name: "Registration Fee",
+        category: "SERVICES",
+        optional: false,
+        status: "Active",
+        accountId: 17,
+      },
+      {
+        id: 3,
+        code: "DEV",
+        name: "Development Levy",
+        category: "CONSTRUCTION",
+        optional: false,
+        status: "Active",
+        accountId: 18,
+      },
+      {
+        id: 4,
+        code: "ICT",
+        name: "ICT / Technology Fee",
+        category: "TECHNOLOGY",
+        optional: false,
+        status: "Active",
+        accountId: 18,
+      },
+      {
+        id: 5,
+        code: "TRANS",
+        name: "Transportation Fee",
+        category: "TRANSPORTATION",
+        optional: true,
+        status: "Active",
+        accountId: 18,
+      },
+      {
+        id: 6,
+        code: "FEED",
+        name: "Feeding / Lunch Fee",
+        category: "FEEDING",
+        optional: true,
+        status: "Active",
+        accountId: 18,
+      },
+      {
+        id: 7,
+        code: "UNIF",
+        name: "Uniform and Materials",
+        category: "MATERIALS",
+        optional: true,
+        status: "Active",
+        accountId: 18,
+      },
+      {
+        id: 8,
+        code: "EXAM",
+        name: "Examination Fee",
+        category: "SERVICES",
+        optional: false,
+        status: "Active",
+        accountId: 18,
+      },
+      {
+        id: 9,
+        code: "PTA",
+        name: "PTA Levy",
+        category: "SERVICES",
+        optional: false,
+        status: "Active",
+        accountId: 18,
+      },
+      {
+        id: 10,
+        code: "MED",
+        name: "Medical / Health Fee",
+        category: "MEDICAL",
+        optional: true,
+        status: "Active",
+        accountId: 18,
+      },
+      {
+        id: 11,
+        code: "SPORT",
+        name: "Sports Fee",
+        category: "OTHER",
+        optional: true,
+        status: "Active",
+        accountId: 18,
+      },
+      {
+        id: 12,
+        code: "LIB",
+        name: "Library Fee",
+        category: "SERVICES",
+        optional: true,
+        status: "Active",
+        accountId: 18,
+      },
+      {
+        id: 13,
+        code: "BOARD",
+        name: "Boarding Fee",
+        category: "SERVICES",
+        optional: true,
+        status: "Active",
+        accountId: 19,
+      },
+      {
+        id: 14,
+        code: "MISC",
+        name: "Miscellaneous Fee",
+        category: "OTHER",
+        optional: true,
+        status: "Active",
+        accountId: 19,
+      },
+    ];
+
+    for (const item of billingItems) {
+      await prisma.billingItem.upsert({
+        where: { code: item.code },
+        update: {
+          name: item.name,
+          category: item.category,
+          optional: item.optional,
+          status: item.status,
+          accountId: item.accountId,
+        },
+        create: item,
+      });
+    }
+    console.log(`   ✓ ${billingItems.length} billing items`);
+
+    // Concession / discount definitions (linked to billing items and discount ledger)
+    console.log("🏷️ Seeding concession discounts...");
+    const concessionDiscounts = [
+      {
+        id: 1,
+        code: "SIBLING10",
+        name: "Sibling Discount (10%)",
+        type: "DISCOUNT",
+        calculationType: "PERCENTAGE",
+        value: 10,
+        maxLimit: null,
+        status: "Active",
+        accountId: 16,
+        appliesToIds: [1, 2],
+      },
+      {
+        id: 2,
+        code: "STAFFCHILD15",
+        name: "Staff Child Concession (15%)",
+        type: "CONCESSION",
+        calculationType: "PERCENTAGE",
+        value: 15,
+        maxLimit: null,
+        status: "Active",
+        accountId: 16,
+        appliesToIds: [1],
+      },
+      {
+        id: 3,
+        code: "EARLY5K",
+        name: "Early Payment Discount (₦5,000)",
+        type: "DISCOUNT",
+        calculationType: "FIXED_AMOUNT",
+        value: 5000,
+        maxLimit: null,
+        status: "Active",
+        accountId: 16,
+        appliesToIds: [1, 3],
+      },
+      {
+        id: 4,
+        code: "SCHOLAR25",
+        name: "Scholarship (25%)",
+        type: "CONCESSION",
+        calculationType: "PERCENTAGE",
+        value: 25,
+        maxLimit: 50000,
+        status: "Active",
+        accountId: 16,
+        appliesToIds: [1],
+      },
+      {
+        id: 5,
+        code: "NEEDY50",
+        name: "Financial Need Concession (50%)",
+        type: "CONCESSION",
+        calculationType: "PERCENTAGE",
+        value: 50,
+        maxLimit: 100000,
+        status: "Active",
+        accountId: 16,
+        appliesToIds: [1, 2, 8],
+      },
+      {
+        id: 6,
+        code: "TRANSFIX2K",
+        name: "Transport Promo (₦2,000 off)",
+        type: "DISCOUNT",
+        calculationType: "FIXED_AMOUNT",
+        value: 2000,
+        maxLimit: null,
+        status: "Active",
+        accountId: 16,
+        appliesToIds: [5],
+      },
+    ];
+
+    for (const row of concessionDiscounts) {
+      const { appliesToIds, ...data } = row;
+      const appliesToConnect = appliesToIds.map((id) => ({ id }));
+      await prisma.concessionDiscount.upsert({
+        where: { code: row.code },
+        update: {
+          name: data.name,
+          type: data.type,
+          calculationType: data.calculationType,
+          value: data.value,
+          maxLimit: data.maxLimit,
+          status: data.status,
+          accountId: data.accountId,
+          appliesTo: { set: appliesToConnect },
+        },
+        create: {
+          ...data,
+          appliesTo: { connect: appliesToConnect },
+        },
+      });
+    }
+    console.log(`   ✓ ${concessionDiscounts.length} concession discounts`);
 
     // UOMs
     console.log("📏 Seeding UOMs...");
@@ -2697,6 +3068,72 @@ async function main() {
     );
     console.log(
       `   ✓ Current period: ${seededSession.id} (2025/2026) + ${seededTerm.id} (Third Term)`
+    );
+
+    // Class default billings (amounts per class for current session / term)
+    console.log("📋 Seeding class default billings...");
+    const CLASS_JSS1 = "c4d5e6f7-a8b9-4012-c012-345678905001";
+    const CLASS_JSS2 = "c4d5e6f7-a8b9-4012-c012-345678905002";
+    const CLASS_JSS3 = "c4d5e6f7-a8b9-4012-c012-345678905003";
+    const CLASS_SS1 = "c4d5e6f7-a8b9-4012-c012-345678905004";
+    const CLASS_SS2 = "c4d5e6f7-a8b9-4012-c012-345678905005";
+    const SUBCLASS_JSS1A = "d5e6f7a8-b9c0-4123-d012-345678906001";
+
+    const classDefaultBillings = [
+      // JSS 1 — class-wide (Third Term 2025/2026)
+      { id: 1, classId: CLASS_JSS1, subclassId: null, billingId: 1, amount: 120000 },
+      { id: 2, classId: CLASS_JSS1, subclassId: null, billingId: 2, amount: 5000 },
+      { id: 3, classId: CLASS_JSS1, subclassId: null, billingId: 3, amount: 10000 },
+      { id: 4, classId: CLASS_JSS1, subclassId: null, billingId: 4, amount: 8000 },
+      { id: 5, classId: CLASS_JSS1, subclassId: null, billingId: 8, amount: 3000 },
+      { id: 6, classId: CLASS_JSS1, subclassId: null, billingId: 9, amount: 2000 },
+      // JSS 1A — optional transport override
+      { id: 7, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1A, billingId: 5, amount: 25000 },
+      // JSS 2
+      { id: 8, classId: CLASS_JSS2, subclassId: null, billingId: 1, amount: 135000 },
+      { id: 9, classId: CLASS_JSS2, subclassId: null, billingId: 2, amount: 5000 },
+      { id: 10, classId: CLASS_JSS2, subclassId: null, billingId: 3, amount: 10000 },
+      { id: 11, classId: CLASS_JSS2, subclassId: null, billingId: 4, amount: 8000 },
+      { id: 12, classId: CLASS_JSS2, subclassId: null, billingId: 8, amount: 3500 },
+      { id: 13, classId: CLASS_JSS2, subclassId: null, billingId: 9, amount: 2000 },
+      // JSS 3
+      { id: 14, classId: CLASS_JSS3, subclassId: null, billingId: 1, amount: 150000 },
+      { id: 15, classId: CLASS_JSS3, subclassId: null, billingId: 2, amount: 5000 },
+      { id: 16, classId: CLASS_JSS3, subclassId: null, billingId: 3, amount: 12000 },
+      { id: 17, classId: CLASS_JSS3, subclassId: null, billingId: 8, amount: 4000 },
+      // SS 1
+      { id: 18, classId: CLASS_SS1, subclassId: null, billingId: 1, amount: 180000 },
+      { id: 19, classId: CLASS_SS1, subclassId: null, billingId: 2, amount: 7500 },
+      { id: 20, classId: CLASS_SS1, subclassId: null, billingId: 3, amount: 15000 },
+      { id: 21, classId: CLASS_SS1, subclassId: null, billingId: 4, amount: 10000 },
+      { id: 22, classId: CLASS_SS1, subclassId: null, billingId: 8, amount: 5000 },
+      // SS 2
+      { id: 23, classId: CLASS_SS2, subclassId: null, billingId: 1, amount: 200000 },
+      { id: 24, classId: CLASS_SS2, subclassId: null, billingId: 2, amount: 7500 },
+      { id: 25, classId: CLASS_SS2, subclassId: null, billingId: 3, amount: 15000 },
+      { id: 26, classId: CLASS_SS2, subclassId: null, billingId: 8, amount: 5000 },
+    ].map((row) => ({
+      ...row,
+      session: seededSession.id,
+      term: seededTerm.id,
+    }));
+
+    for (const row of classDefaultBillings) {
+      await prisma.classDefaultBilling.upsert({
+        where: { id: row.id },
+        update: {
+          classId: row.classId,
+          subclassId: row.subclassId,
+          session: row.session,
+          term: row.term,
+          billingId: row.billingId,
+          amount: row.amount,
+        },
+        create: row,
+      });
+    }
+    console.log(
+      `   ✓ ${classDefaultBillings.length} class default billings (2025/2026, Third Term)`
     );
 
     // Create merchant users for each merchant
