@@ -743,7 +743,7 @@ model AccountSubhead {
   rank          Int
   afs           String?     @map("afs")
   paymentMethod String?     @map("payment_method")
-  accountType   AccountType @default(Cash) @map("account_type")
+  accountType   AccountType @default(NonCash) @map("account_type")
 
   group                 AccountGroup            @relation(fields: [groupId], references: [id], onDelete: Restrict)
   head                  AccountHead             @relation(fields: [headId], references: [id], onDelete: Restrict)

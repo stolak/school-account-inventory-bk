@@ -838,7 +838,16 @@ async function main() {
         status: "Active",
         rank: 2,
       },
-      { id: 3, groupId: 1, headId: 1, code: "1103", name: "Inventory", status: "Active", rank: 3 },
+      {
+        id: 3,
+        groupId: 1,
+        headId: 1,
+        code: "1103",
+        name: "Inventory",
+        status: "Active",
+        rank: 3,
+        accountType: "NonCash",
+      },
       // Assets — Fixed Assets (head 2)
       {
         id: 4,
