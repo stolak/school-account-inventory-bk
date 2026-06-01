@@ -55,6 +55,8 @@ import auditLogRouter from "./auditLog";
 import departmentRouter from "./department";
 import gradeLevelRouter from "./gradeLevel";
 import staffBankDetailsRouter from "./staffBankDetails";
+import salaryComponentRouter from "./salaryComponent";
+import salaryChartRouter from "./salaryChart";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -115,6 +117,8 @@ router.use("/audit-logs", auditLogRouter);
 router.use("/departments", departmentRouter);
 router.use("/grade-levels", gradeLevelRouter);
 router.use("/staff-bank-details", staffBankDetailsRouter);
+router.use("/salary-components", salaryComponentRouter);
+router.use("/salary-charts", salaryChartRouter);
 
 router.use("/upload", uploadRouter);
 

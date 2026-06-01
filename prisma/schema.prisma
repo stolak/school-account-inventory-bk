@@ -123,6 +123,8 @@ model User {
   auditLogs               AuditLog[]
   cashiers                Cashier[]
   staffJournalTransfers   StaffJournalTransfer[]
+  salaryChartsCreated     SalaryChart[]            @relation("SalaryChartCreatedBy")
+  salaryChartsUpdated     SalaryChart[]            @relation("SalaryChartUpdatedBy")
 
   @@map("users")
 }
@@ -784,6 +786,7 @@ model AccountChart {
   // suppliers               Supplier[]
   cashiers                Cashier[]
   staffJournalTransfers   StaffJournalTransfer[]
+  salaryComponents        SalaryComponent[]
 
   @@index([groupId])
   @@index([headId])
@@ -1133,10 +1136,11 @@ model Department {
 }
 
 model GradeLevel {
-  id     String  @id @default(uuid()) @db.Char(36)
-  name   String
-  status Status  @default(Active)
-  staff  Staff[]
+  id           String        @id @default(uuid()) @db.Char(36)
+  name         String
+  status       Status        @default(Active)
+  staff        Staff[]
+  salaryCharts SalaryChart[]
 
   @@index([id])
   @@map("grade_levels")
@@ -1186,4 +1190,50 @@ model StaffJournalTransfer {
   @@index([transactionDate])
   @@index([batchStatus])
   @@map("staff_journal_transfer")
+}
+
+enum SalaryComponentType {
+  EARNING
+  DEDUCTION
+}
+
+model SalaryComponent {
+  id                 String              @id @default(uuid()) @db.Char(36)
+  name               String              @unique
+  description        String?
+  type               SalaryComponentType
+  status             Status              @default(Active)
+  isTaxable          Boolean             @default(false) @map("is_taxable")
+  isPensionable      Boolean             @default(false) @map("is_pensionable")
+  isFunction         Boolean             @default(false) @map("is_function")
+  salaryCharts       SalaryChart[]
+  functionPercentage Decimal?            @map("function_percentage") @db.Decimal(14, 2)
+  functionElements   Json?               @map("function_elements") // array of strings representing the ids of the salary components that are part of the function
+  accountId          Int?                @map("account_id")
+  account            AccountChart?       @relation(fields: [accountId], references: [id], onDelete: SetNull)
+
+  @@map("salary_components")
+}
+
+model SalaryChart {
+  id             String          @id @default(uuid()) @db.Char(36)
+  gradeLevelId   String          @map("grade_level_id") @db.Char(36)
+  gradeLevel     GradeLevel      @relation(fields: [gradeLevelId], references: [id])
+  step           Int             @map("step")
+  employmentType EmploymentType  @map("employment_type")
+  componentId    String          @map("component_id") @db.Char(36)
+  component      SalaryComponent @relation(fields: [componentId], references: [id])
+  amount         Decimal         @map("amount") @db.Decimal(14, 2)
+  status         Status          @default(Active)
+  createdBy      String?         @map("created_by") @db.Char(36)
+  createdByUser  User?           @relation("SalaryChartCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  updatedBy      String?         @map("updated_by") @db.Char(36)
+  updatedByUser  User?           @relation("SalaryChartUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@unique([gradeLevelId, step, employmentType, componentId])
+  @@index([gradeLevelId])
+  @@index([componentId])
+  @@map("salary_charts")
 }

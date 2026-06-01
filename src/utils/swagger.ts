@@ -94,6 +94,14 @@ const options: swaggerJSDoc.Options = {
       { name: "GradeLevels", description: "Grade level master data (CRUD)" },
       { name: "Staff", description: "Staff registration and profile management" },
       { name: "StaffBankDetails", description: "Staff bank account details (CRUD and bulk create)" },
+      {
+        name: "SalaryComponents",
+        description: "Payroll salary components (earnings, deductions, function-type formulas)",
+      },
+      {
+        name: "SalaryCharts",
+        description: "Payroll salary chart amounts by grade level, step, and employment type",
+      },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
       { name: "Sales", description: "Inventory sales transactions (bulk create, list, grouped by reference)" },
