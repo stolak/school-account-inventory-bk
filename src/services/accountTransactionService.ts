@@ -342,6 +342,43 @@ export interface ProfitAndLossReportResult {
 export const BS_ASSET_GROUP_ID = 1;
 export const BS_LIABILITY_GROUP_ID = 2;
 export const BS_EQUITY_GROUP_ID = 3;
+export const BS_CURRENT_ASSET_HEAD_ID = 1;
+export const BS_FIXED_ASSET_HEAD_ID = 2;
+export const BS_CURRENT_LIABILITY_HEAD_ID = 3;
+export const BS_LONG_TERM_LIABILITY_HEAD_ID = 4;
+
+export type CashFlowActivity = "operating" | "investing" | "financing" | "unclassified";
+
+export interface CashFlowActivitySection {
+  inflows: string;
+  outflows: string;
+  net: string;
+}
+
+export interface CashFlowAccountLine {
+  accountId: number;
+  accountNo: string | null;
+  accountDescription: string;
+  openingBalance: string;
+  inflows: string;
+  outflows: string;
+  closingBalance: string;
+}
+
+export interface CashFlowReportResult {
+  transactionDateFrom: Date | null;
+  transactionDateTo: Date | null;
+  openingCashBalance: string;
+  closingCashBalance: string;
+  netChangeInCash: string;
+  operatingActivities: CashFlowActivitySection;
+  investingActivities: CashFlowActivitySection;
+  financingActivities: CashFlowActivitySection;
+  unclassifiedActivities: CashFlowActivitySection;
+  cashAccounts: CashFlowAccountLine[];
+  reconciled: boolean;
+  reconciliationDifference: string;
+}
 
 export interface BalanceSheetParams {
   asAtDate?: Date;
@@ -1292,6 +1329,295 @@ export class AccountTransactionService {
       isBalanced: report.isBalanced,
       balancingDifference: report.balancingDifference,
     };
+  }
+
+  /**
+   * Cash flow for the period: movements on subheads with accountType Cash, classified by
+   * paired journal ref (operating / investing / financing) using the non-cash leg.
+   */
+  async getCashFlowReport(
+    params: AccountTransactionByAccountReportParams = {}
+  ): Promise<CashFlowReportResult> {
+    const from = params.transactionDateFrom;
+    const to = params.transactionDateTo ?? endOfUtcDay(new Date());
+
+    if (from && to.getTime() > to.getTime()) {
+      throw new Error("transactionDateFrom must be before or equal to transactionDateTo");
+    }
+
+    const cashAccounts = await this.prisma.accountChart.findMany({
+      where: {
+        status: "Active",
+        subhead: { accountType: "Cash" },
+      },
+      select: {
+        id: true,
+        accountNo: true,
+        accountDescription: true,
+        rank: true,
+      },
+      orderBy: [{ rank: "asc" }, { id: "asc" }],
+    });
+    const cashAccountIds = new Set(cashAccounts.map((a) => a.id));
+
+    if (!cashAccountIds.size) {
+      throw new Error("Cash flow chart configuration is missing: no Cash subhead accounts found");
+    }
+
+    const openingCashBalance = await this.sumCashBalanceThroughDate(
+      cashAccountIds,
+      from ? new Date(from.getTime() - 1) : undefined
+    );
+    const closingCashBalance = await this.sumCashBalanceThroughDate(cashAccountIds, to);
+
+    const periodWhere = {
+      accountId: { in: [...cashAccountIds] },
+      transactionDate: {
+        ...(from ? { gte: from } : {}),
+        lte: to,
+      },
+    };
+
+    const cashPeriodRows = await this.prisma.accountTransaction.findMany({
+      where: periodWhere,
+      select: {
+        id: true,
+        accountId: true,
+        groupId: true,
+        headId: true,
+        debit: true,
+        credit: true,
+        ref: true,
+      },
+    });
+
+    const refs = [
+      ...new Set(
+        cashPeriodRows.map((r) => r.ref?.trim()).filter((r): r is string => Boolean(r))
+      ),
+    ];
+
+    const refLines =
+      refs.length > 0
+        ? await this.prisma.accountTransaction.findMany({
+            where: { ref: { in: refs } },
+            select: {
+              accountId: true,
+              groupId: true,
+              headId: true,
+              debit: true,
+              credit: true,
+              ref: true,
+            },
+          })
+        : [];
+
+    const linesByRef = new Map<string, typeof refLines>();
+    for (const line of refLines) {
+      const key = line.ref?.trim();
+      if (!key) continue;
+      const bucket = linesByRef.get(key) ?? [];
+      bucket.push(line);
+      linesByRef.set(key, bucket);
+    }
+
+    const activityTotals: Record<CashFlowActivity, { inflows: Prisma.Decimal; outflows: Prisma.Decimal }> =
+      {
+        operating: { inflows: new Prisma.Decimal(0), outflows: new Prisma.Decimal(0) },
+        investing: { inflows: new Prisma.Decimal(0), outflows: new Prisma.Decimal(0) },
+        financing: { inflows: new Prisma.Decimal(0), outflows: new Prisma.Decimal(0) },
+        unclassified: { inflows: new Prisma.Decimal(0), outflows: new Prisma.Decimal(0) },
+      };
+
+    const accountPeriod = new Map<
+      number,
+      { inflows: Prisma.Decimal; outflows: Prisma.Decimal }
+    >();
+    for (const id of cashAccountIds) {
+      accountPeriod.set(id, { inflows: new Prisma.Decimal(0), outflows: new Prisma.Decimal(0) });
+    }
+
+    for (const row of cashPeriodRows) {
+      const debit = row.debit ?? new Prisma.Decimal(0);
+      const credit = row.credit ?? new Prisma.Decimal(0);
+      const inflow = debit.gt(0) ? debit : new Prisma.Decimal(0);
+      const outflow = credit.gt(0) ? credit : new Prisma.Decimal(0);
+
+      const bucket = accountPeriod.get(row.accountId);
+      if (bucket) {
+        bucket.inflows = bucket.inflows.plus(inflow);
+        bucket.outflows = bucket.outflows.plus(outflow);
+      }
+
+      const refKey = row.ref?.trim();
+      const activity: CashFlowActivity = refKey
+        ? this.classifyCashFlowFromRef(linesByRef.get(refKey) ?? [], cashAccountIds)
+        : "unclassified";
+
+      activityTotals[activity].inflows = activityTotals[activity].inflows.plus(inflow);
+      activityTotals[activity].outflows = activityTotals[activity].outflows.plus(outflow);
+    }
+
+    const toSection = (t: { inflows: Prisma.Decimal; outflows: Prisma.Decimal }): CashFlowActivitySection => {
+      const net = t.inflows.minus(t.outflows);
+      return {
+        inflows: t.inflows.toString(),
+        outflows: t.outflows.toString(),
+        net: net.toString(),
+      };
+    };
+
+    const operatingActivities = toSection(activityTotals.operating);
+    const investingActivities = toSection(activityTotals.investing);
+    const financingActivities = toSection(activityTotals.financing);
+    const unclassifiedActivities = toSection(activityTotals.unclassified);
+
+    const classifiedNet = new Prisma.Decimal(operatingActivities.net)
+      .plus(investingActivities.net)
+      .plus(financingActivities.net)
+      .plus(unclassifiedActivities.net);
+
+    const netChangeInCash = closingCashBalance.minus(openingCashBalance);
+    const reconciliationDifference = netChangeInCash.minus(classifiedNet);
+
+    const cashAccountLines: CashFlowAccountLine[] = [];
+    for (const account of cashAccounts) {
+      const opening = await this.sumCashBalanceForAccounts(new Set([account.id]), from ? new Date(from.getTime() - 1) : undefined);
+      const closing = await this.sumCashBalanceForAccounts(new Set([account.id]), to);
+      const period = accountPeriod.get(account.id) ?? {
+        inflows: new Prisma.Decimal(0),
+        outflows: new Prisma.Decimal(0),
+      };
+      cashAccountLines.push({
+        accountId: account.id,
+        accountNo: account.accountNo,
+        accountDescription: account.accountDescription,
+        openingBalance: opening.toString(),
+        inflows: period.inflows.toString(),
+        outflows: period.outflows.toString(),
+        closingBalance: closing.toString(),
+      });
+    }
+
+    return {
+      transactionDateFrom: from ?? null,
+      transactionDateTo: to,
+      openingCashBalance: openingCashBalance.toString(),
+      closingCashBalance: closingCashBalance.toString(),
+      netChangeInCash: netChangeInCash.toString(),
+      operatingActivities,
+      investingActivities,
+      financingActivities,
+      unclassifiedActivities,
+      cashAccounts: cashAccountLines,
+      reconciled: reconciliationDifference.abs().lte(new Prisma.Decimal("0.01")),
+      reconciliationDifference: reconciliationDifference.toString(),
+    };
+  }
+
+  async getCashFlowSummary(
+    params: AccountTransactionByAccountReportParams = {}
+  ): Promise<
+    Pick<
+      CashFlowReportResult,
+      | "transactionDateFrom"
+      | "transactionDateTo"
+      | "openingCashBalance"
+      | "closingCashBalance"
+      | "netChangeInCash"
+      | "operatingActivities"
+      | "investingActivities"
+      | "financingActivities"
+      | "unclassifiedActivities"
+      | "reconciled"
+      | "reconciliationDifference"
+    >
+  > {
+    const report = await this.getCashFlowReport(params);
+    return {
+      transactionDateFrom: report.transactionDateFrom,
+      transactionDateTo: report.transactionDateTo,
+      openingCashBalance: report.openingCashBalance,
+      closingCashBalance: report.closingCashBalance,
+      netChangeInCash: report.netChangeInCash,
+      operatingActivities: report.operatingActivities,
+      investingActivities: report.investingActivities,
+      financingActivities: report.financingActivities,
+      unclassifiedActivities: report.unclassifiedActivities,
+      reconciled: report.reconciled,
+      reconciliationDifference: report.reconciliationDifference,
+    };
+  }
+
+  private classifyCashFlowActivity(groupId: number, headId: number): CashFlowActivity {
+    if (groupId === PL_INCOME_GROUP_ID || groupId === PL_EXPENSE_GROUP_ID) {
+      return "operating";
+    }
+    if (groupId === BS_EQUITY_GROUP_ID) {
+      return "financing";
+    }
+    if (groupId === BS_LIABILITY_GROUP_ID && headId === BS_LONG_TERM_LIABILITY_HEAD_ID) {
+      return "financing";
+    }
+    if (groupId === BS_ASSET_GROUP_ID && headId === BS_FIXED_ASSET_HEAD_ID) {
+      return "investing";
+    }
+    if (groupId === BS_LIABILITY_GROUP_ID || groupId === BS_ASSET_GROUP_ID) {
+      return "operating";
+    }
+    return "unclassified";
+  }
+
+  private classifyCashFlowFromRef(
+    lines: Array<{
+      accountId: number;
+      groupId: number;
+      headId: number;
+      debit: Prisma.Decimal;
+      credit: Prisma.Decimal;
+    }>,
+    cashAccountIds: Set<number>
+  ): CashFlowActivity {
+    const nonCash = lines.filter((l) => !cashAccountIds.has(l.accountId));
+    if (!nonCash.length) {
+      return "unclassified";
+    }
+
+    const primary = nonCash.reduce((best, line) => {
+      const amount = (line.debit ?? new Prisma.Decimal(0)).plus(line.credit ?? new Prisma.Decimal(0));
+      const bestAmount = (best.debit ?? new Prisma.Decimal(0)).plus(best.credit ?? new Prisma.Decimal(0));
+      return amount.gt(bestAmount) ? line : best;
+    });
+
+    return this.classifyCashFlowActivity(primary.groupId, primary.headId);
+  }
+
+  private async sumCashBalanceThroughDate(
+    cashAccountIds: Set<number>,
+    asAtDate?: Date
+  ): Promise<Prisma.Decimal> {
+    return this.sumCashBalanceForAccounts(cashAccountIds, asAtDate);
+  }
+
+  private async sumCashBalanceForAccounts(
+    cashAccountIds: Set<number>,
+    asAtDate?: Date
+  ): Promise<Prisma.Decimal> {
+    if (!cashAccountIds.size) {
+      return new Prisma.Decimal(0);
+    }
+
+    const agg = await this.prisma.accountTransaction.aggregate({
+      where: {
+        accountId: { in: [...cashAccountIds] },
+        ...(asAtDate !== undefined ? { transactionDate: { lte: asAtDate } } : {}),
+      },
+      _sum: { debit: true, credit: true },
+    });
+
+    const debit = agg._sum.debit ?? new Prisma.Decimal(0);
+    const credit = agg._sum.credit ?? new Prisma.Decimal(0);
+    return debit.minus(credit);
   }
 
   private async buildBalanceSheetGroupSection(

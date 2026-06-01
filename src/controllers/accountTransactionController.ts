@@ -242,6 +242,51 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *       500:
  *         description: Server error
  *
+ * /api/v1/account-transactions/cash-flow:
+ *   get:
+ *     summary: Cash flow statement
+ *     description: |
+ *       Cash movements on ledger accounts under subheads with `accountType` Cash (seeded Cash and Bank).
+ *       **Inflows** = cash debits; **outflows** = cash credits in the date window.
+ *       Activities (operating / investing / financing) are inferred from the largest non-cash leg
+ *       sharing the same journal `ref`. Includes per-cash-account opening/closing balances.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: transactionDateFrom
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: transactionDateTo
+ *         schema: { type: string, format: date }
+ *         description: Defaults to end of today UTC if omitted.
+ *     responses:
+ *       200:
+ *         description: Cash flow report with activity sections and cash account detail
+ *       400:
+ *         description: Invalid date parameters or date range
+ *       500:
+ *         description: Server error
+ *
+ * /api/v1/account-transactions/cash-flow/summary:
+ *   get:
+ *     summary: Cash flow summary totals
+ *     description: Activity section nets and opening/closing cash without per-account detail.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: transactionDateFrom
+ *         schema: { type: string, format: date }
+ *       - in: query
+ *         name: transactionDateTo
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Cash flow summary
+ *       400:
+ *         description: Invalid date parameters or date range
+ *       500:
+ *         description: Server error
+ *
  * /api/v1/account-transactions/balance-as-at:
  *   get:
  *     summary: Account balance as at a selected date
@@ -1482,6 +1527,88 @@ export const accountTransactionController = {
       const message =
         error instanceof Error ? error.message : "Failed to retrieve balance sheet summary";
       const code = message.includes("Balance sheet chart") ? 400 : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getCashFlowReport: async (req: Request, res: Response) => {
+    try {
+      const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
+      const toRaw = parseQueryDateEndInclusive(req.query.transactionDateTo);
+
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+
+      const data = await accountTransactionService.getCashFlowReport({
+        ...(transactionDateFrom !== undefined ? { transactionDateFrom } : {}),
+        ...(transactionDateTo !== undefined ? { transactionDateTo } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Cash flow report retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve cash flow report";
+      const code =
+        message === "transactionDateFrom must be before or equal to transactionDateTo" ||
+        message.includes("Cash flow chart")
+          ? 400
+          : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getCashFlowSummary: async (req: Request, res: Response) => {
+    try {
+      const fromRaw = parseQueryDateStart(req.query.transactionDateFrom);
+      const toRaw = parseQueryDateEndInclusive(req.query.transactionDateTo);
+
+      if (fromRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateFrom is invalid" });
+      }
+      if (toRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "transactionDateTo is invalid" });
+      }
+
+      const transactionDateFrom = fromRaw === "missing" ? undefined : fromRaw;
+      const transactionDateTo = toRaw === "missing" ? undefined : toRaw;
+
+      const data = await accountTransactionService.getCashFlowSummary({
+        ...(transactionDateFrom !== undefined ? { transactionDateFrom } : {}),
+        ...(transactionDateTo !== undefined ? { transactionDateTo } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Cash flow summary retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve cash flow summary";
+      const code =
+        message === "transactionDateFrom must be before or equal to transactionDateTo" ||
+        message.includes("Cash flow chart")
+          ? 400
+          : 500;
 
       return res.status(code).json({
         success: false,

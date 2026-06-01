@@ -23,6 +23,8 @@ router.get("/profit-and-loss", accountTransactionController.getProfitAndLossRepo
 router.get("/profit-and-loss/summary", accountTransactionController.getProfitAndLossSummary);
 router.get("/balance-sheet", accountTransactionController.getBalanceSheetReport);
 router.get("/balance-sheet/summary", accountTransactionController.getBalanceSheetSummary);
+router.get("/cash-flow", accountTransactionController.getCashFlowReport);
+router.get("/cash-flow/summary", accountTransactionController.getCashFlowSummary);
 router.get("/transaction-log", accountTransactionController.getAccountTransactionLog);
 router.post("/debit", accountTransactionController.debitAccount);
 router.post("/credit", accountTransactionController.creditAccount);
