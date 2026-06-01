@@ -729,6 +729,7 @@ async function main() {
       { route: "/reports/student-billing-summary", caption: "Student billing summary" },
       { route: "/reports/student-balances", caption: "Student balances" },
       { route: "/reports/student-transaction-log", caption: "Student transaction log" },
+      { route: "/reports/profit-and-loss", caption: "Profit & loss" },
       // Accounting
       { route: "/account-subheads", caption: "Account setup" },
       { route: "/billing-items", caption: "Billing & discounts" },

@@ -202,6 +202,46 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *       500:
  *         description: Server error
  *
+ * /api/v1/account-transactions/balance-sheet:
+ *   get:
+ *     summary: Balance sheet
+ *     description: |
+ *       Statement of financial position as at a date (inception through `asAtDate` inclusive).
+ *       Uses the fixed seeded groups: **Assets** (1), **Liabilities** (2), **Equity** (3),
+ *       with all account heads and subheads under each group.
+ *       Asset balances = sum(debit) − sum(credit); liability and equity = sum(credit) − sum(debit).
+ *       Returns `isBalanced` when total assets equals liabilities + equity (±0.01).
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: asAtDate
+ *         schema: { type: string, format: date }
+ *         description: Defaults to end of today UTC if omitted.
+ *     responses:
+ *       200:
+ *         description: Full balance sheet with nested heads and account lines
+ *       400:
+ *         description: Invalid asAtDate
+ *       500:
+ *         description: Server error
+ *
+ * /api/v1/account-transactions/balance-sheet/summary:
+ *   get:
+ *     summary: Balance sheet totals only
+ *     description: Same as balance-sheet; returns section totals and balancing check only.
+ *     tags: [AccountTransactions]
+ *     parameters:
+ *       - in: query
+ *         name: asAtDate
+ *         schema: { type: string, format: date }
+ *     responses:
+ *       200:
+ *         description: Balance sheet summary totals
+ *       400:
+ *         description: Invalid asAtDate
+ *       500:
+ *         description: Server error
+ *
  * /api/v1/account-transactions/balance-as-at:
  *   get:
  *     summary: Account balance as at a selected date
@@ -1385,6 +1425,63 @@ export const accountTransactionController = {
         message.includes("Profit and loss chart")
           ? 400
           : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getBalanceSheetReport: async (req: Request, res: Response) => {
+    try {
+      const asAtDateRaw = parseQueryDateEndInclusive(req.query.asAtDate);
+      if (asAtDateRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "asAtDate is invalid" });
+      }
+
+      const data = await accountTransactionService.getBalanceSheetReport({
+        ...(asAtDateRaw === "missing" ? {} : { asAtDate: asAtDateRaw }),
+      });
+
+      return res.json({
+        success: true,
+        message: "Balance sheet retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Failed to retrieve balance sheet";
+      const code = message.includes("Balance sheet chart") ? 400 : 500;
+
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
+  getBalanceSheetSummary: async (req: Request, res: Response) => {
+    try {
+      const asAtDateRaw = parseQueryDateEndInclusive(req.query.asAtDate);
+      if (asAtDateRaw === "invalid") {
+        return res.status(400).json({ success: false, message: "asAtDate is invalid" });
+      }
+
+      const data = await accountTransactionService.getBalanceSheetSummary({
+        ...(asAtDateRaw === "missing" ? {} : { asAtDate: asAtDateRaw }),
+      });
+
+      return res.json({
+        success: true,
+        message: "Balance sheet summary retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to retrieve balance sheet summary";
+      const code = message.includes("Balance sheet chart") ? 400 : 500;
 
       return res.status(code).json({
         success: false,

@@ -338,6 +338,62 @@ export interface ProfitAndLossReportResult {
   resultLabel: "Net Profit" | "Net Loss";
 }
 
+/** Seeded chart — balance sheet groups (Assets, Liabilities, Equity). */
+export const BS_ASSET_GROUP_ID = 1;
+export const BS_LIABILITY_GROUP_ID = 2;
+export const BS_EQUITY_GROUP_ID = 3;
+
+export interface BalanceSheetParams {
+  asAtDate?: Date;
+}
+
+export interface BalanceSheetLine {
+  accountId: number;
+  accountNo: string | null;
+  accountRef: string | null;
+  accountDescription: string;
+  subheadId: number;
+  subheadName: string;
+  subheadCode: string | null;
+  balance: string;
+}
+
+export interface BalanceSheetSubheadTotal {
+  subheadId: number;
+  subheadName: string;
+  subheadCode: string | null;
+  balance: string;
+}
+
+export interface BalanceSheetHeadSection {
+  headId: number;
+  headCode: string;
+  headName: string;
+  lines: BalanceSheetLine[];
+  subheadTotals: BalanceSheetSubheadTotal[];
+  total: string;
+}
+
+export interface BalanceSheetGroupSection {
+  groupId: number;
+  groupName: string;
+  heads: BalanceSheetHeadSection[];
+  total: string;
+}
+
+export interface BalanceSheetReportResult {
+  asAtDate: Date;
+  assets: BalanceSheetGroupSection;
+  liabilities: BalanceSheetGroupSection;
+  equity: BalanceSheetGroupSection;
+  totalAssets: string;
+  totalLiabilities: string;
+  totalEquity: string;
+  totalLiabilitiesAndEquity: string;
+  isBalanced: boolean;
+  balancingDifference: string;
+}
+
 type EntryInput = {
   accountId: string;
   amount: number;
@@ -1158,6 +1214,205 @@ export class AccountTransactionService {
       totalExpenses: report.totalExpenses,
       netProfit: report.netProfit,
       resultLabel: report.resultLabel,
+    };
+  }
+
+  /**
+   * Balance sheet as at a date (inception through asAtDate inclusive).
+   * Assets: sum(debit) − sum(credit); liabilities & equity: sum(credit) − sum(debit).
+   */
+  async getBalanceSheetReport(params: BalanceSheetParams = {}): Promise<BalanceSheetReportResult> {
+    const asAtDate = params.asAtDate ?? endOfUtcDay(new Date());
+
+    const grouped = await this.prisma.accountTransaction.groupBy({
+      by: ["accountId"],
+      where: {
+        groupId: { in: [BS_ASSET_GROUP_ID, BS_LIABILITY_GROUP_ID, BS_EQUITY_GROUP_ID] },
+        transactionDate: { lte: asAtDate },
+      },
+      _sum: { credit: true, debit: true },
+    });
+
+    const balanceByAccountId = new Map<
+      number,
+      { credit: Prisma.Decimal; debit: Prisma.Decimal }
+    >();
+    for (const row of grouped) {
+      balanceByAccountId.set(row.accountId, {
+        credit: row._sum.credit ?? new Prisma.Decimal(0),
+        debit: row._sum.debit ?? new Prisma.Decimal(0),
+      });
+    }
+
+    const [assets, liabilities, equity] = await Promise.all([
+      this.buildBalanceSheetGroupSection(BS_ASSET_GROUP_ID, "debit", balanceByAccountId),
+      this.buildBalanceSheetGroupSection(BS_LIABILITY_GROUP_ID, "credit", balanceByAccountId),
+      this.buildBalanceSheetGroupSection(BS_EQUITY_GROUP_ID, "credit", balanceByAccountId),
+    ]);
+
+    const totalAssets = new Prisma.Decimal(assets.total);
+    const totalLiabilities = new Prisma.Decimal(liabilities.total);
+    const totalEquity = new Prisma.Decimal(equity.total);
+    const totalLiabilitiesAndEquity = totalLiabilities.plus(totalEquity);
+    const balancingDifference = totalAssets.minus(totalLiabilitiesAndEquity);
+
+    return {
+      asAtDate,
+      assets,
+      liabilities,
+      equity,
+      totalAssets: assets.total,
+      totalLiabilities: liabilities.total,
+      totalEquity: equity.total,
+      totalLiabilitiesAndEquity: totalLiabilitiesAndEquity.toString(),
+      isBalanced: balancingDifference.abs().lte(new Prisma.Decimal("0.01")),
+      balancingDifference: balancingDifference.toString(),
+    };
+  }
+
+  async getBalanceSheetSummary(params: BalanceSheetParams = {}): Promise<
+    Pick<
+      BalanceSheetReportResult,
+      | "asAtDate"
+      | "totalAssets"
+      | "totalLiabilities"
+      | "totalEquity"
+      | "totalLiabilitiesAndEquity"
+      | "isBalanced"
+      | "balancingDifference"
+    >
+  > {
+    const report = await this.getBalanceSheetReport(params);
+    return {
+      asAtDate: report.asAtDate,
+      totalAssets: report.totalAssets,
+      totalLiabilities: report.totalLiabilities,
+      totalEquity: report.totalEquity,
+      totalLiabilitiesAndEquity: report.totalLiabilitiesAndEquity,
+      isBalanced: report.isBalanced,
+      balancingDifference: report.balancingDifference,
+    };
+  }
+
+  private async buildBalanceSheetGroupSection(
+    groupId: number,
+    normalBalance: "credit" | "debit",
+    balanceByAccountId: Map<number, { credit: Prisma.Decimal; debit: Prisma.Decimal }>
+  ): Promise<BalanceSheetGroupSection> {
+    const group = await this.prisma.accountGroup.findUnique({
+      where: { id: groupId },
+      select: { id: true, name: true },
+    });
+    if (!group) {
+      throw new Error("Balance sheet chart group configuration is missing or invalid");
+    }
+
+    const heads = await this.prisma.accountHead.findMany({
+      where: { groupId },
+      select: { id: true, code: true, name: true, rank: true },
+      orderBy: [{ rank: "asc" }, { id: "asc" }],
+    });
+
+    const headSections: BalanceSheetHeadSection[] = [];
+    for (const head of heads) {
+      headSections.push(
+        await this.buildBalanceSheetHeadSection(groupId, head.id, normalBalance, balanceByAccountId)
+      );
+    }
+
+    const total = headSections
+      .reduce((acc, section) => acc.plus(new Prisma.Decimal(section.total)), new Prisma.Decimal(0))
+      .toString();
+
+    return {
+      groupId: group.id,
+      groupName: group.name,
+      heads: headSections,
+      total,
+    };
+  }
+
+  private async buildBalanceSheetHeadSection(
+    groupId: number,
+    headId: number,
+    normalBalance: "credit" | "debit",
+    balanceByAccountId: Map<number, { credit: Prisma.Decimal; debit: Prisma.Decimal }>
+  ): Promise<BalanceSheetHeadSection> {
+    const head = await this.prisma.accountHead.findUnique({
+      where: { id: headId },
+      select: { id: true, code: true, name: true, groupId: true },
+    });
+    if (!head || head.groupId !== groupId) {
+      throw new Error("Balance sheet chart head configuration is missing or invalid");
+    }
+
+    const accounts = await this.prisma.accountChart.findMany({
+      where: { groupId, headId, status: "Active" },
+      select: {
+        id: true,
+        accountNo: true,
+        accountRef: true,
+        accountDescription: true,
+        rank: true,
+        subheadId: true,
+        subhead: { select: { id: true, code: true, name: true, rank: true } },
+      },
+      orderBy: [{ subhead: { rank: "asc" } }, { rank: "asc" }, { id: "asc" }],
+    });
+
+    const lines: BalanceSheetLine[] = accounts.map((account) => {
+      const sums = balanceByAccountId.get(account.id) ?? {
+        credit: new Prisma.Decimal(0),
+        debit: new Prisma.Decimal(0),
+      };
+      const balance =
+        normalBalance === "credit"
+          ? sums.credit.minus(sums.debit)
+          : sums.debit.minus(sums.credit);
+
+      return {
+        accountId: account.id,
+        accountNo: account.accountNo,
+        accountRef: account.accountRef,
+        accountDescription: account.accountDescription,
+        subheadId: account.subheadId,
+        subheadName: account.subhead.name,
+        subheadCode: account.subhead.code,
+        balance: balance.toString(),
+      };
+    });
+
+    const subheadMap = new Map<number, BalanceSheetSubheadTotal>();
+    for (const line of lines) {
+      const existing = subheadMap.get(line.subheadId);
+      const lineBalance = new Prisma.Decimal(line.balance);
+      if (existing) {
+        subheadMap.set(line.subheadId, {
+          ...existing,
+          balance: new Prisma.Decimal(existing.balance).plus(lineBalance).toString(),
+        });
+      } else {
+        subheadMap.set(line.subheadId, {
+          subheadId: line.subheadId,
+          subheadName: line.subheadName,
+          subheadCode: line.subheadCode,
+          balance: line.balance,
+        });
+      }
+    }
+
+    const subheadTotals = [...subheadMap.values()].sort((a, b) => a.subheadId - b.subheadId);
+    const total = lines
+      .reduce((acc, line) => acc.plus(new Prisma.Decimal(line.balance)), new Prisma.Decimal(0))
+      .toString();
+
+    return {
+      headId: head.id,
+      headCode: head.code,
+      headName: head.name,
+      lines,
+      subheadTotals,
+      total,
     };
   }
 
