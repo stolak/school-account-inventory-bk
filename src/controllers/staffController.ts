@@ -59,14 +59,73 @@ function parseStepInput(raw: unknown): number | undefined | "invalid" {
   return n;
 }
 
+function parseBodyStatus(raw: unknown): Status | undefined {
+  if (raw === Status.Active || raw === Status.Inactive || raw === Status.Archived) {
+    return raw;
+  }
+  return undefined;
+}
+
+function parseStaffBanksInput(raw: unknown):
+  | { banks: { bankId: string; accountNumber: string; isPrimary?: boolean; status?: Status }[] }
+  | { error: string } {
+  if (raw === undefined) return { banks: [] };
+  if (!Array.isArray(raw)) {
+    return { error: "banks must be an array" };
+  }
+  if (raw.length === 0) {
+    return { error: "banks must be a non-empty array when provided" };
+  }
+
+  const banks: { bankId: string; accountNumber: string; isPrimary?: boolean; status?: Status }[] =
+    [];
+
+  for (const [idx, row] of raw.entries()) {
+    if (!row || typeof row !== "object") {
+      return { error: `banks[${idx}] must be an object` };
+    }
+    const { bankId, accountNumber, isPrimary, status } = row as Record<string, unknown>;
+    if (!bankId || typeof bankId !== "string" || !bankId.trim()) {
+      return { error: `banks[${idx}].bankId is required` };
+    }
+    if (!accountNumber || typeof accountNumber !== "string" || !accountNumber.trim()) {
+      return { error: `banks[${idx}].accountNumber is required` };
+    }
+    if (isPrimary !== undefined && typeof isPrimary !== "boolean") {
+      return { error: `banks[${idx}].isPrimary must be a boolean` };
+    }
+    const parsedStatus = parseBodyStatus(status);
+    if (status !== undefined && parsedStatus === undefined) {
+      return {
+        error: `banks[${idx}].status must be Active, Inactive, or Archived`,
+      };
+    }
+    banks.push({
+      bankId: bankId.trim(),
+      accountNumber: accountNumber.trim(),
+      ...(typeof isPrimary === "boolean" ? { isPrimary } : {}),
+      ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
+    });
+  }
+
+  return { banks };
+}
+
 function httpStatusForStaffError(message: string): number {
-  if (message === "Staff not found" || message === "App role not found") return 404;
+  if (
+    message === "Staff not found" ||
+    message === "App role not found" ||
+    message === "Invalid bankId"
+  ) {
+    return 404;
+  }
   if (message.includes("already exists")) return 409;
   if (
     message.includes("required") ||
     message.includes("must be") ||
     message.includes("Invalid ") ||
-    message.includes("invalid")
+    message.includes("invalid") ||
+    message.includes("Only one bank")
   ) {
     return 400;
   }
@@ -85,6 +144,7 @@ function httpStatusForStaffError(message: string): number {
  *       Creates a User and a Staff row linked via Staff.userId.
  *       Email is checked on users and staff; StaffNumber must be unique on staff.
  *       Optional `appRoleId` is an AppRole id (UUID) — when provided, a UserRole row is created for the new user.
+ *       Optional `banks` creates StaffBankDetails rows in the same transaction (at most one entry with `isPrimary` true).
  *       Password defaults to `12345` if omitted. Staff `position` defaults to teacher and `employmentType` defaults to Permanent when omitted.
  *     requestBody:
  *       required: true
@@ -170,15 +230,35 @@ function httpStatusForStaffError(message: string): number {
  *                 type: string
  *                 enum: [SuperAdmin, Staff, Student, Parent]
  *                 description: User.userType (defaults to Staff)
+ *               banks:
+ *                 type: array
+ *                 minItems: 1
+ *                 description: Optional bank accounts to create for the new staff member
+ *                 items:
+ *                   type: object
+ *                   required: [bankId, accountNumber]
+ *                   properties:
+ *                     bankId:
+ *                       type: string
+ *                       format: uuid
+ *                     accountNumber:
+ *                       type: string
+ *                     isPrimary:
+ *                       type: boolean
+ *                       description: Defaults to false; at most one entry may be true
+ *                     status:
+ *                       type: string
+ *                       enum: [Active, Inactive, Archived]
+ *                       description: Defaults to Active
  *     responses:
  *       201:
- *         description: Staff and user created
+ *         description: Staff and user created (includes `banks` when bank accounts were provided)
  *       400:
  *         description: Validation error
  *       401:
  *         description: Unauthorized
  *       404:
- *         description: App role, grade level, or department not found
+ *         description: App role, grade level, department, or bank not found
  *       409:
  *         description: Duplicate StaffNumber or email
  *       500:
@@ -260,6 +340,7 @@ export const staffController = {
         departmentId,
         step,
         salary,
+        banks,
       } = body;
 
       if (!StaffNumber || typeof StaffNumber !== "string" || !StaffNumber.trim()) {
@@ -342,6 +423,11 @@ export const staffController = {
         return res.status(400).json({ success: false, message: dateError });
       }
 
+      const banksParsed = parseStaffBanksInput(banks);
+      if ("error" in banksParsed) {
+        return res.status(400).json({ success: false, message: banksParsed.error });
+      }
+
       const createdById = (req as { user?: { id: string } }).user?.id;
       if (!createdById) return res.status(401).json({ success: false, message: "Unauthorized" });
 
@@ -386,6 +472,7 @@ export const staffController = {
         ...(dates?.dateOfTermination !== undefined
           ? { dateOfTermination: dates.dateOfTermination }
           : {}),
+        ...(banksParsed.banks.length > 0 ? { banks: banksParsed.banks } : {}),
       });
 
       return res

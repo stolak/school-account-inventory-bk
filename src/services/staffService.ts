@@ -1,13 +1,7 @@
 import prisma from "../utils/prisma";
 import bcrypt from "bcryptjs";
-import {
-  AppRole,
-  EmploymentType,
-  Prisma,
-  StaffPosition,
-  Status,
-  UserType,
-} from "@prisma/client";
+import { AppRole, EmploymentType, Prisma, StaffPosition, Status, UserType } from "@prisma/client";
+import type { StaffBankDetailsInput } from "./staffBankDetailsService";
 
 const staffInclude = {
   user: {
@@ -16,6 +10,11 @@ const staffInclude = {
   createdBy: { select: { firstName: true, lastName: true } },
   gradeLevel: { select: { id: true, name: true } },
   department: { select: { id: true, name: true } },
+  staffBankDetails: {
+    include: {
+      bank: { select: { id: true, bankCode: true, bankName: true } },
+    },
+  },
 } satisfies Prisma.StaffInclude;
 
 type StaffWithRelations = Prisma.StaffGetPayload<{ include: typeof staffInclude }>;
@@ -45,6 +44,7 @@ export interface StaffData {
   createdBy?: StaffWithRelations["createdBy"];
   gradeLevel?: StaffWithRelations["gradeLevel"];
   department?: StaffWithRelations["department"];
+  banks?: StaffWithRelations["staffBankDetails"];
 }
 
 export interface ListStaffParams {
@@ -135,6 +135,40 @@ export class StaffService {
     if (!row) throw new Error("Invalid departmentId");
   }
 
+  private async assertBankExists(bankId: string): Promise<void> {
+    const row = await this.prisma.bank.findUnique({ where: { id: bankId }, select: { id: true } });
+    if (!row) throw new Error("Invalid bankId");
+  }
+
+  private normalizeBankRows(banks: StaffBankDetailsInput[]): {
+    bankId: string;
+    accountNumber: string;
+    isPrimary: boolean;
+    status?: Status;
+  }[] {
+    if (!banks.length) {
+      throw new Error("banks must be a non-empty array when provided");
+    }
+
+    const primaryCount = banks.filter((b) => b.isPrimary === true).length;
+    if (primaryCount > 1) {
+      throw new Error("Only one bank entry in banks may have isPrimary true");
+    }
+
+    return banks.map((b, idx) => {
+      const bankId = b.bankId?.trim();
+      if (!bankId) throw new Error(`banks[${idx}].bankId is required`);
+      const accountNumber = b.accountNumber?.trim();
+      if (!accountNumber) throw new Error(`banks[${idx}].accountNumber is required`);
+      return {
+        bankId,
+        accountNumber,
+        isPrimary: b.isPrimary ?? false,
+        ...(b.status !== undefined ? { status: b.status } : {}),
+      };
+    });
+  }
+
   private async resolveOptionalFk(input: {
     gradeLevelId?: string | null;
     departmentId?: string | null;
@@ -175,6 +209,7 @@ export class StaffService {
     dateOfAppointment?: StaffDateInput;
     dateOfResignation?: StaffDateInput;
     dateOfTermination?: StaffDateInput;
+    banks?: StaffBankDetailsInput[];
   }): Promise<StaffData> {
     const normalizedEmail = input.email.trim().toLowerCase();
     const normalizedStaffNumber = input.StaffNumber.trim();
@@ -189,6 +224,15 @@ export class StaffService {
       gradeLevelId: input.gradeLevelId ?? undefined,
       departmentId: input.departmentId ?? undefined,
     });
+
+    const normalizedBanks =
+      input.banks !== undefined ? this.normalizeBankRows(input.banks) : undefined;
+    if (normalizedBanks) {
+      const bankIds = [...new Set(normalizedBanks.map((b) => b.bankId))];
+      for (const bankId of bankIds) {
+        await this.assertBankExists(bankId);
+      }
+    }
 
     const { firstName, lastName } = splitName(normalizedName);
     const rawPassword = input.password ?? "12345";
@@ -242,7 +286,7 @@ export class StaffService {
           });
         }
 
-        return tx.staff.create({
+        const staff = await tx.staff.create({
           data: {
             StaffNumber: normalizedStaffNumber,
             email: normalizedEmail,
@@ -270,11 +314,34 @@ export class StaffService {
           },
           include: staffInclude,
         });
+        if (normalizedBanks?.length) {
+          for (const bank of normalizedBanks) {
+            await tx.staffBankDetails.create({
+              data: {
+                staffId: staff.id,
+                bankId: bank.bankId,
+                accountNumber: bank.accountNumber,
+                isPrimary: bank.isPrimary,
+                ...(bank.status !== undefined ? { status: bank.status } : {}),
+              },
+            });
+          }
+        }
+
+        return tx.staff.findUniqueOrThrow({
+          where: { id: staff.id },
+          include: staffInclude,
+        });
       });
 
       return mapStaffRow(staff);
     } catch (e: unknown) {
-      if (typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "P2002") {
+      if (
+        typeof e === "object" &&
+        e !== null &&
+        "code" in e &&
+        (e as { code: string }).code === "P2002"
+      ) {
         throw new Error("StaffNumber or email already exists");
       }
       throw e;
@@ -403,7 +470,12 @@ export class StaffService {
       });
       return mapStaffRow(row);
     } catch (e: unknown) {
-      if (typeof e === "object" && e !== null && "code" in e && (e as { code: string }).code === "P2002") {
+      if (
+        typeof e === "object" &&
+        e !== null &&
+        "code" in e &&
+        (e as { code: string }).code === "P2002"
+      ) {
         throw new Error("StaffNumber or email already exists");
       }
       throw e;
