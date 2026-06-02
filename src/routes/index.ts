@@ -57,6 +57,7 @@ import gradeLevelRouter from "./gradeLevel";
 import staffBankDetailsRouter from "./staffBankDetails";
 import salaryComponentRouter from "./salaryComponent";
 import salaryChartRouter from "./salaryChart";
+import staffSalaryOverrideComponentRouter from "./staffSalaryOverrideComponent";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -119,6 +120,7 @@ router.use("/grade-levels", gradeLevelRouter);
 router.use("/staff-bank-details", staffBankDetailsRouter);
 router.use("/salary-components", salaryComponentRouter);
 router.use("/salary-charts", salaryChartRouter);
+router.use("/staff-salary-override-components", staffSalaryOverrideComponentRouter);
 
 router.use("/upload", uploadRouter);
 

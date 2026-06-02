@@ -313,7 +313,6 @@ export class SalaryChartService {
     count: number;
   }> {
     const where: Prisma.SalaryChartWhereInput = {};
-    console.log(params);
     if (params.status === undefined) {
       where.status = Status.Active;
     } else if (params.status !== "All") {

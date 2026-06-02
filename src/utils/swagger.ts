@@ -102,6 +102,10 @@ const options: swaggerJSDoc.Options = {
         name: "SalaryCharts",
         description: "Payroll salary chart amounts by grade level, step, and employment type",
       },
+      {
+        name: "StaffSalaryOverrideComponents",
+        description: "Staff-specific salary component override amounts (CRUD)",
+      },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
       { name: "Sales", description: "Inventory sales transactions (bulk create, list, grouped by reference)" },
