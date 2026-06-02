@@ -13,7 +13,7 @@ export interface SalaryComponentAccountSummary {
 export interface SalaryComponentData {
   id: string;
   name: string;
-  description: string | null;
+  shortName: string | null;
   type: SalaryComponentType;
   status: Status;
   isTaxable: boolean;
@@ -23,6 +23,7 @@ export interface SalaryComponentData {
   functionElements: string[] | null;
   accountId: number | null;
   account: SalaryComponentAccountSummary | null;
+  rank: number;
 }
 
 export interface ListSalaryComponentsParams {
@@ -61,7 +62,7 @@ function mapRow(row: SalaryComponentRow): SalaryComponentData {
   return {
     id: row.id,
     name: row.name,
-    description: row.description,
+    shortName: row.shortName,
     type: row.type,
     status: row.status,
     isTaxable: row.isTaxable,
@@ -71,6 +72,7 @@ function mapRow(row: SalaryComponentRow): SalaryComponentData {
     functionElements: parseFunctionElementsJson(row.functionElements),
     accountId: row.accountId,
     account: row.account,
+    rank: row.rank,
   };
 }
 
@@ -164,7 +166,7 @@ export class SalaryComponentService {
 
   async create(input: {
     name: string;
-    description?: string | null;
+    shortName?: string | null;
     type: SalaryComponentType;
     status?: Status;
     isTaxable?: boolean;
@@ -173,6 +175,7 @@ export class SalaryComponentService {
     functionPercentage?: string | number | null;
     functionElements?: string[] | null;
     accountId?: number | null;
+    rank?: number;
   }): Promise<SalaryComponentData> {
     const name = input.name.trim();
     if (!name) throw new Error("name is required");
@@ -190,13 +193,14 @@ export class SalaryComponentService {
     const row = await this.prisma.salaryComponent.create({
       data: {
         name,
-        description: input.description?.trim() ? input.description.trim() : null,
+        shortName: input.shortName?.trim() ? input.shortName.trim() : null,
         type: input.type,
         isFunction,
         ...(input.status !== undefined ? { status: input.status } : {}),
         ...(input.isTaxable !== undefined ? { isTaxable: input.isTaxable } : {}),
         ...(input.isPensionable !== undefined ? { isPensionable: input.isPensionable } : {}),
         ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+        ...(input.rank !== undefined ? { rank: input.rank } : {}),
         functionPercentage,
         functionElements,
       },
@@ -223,16 +227,17 @@ export class SalaryComponentService {
     if (params.accountId !== undefined) where.accountId = params.accountId;
 
     if (params.q?.trim()) {
+      const q = params.q.trim();
       where.OR = [
-        { name: { contains: params.q.trim() } },
-        { description: { contains: params.q.trim() } },
+        { name: { contains: q } },
+        { shortName: { contains: q } },
       ];
     }
 
     const rows = await this.prisma.salaryComponent.findMany({
       where,
       include: salaryComponentInclude,
-      orderBy: [{ type: "asc" }, { name: "asc" }],
+      orderBy: [{ type: "asc" }, { rank: "asc" }, { name: "asc" }],
     });
 
     return { salaryComponents: rows.map(mapRow), count: rows.length };
@@ -250,7 +255,7 @@ export class SalaryComponentService {
     id: string,
     input: {
       name?: string;
-      description?: string | null;
+      shortName?: string | null;
       type?: SalaryComponentType;
       status?: Status;
       isTaxable?: boolean;
@@ -259,6 +264,7 @@ export class SalaryComponentService {
       functionPercentage?: string | number | null;
       functionElements?: string[] | null;
       accountId?: number | null;
+      rank?: number;
     }
   ): Promise<SalaryComponentData> {
     const existing = await this.getById(id);
@@ -292,8 +298,8 @@ export class SalaryComponentService {
         where: { id },
         data: {
           ...(input.name !== undefined ? { name: input.name.trim() } : {}),
-          ...(input.description !== undefined
-            ? { description: input.description?.trim() ? input.description.trim() : null }
+          ...(input.shortName !== undefined
+            ? { shortName: input.shortName?.trim() ? input.shortName.trim() : null }
             : {}),
           ...(input.type !== undefined ? { type: input.type } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
@@ -301,6 +307,7 @@ export class SalaryComponentService {
           ...(input.isPensionable !== undefined ? { isPensionable: input.isPensionable } : {}),
           ...(input.isFunction !== undefined ? { isFunction: input.isFunction } : {}),
           ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
+          ...(input.rank !== undefined ? { rank: input.rank } : {}),
           functionPercentage: functionConfig.functionPercentage,
           functionElements: functionConfig.functionElements,
         },

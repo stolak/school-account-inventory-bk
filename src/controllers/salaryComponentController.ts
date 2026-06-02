@@ -72,6 +72,18 @@ function parseBodyAccountId(raw: unknown): number | null | undefined | "invalid"
   return n;
 }
 
+function parseBodyRank(raw: unknown): number | undefined | "invalid" {
+  if (raw === undefined) return undefined;
+  const n =
+    typeof raw === "number" && Number.isInteger(raw)
+      ? raw
+      : typeof raw === "string"
+        ? Number.parseInt(raw, 10)
+        : NaN;
+  if (!Number.isFinite(n) || n < 0) return "invalid";
+  return n;
+}
+
 function httpStatusForSalaryComponentError(message: string): number {
   if (message === "Salary component not found") return 404;
   if (message.includes("already exists")) return 409;
@@ -106,7 +118,7 @@ function httpStatusForSalaryComponentError(message: string): number {
  *             properties:
  *               name:
  *                 type: string
- *               description:
+ *               shortName:
  *                 type: string
  *                 nullable: true
  *               type:
@@ -134,6 +146,10 @@ function httpStatusForSalaryComponentError(message: string): number {
  *                 type: integer
  *                 nullable: true
  *                 description: Linked account chart id for payroll posting
+ *               rank:
+ *                 type: integer
+ *                 minimum: 0
+ *                 description: Sort order (lower first)
  *     responses:
  *       201:
  *         description: Salary component created
@@ -153,7 +169,7 @@ function httpStatusForSalaryComponentError(message: string): number {
  *         name: q
  *         schema:
  *           type: string
- *         description: Search name or description (substring)
+ *         description: Search name or shortName (substring)
  *       - in: query
  *         name: status
  *         schema:
@@ -189,7 +205,7 @@ export const salaryComponentController = {
       const body = (req.body ?? {}) as Record<string, unknown>;
       const {
         name,
-        description,
+        shortName,
         type,
         status,
         isTaxable,
@@ -198,10 +214,15 @@ export const salaryComponentController = {
         functionPercentage,
         functionElements,
         accountId,
+        rank,
       } = body;
 
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ success: false, message: "name is required" });
+      }
+
+      if (shortName !== undefined && !isStringOrNullOrUndefined(shortName)) {
+        return res.status(400).json({ success: false, message: "shortName must be a string or null" });
       }
 
       const parsedAccountId = parseBodyAccountId(accountId);
@@ -210,6 +231,11 @@ export const salaryComponentController = {
           success: false,
           message: "accountId must be a positive integer or null",
         });
+      }
+
+      const parsedRank = parseBodyRank(rank);
+      if (parsedRank === "invalid") {
+        return res.status(400).json({ success: false, message: "rank must be a non-negative integer" });
       }
 
       const parsedType = parseType(type);
@@ -240,10 +266,6 @@ export const salaryComponentController = {
         return res.status(400).json({ success: false, message: "isPensionable must be a boolean" });
       }
 
-      if (description !== undefined && !isStringOrNullOrUndefined(description)) {
-        return res.status(400).json({ success: false, message: "description must be a string or null" });
-      }
-
       const parsedFunctionPct = parseFunctionPercentage(functionPercentage);
       if (parsedFunctionPct === "invalid") {
         return res
@@ -262,8 +284,8 @@ export const salaryComponentController = {
       const created = await salaryComponentService.create({
         name: name.trim(),
         type: parsedType,
-        ...(description !== undefined
-          ? { description: description === "" ? null : (description as string) }
+        ...(shortName !== undefined
+          ? { shortName: shortName === "" ? null : (shortName as string | null) }
           : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
         ...(parsedIsTaxable !== undefined ? { isTaxable: parsedIsTaxable } : {}),
@@ -272,6 +294,7 @@ export const salaryComponentController = {
         ...(parsedFunctionPct !== undefined ? { functionPercentage: parsedFunctionPct } : {}),
         ...(parsedElements !== undefined ? { functionElements: parsedElements } : {}),
         ...(parsedAccountId !== undefined ? { accountId: parsedAccountId } : {}),
+        ...(parsedRank !== undefined ? { rank: parsedRank } : {}),
       });
 
       return res.status(201).json({
@@ -379,7 +402,7 @@ export const salaryComponentController = {
    *             properties:
    *               name:
    *                 type: string
-   *               description:
+   *               shortName:
    *                 type: string
    *                 nullable: true
    *               type:
@@ -405,6 +428,9 @@ export const salaryComponentController = {
  *                 type: integer
  *                 nullable: true
  *                 description: Linked account chart id; send null to clear
+ *               rank:
+ *                 type: integer
+ *                 minimum: 0
  *     responses:
  *       200:
  *         description: Updated
@@ -466,7 +492,7 @@ export const salaryComponentController = {
       const body = (req.body ?? {}) as Record<string, unknown>;
       const {
         name,
-        description,
+        shortName,
         type,
         status,
         isTaxable,
@@ -475,11 +501,12 @@ export const salaryComponentController = {
         functionPercentage,
         functionElements,
         accountId,
+        rank,
       } = body;
 
       const hasAny =
         name !== undefined ||
-        description !== undefined ||
+        shortName !== undefined ||
         type !== undefined ||
         status !== undefined ||
         isTaxable !== undefined ||
@@ -487,7 +514,8 @@ export const salaryComponentController = {
         isFunction !== undefined ||
         functionPercentage !== undefined ||
         functionElements !== undefined ||
-        accountId !== undefined;
+        accountId !== undefined ||
+        rank !== undefined;
 
       if (!hasAny) {
         return res.status(400).json({
@@ -498,6 +526,10 @@ export const salaryComponentController = {
 
       if (name !== undefined && (typeof name !== "string" || !name.trim())) {
         return res.status(400).json({ success: false, message: "name must be a non-empty string" });
+      }
+
+      if (shortName !== undefined && !isStringOrNullOrUndefined(shortName)) {
+        return res.status(400).json({ success: false, message: "shortName must be a string or null" });
       }
 
       const parsedType = type !== undefined ? parseType(type) : undefined;
@@ -528,10 +560,6 @@ export const salaryComponentController = {
         return res.status(400).json({ success: false, message: "isPensionable must be a boolean" });
       }
 
-      if (description !== undefined && !isStringOrNullOrUndefined(description)) {
-        return res.status(400).json({ success: false, message: "description must be a string or null" });
-      }
-
       const parsedFunctionPct = parseFunctionPercentage(functionPercentage);
       if (parsedFunctionPct === "invalid") {
         return res
@@ -555,10 +583,15 @@ export const salaryComponentController = {
         });
       }
 
+      const parsedRank = parseBodyRank(rank);
+      if (parsedRank === "invalid") {
+        return res.status(400).json({ success: false, message: "rank must be a non-negative integer" });
+      }
+
       const updated = await salaryComponentService.update(id, {
         ...(name !== undefined ? { name: name as string } : {}),
-        ...(description !== undefined
-          ? { description: description === "" ? null : (description as string | null) }
+        ...(shortName !== undefined
+          ? { shortName: shortName === "" ? null : (shortName as string | null) }
           : {}),
         ...(parsedType !== undefined ? { type: parsedType } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
@@ -568,6 +601,7 @@ export const salaryComponentController = {
         ...(parsedFunctionPct !== undefined ? { functionPercentage: parsedFunctionPct } : {}),
         ...(parsedElements !== undefined ? { functionElements: parsedElements } : {}),
         ...(parsedAccountId !== undefined ? { accountId: parsedAccountId } : {}),
+        ...(parsedRank !== undefined ? { rank: parsedRank } : {}),
       });
 
       return res.json({

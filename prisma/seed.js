@@ -746,6 +746,7 @@ async function main() {
 
       // payroll
       { route: "/payroll/salary-components", caption: "Salary components" },
+      { route: "/payroll/salary-charts", caption: "Salary charts" },
     ];
 
     for (const item of sidebarMenus) {
@@ -2669,6 +2670,48 @@ async function main() {
       });
     }
     console.log(`   ✓ ${facilities.length} facilities`);
+
+    // Departments
+    console.log("🏬 Seeding departments...");
+    const departments = [
+      { id: "depa0001-0000-4000-8000-000000000001", name: "Administration", status: "Active" },
+      { id: "depa0001-0000-4000-8000-000000000002", name: "Academics", status: "Active" },
+      { id: "depa0001-0000-4000-8000-000000000003", name: "Accounts", status: "Active" },
+      { id: "depa0001-0000-4000-8000-000000000004", name: "ICT", status: "Active" },
+      { id: "depa0001-0000-4000-8000-000000000005", name: "Maintenance", status: "Active" },
+      { id: "depa0001-0000-4000-8000-000000000006", name: "Security", status: "Active" },
+      { id: "depa0001-0000-4000-8000-000000000007", name: "Boarding", status: "Active" },
+      { id: "depa0001-0000-4000-8000-000000000008", name: "Library", status: "Active" },
+    ];
+
+    for (const dep of departments) {
+      await prisma.department.upsert({
+        where: { id: dep.id },
+        update: { name: dep.name, status: dep.status },
+        create: dep,
+      });
+    }
+    console.log(`   ✓ ${departments.length} departments`);
+
+    // Grade levels
+    console.log("🏫 Seeding grade levels...");
+    const gradeLevels = [
+      { id: "grad0001-0000-4000-8000-000000000001", name: "JSS 1", status: "Active" },
+      { id: "grad0001-0000-4000-8000-000000000002", name: "JSS 2", status: "Active" },
+      { id: "grad0001-0000-4000-8000-000000000003", name: "JSS 3", status: "Active" },
+      { id: "grad0001-0000-4000-8000-000000000004", name: "SS 1", status: "Active" },
+      { id: "grad0001-0000-4000-8000-000000000005", name: "SS 2", status: "Active" },
+      { id: "grad0001-0000-4000-8000-000000000006", name: "SS 3", status: "Active" },
+    ];
+
+    for (const gl of gradeLevels) {
+      await prisma.gradeLevel.upsert({
+        where: { id: gl.id },
+        update: { name: gl.name, status: gl.status },
+        create: gl,
+      });
+    }
+    console.log(`   ✓ ${gradeLevels.length} grade levels`);
 
     // Staff (+ linked user accounts, same as StaffService.createStaffWithUser)
     console.log("👔 Seeding staff...");

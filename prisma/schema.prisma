@@ -1200,7 +1200,7 @@ enum SalaryComponentType {
 model SalaryComponent {
   id                 String              @id @default(uuid()) @db.Char(36)
   name               String              @unique
-  description        String?
+  shortName          String?             @map("short_name")
   type               SalaryComponentType
   status             Status              @default(Active)
   isTaxable          Boolean             @default(false) @map("is_taxable")
@@ -1211,6 +1211,7 @@ model SalaryComponent {
   functionElements   Json?               @map("function_elements") // array of strings representing the ids of the salary components that are part of the function
   accountId          Int?                @map("account_id")
   account            AccountChart?       @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  rank               Int                 @default(0) @map("rank")
 
   @@map("salary_components")
 }

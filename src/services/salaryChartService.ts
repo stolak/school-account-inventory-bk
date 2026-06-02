@@ -9,7 +9,8 @@ const salaryChartInclude = {
       name: true,
       type: true,
       status: true,
-      description: true,
+      shortName: true,
+      rank: true,
       isTaxable: true,
       isPensionable: true,
       isFunction: true,
@@ -43,10 +44,11 @@ export interface SalaryChartComponentDetail {
   name: string;
   type: string;
   status: Status;
-  description: string | null;
-  isTaxable: boolean;
-  isPensionable: boolean;
-  isFunction: boolean;
+  shortName?: string | null;
+  rank?: number;
+  isTaxable?: boolean;
+  isPensionable?: boolean;
+  isFunction?: boolean;
 }
 
 export interface SalaryChartGroupedComponent {
@@ -105,7 +107,17 @@ function groupRows(rows: SalaryChartRow[]): SalaryChartGrouped[] {
     group.components.push({
       componentId: row.componentId,
       amount: row.amount.toString(),
-      component: row.component,
+      component: {
+        id: row.component.id,
+        name: row.component.name,
+        type: row.component.type,
+        status: row.component.status,
+        shortName: row.component.shortName ?? null,
+        rank: row.component.rank,
+        isTaxable: row.component.isTaxable,
+        isPensionable: row.component.isPensionable ?? false,
+        isFunction: row.component.isFunction ?? false,
+      },
     });
   }
 
@@ -147,7 +159,17 @@ function mapRow(row: SalaryChartRow): SalaryChartData {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     gradeLevel: row.gradeLevel,
-    component: row.component,
+    component: {
+      id: row.component.id,
+      name: row.component.name,
+      type: row.component.type,
+      status: row.component.status,
+      shortName: row.component.shortName ?? null,
+      rank: row.component.rank ?? null,
+      isTaxable: row.component.isTaxable,
+      isPensionable: row.component.isPensionable ?? false,
+      isFunction: row.component.isFunction ?? false,
+    },
   };
 }
 
