@@ -743,6 +743,9 @@ async function main() {
       { route: "/users", caption: "User management" },
       { route: "/app-roles", caption: "Role management" },
       { route: "/menus", caption: "Menu management" },
+
+      // payroll
+      { route: "/payroll/salary-components", caption: "Salary components" },
     ];
 
     for (const item of sidebarMenus) {

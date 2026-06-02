@@ -38,7 +38,12 @@ type SalaryComponentRow = Prisma.SalaryComponentGetPayload<{
 }>;
 
 function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
-  return typeof e === "object" && e !== null && "code" in e && typeof (e as { code: string }).code === "string";
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    "code" in e &&
+    typeof (e as { code: string }).code === "string"
+  );
 }
 
 function parseFunctionElementsJson(value: Prisma.JsonValue | null): string[] | null {
@@ -101,7 +106,9 @@ export class SalaryComponentService {
     }
   }
 
-  private parseFunctionPercentage(value: string | number | null | undefined): Prisma.Decimal | null {
+  private parseFunctionPercentage(
+    value: string | number | null | undefined
+  ): Prisma.Decimal | null {
     if (value === undefined || value === null || value === "") return null;
     const d = new Prisma.Decimal(value);
     if (d.isNegative()) {
@@ -144,10 +151,10 @@ export class SalaryComponentService {
     if (referenced.length !== uniqueIds.length) {
       throw new Error("One or more functionElements salary component ids are invalid");
     }
-    const nestedFunction = referenced.find((r) => r.isFunction);
-    if (nestedFunction) {
-      throw new Error("functionElements cannot reference another function-type salary component");
-    }
+    // const nestedFunction = referenced.find((r) => r.isFunction);
+    // if (nestedFunction) {
+    //   throw new Error("functionElements cannot reference another function-type salary component");
+    // }
 
     return {
       functionPercentage: this.parseFunctionPercentage(input.functionPercentage),
@@ -276,9 +283,7 @@ export class SalaryComponentService {
           ? input.functionPercentage
           : existing.functionPercentage,
       functionElements:
-        input.functionElements !== undefined
-          ? input.functionElements
-          : existing.functionElements,
+        input.functionElements !== undefined ? input.functionElements : existing.functionElements,
       excludeId: id,
     });
 
