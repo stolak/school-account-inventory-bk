@@ -76,55 +76,7 @@ function httpStatusForSalaryChartError(message: string): number {
 
 /**
  * @openapi
- * /api/v1/salary-charts/upsert:
- *   post:
- *     summary: Upsert salary chart rows for a grade level, step, and employment type
- *     description: >
- *       Creates or updates amount rows for each salary component in `components`.
- *       Any existing chart rows for the same gradeLevelId, step, and employmentType
- *       whose componentId is not in the payload are removed (full replace for that slot).
- *     tags: [SalaryCharts]
- *     security:
- *       - bearerAuth: []
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [gradeLevelId, step, employmentType, components]
- *             properties:
- *               gradeLevelId:
- *                 type: string
- *                 format: uuid
- *               step:
- *                 type: integer
- *                 minimum: 1
- *                 example: 1
- *               employmentType:
- *                 type: string
- *                 enum: [Permanent, Contractual, Casual, Internship, Volunteer, PartTime, Temporary, Seasonal, ProjectBased, Other]
- *               components:
- *                 type: array
- *                 minItems: 1
- *                 items:
- *                   type: object
- *                   required: [componentId, amount]
- *                   properties:
- *                     componentId:
- *                       type: string
- *                       format: uuid
- *                     amount:
- *                       oneOf: [{ type: string }, { type: number }]
- *     responses:
- *       200:
- *         description: Salary chart upserted
- *       400:
- *         description: Validation error
- *       401:
- *         description: Unauthorized
- *       500:
- *         description: Server error
+ * /api/v1/salary-charts:
  *   get:
  *     summary: List salary charts (grouped by grade level, step, employment type)
  *     tags: [SalaryCharts]
@@ -214,6 +166,55 @@ export const salaryChartController = {
     }
   },
 
+  /**
+   * @openapi
+   * /api/v1/salary-charts/upsert:
+   *   post:
+   *     summary: Upsert salary chart rows for a grade level, step, and employment type
+   *     description: Creates or updates amount rows for each salary component in components. Rows for the same gradeLevelId, step, and employmentType whose componentId is not in the payload are removed.
+   *     tags: [SalaryCharts]
+   *     security:
+   *       - bearerAuth: []
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [gradeLevelId, step, employmentType, components]
+   *             properties:
+   *               gradeLevelId:
+   *                 type: string
+   *                 format: uuid
+   *               step:
+   *                 type: integer
+   *                 minimum: 1
+   *                 example: 1
+   *               employmentType:
+   *                 type: string
+   *                 enum: [Permanent, Contractual, Casual, Internship, Volunteer, PartTime, Temporary, Seasonal, ProjectBased, Other]
+   *               components:
+   *                 type: array
+   *                 minItems: 1
+   *                 items:
+   *                   type: object
+   *                   required: [componentId, amount]
+   *                   properties:
+   *                     componentId:
+   *                       type: string
+   *                       format: uuid
+   *                     amount:
+   *                       type: number
+   *     responses:
+   *       200:
+   *         description: Salary chart upserted
+   *       400:
+   *         description: Validation error
+   *       401:
+   *         description: Unauthorized
+   *       500:
+   *         description: Server error
+   */
   upsert: async (req: Request, res: Response) => {
     try {
       const userId = (req as { user?: { id: string } }).user?.id;

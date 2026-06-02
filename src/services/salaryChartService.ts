@@ -78,7 +78,11 @@ export interface ListSalaryChartsParams {
 
 type SalaryChartRow = Prisma.SalaryChartGetPayload<{ include: typeof salaryChartInclude }>;
 
-function groupKey(row: { gradeLevelId: string; step: number; employmentType: EmploymentType }): string {
+function groupKey(row: {
+  gradeLevelId: string;
+  step: number;
+  employmentType: EmploymentType;
+}): string {
   return `${row.gradeLevelId}|${row.step}|${row.employmentType}`;
 }
 
@@ -121,7 +125,12 @@ function groupRows(rows: SalaryChartRow[]): SalaryChartGrouped[] {
 }
 
 function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
-  return typeof e === "object" && e !== null && "code" in e && typeof (e as { code: string }).code === "string";
+  return (
+    typeof e === "object" &&
+    e !== null &&
+    "code" in e &&
+    typeof (e as { code: string }).code === "string"
+  );
 }
 
 function mapRow(row: SalaryChartRow): SalaryChartData {
@@ -282,7 +291,7 @@ export class SalaryChartService {
     count: number;
   }> {
     const where: Prisma.SalaryChartWhereInput = {};
-
+    console.log(params);
     if (params.status === undefined) {
       where.status = Status.Active;
     } else if (params.status !== "All") {
