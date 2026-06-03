@@ -77,6 +77,129 @@ type StaffPayrollChartRow = StaffSalaryChartRow & {
   amount: Prisma.Decimal;
 };
 
+const staffSalaryOverrideForProcessSelect = {
+  id: true,
+  staffId: true,
+  componentId: true,
+  amount: true,
+  isContinuous: true,
+  targetAmount: true,
+} satisfies Prisma.StaffSalaryOverrideComponentSelect;
+
+type StaffSalaryOverrideForProcess = Prisma.StaffSalaryOverrideComponentGetPayload<{
+  select: typeof staffSalaryOverrideForProcessSelect;
+}>;
+
+type PayrollOverrideAmountRow = {
+  staffId: string;
+  componentId: string;
+  amount: Prisma.Decimal;
+};
+
+/**
+ * Resolves payable override amounts from master override rows, persists
+ * StaffSalaryProcessOverride for the period, and returns rows for payroll grouping.
+ * Call only after deleting process overrides for the same year/month.
+ */
+async function resolveAndPersistStaffSalaryProcessOverrides(
+  tx: Prisma.TransactionClient,
+  overrideComponents: StaffSalaryOverrideForProcess[],
+  year: number,
+  month: number
+): Promise<PayrollOverrideAmountRow[]> {
+  if (overrideComponents.length === 0) return [];
+
+  const overrideComponentIds = overrideComponents.map((row) => row.id);
+
+  const [existingOneTime, amountSums] = await Promise.all([
+    tx.staffSalaryProcessOverride.findMany({
+      where: {
+        staffSalaryOverrideComponentId: { in: overrideComponentIds },
+        status: Status.Active,
+      },
+      select: { staffSalaryOverrideComponentId: true },
+      distinct: ["staffSalaryOverrideComponentId"],
+    }),
+    tx.staffSalaryProcessOverride.groupBy({
+      by: ["staffSalaryOverrideComponentId"],
+      where: {
+        staffSalaryOverrideComponentId: { in: overrideComponentIds },
+        status: Status.Active,
+      },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const hasPriorProcessOverride = new Set(
+    existingOneTime.map((row) => row.staffSalaryOverrideComponentId)
+  );
+  const sumByOverrideComponentId = new Map(
+    amountSums.map((row) => [
+      row.staffSalaryOverrideComponentId,
+      row._sum.amount ?? new Prisma.Decimal(0),
+    ])
+  );
+
+  const processInserts: Prisma.StaffSalaryProcessOverrideCreateManyInput[] = [];
+  const resolvedForPayroll: PayrollOverrideAmountRow[] = [];
+
+  for (const override of overrideComponents) {
+    const payable = resolveStaffSalaryProcessOverrideAmount(
+      override,
+      hasPriorProcessOverride,
+      sumByOverrideComponentId
+    );
+    if (payable == null || payable.lte(0)) continue;
+
+    processInserts.push({
+      staffSalaryOverrideComponentId: override.id,
+      amount: payable,
+      year,
+      month,
+      status: Status.Active,
+    });
+    resolvedForPayroll.push({
+      staffId: override.staffId,
+      componentId: override.componentId,
+      amount: payable,
+    });
+  }
+
+  if (processInserts.length > 0) {
+    await tx.staffSalaryProcessOverride.createMany({ data: processInserts });
+  }
+
+  return resolvedForPayroll;
+}
+
+function resolveStaffSalaryProcessOverrideAmount(
+  override: StaffSalaryOverrideForProcess,
+  hasPriorProcessOverride: Set<string>,
+  sumByOverrideComponentId: Map<string, Prisma.Decimal>
+): Prisma.Decimal | null {
+  const amount = new Prisma.Decimal(override.amount);
+
+  if (override.isContinuous) {
+    return amount;
+  }
+
+  if (override.targetAmount == null || override.targetAmount.equals(0)) {
+    if (hasPriorProcessOverride.has(override.id)) {
+      return null;
+    }
+    return amount;
+  }
+
+  const target = new Prisma.Decimal(override.targetAmount);
+  const appliedTotal = sumByOverrideComponentId.get(override.id) ?? new Prisma.Decimal(0);
+  const remaining = target.sub(appliedTotal);
+  if (remaining.lte(0)) {
+    return null;
+  }
+
+  return amount.lte(remaining) ? amount : remaining;
+}
+
 function groupStaffSalaryOverridesByStaff(
   rows: Array<{ staffId: string; componentId: string; amount: Prisma.Decimal }>
 ): Map<string, Map<string, Prisma.Decimal>> {
@@ -556,7 +679,7 @@ export class PayrollService {
         where: { status: Status.Active },
         select: salaryComponentSelect,
       });
-
+      console.log("activeSalaryComponents", activeSalaryComponents);
       const { year, month } = activePayrollPeriod;
 
       const staffEligibleForPayroll = activeStaffs.filter(
@@ -578,14 +701,21 @@ export class PayrollService {
           await tx.staffSalaryProcessOverride.deleteMany({ where: { year, month } });
 
           const staffIds = staffEligibleForPayroll.map((staff) => staff.id);
-          const overrideRows =
+          const overrideComponents =
             staffIds.length > 0
               ? await tx.staffSalaryOverrideComponent.findMany({
                   where: { staffId: { in: staffIds }, status: Status.Active },
-                  select: { staffId: true, componentId: true, amount: true },
+                  select: staffSalaryOverrideForProcessSelect,
                 })
               : [];
-          const overridesByStaffId = groupStaffSalaryOverridesByStaff(overrideRows);
+
+          const resolvedOverrideRows = await resolveAndPersistStaffSalaryProcessOverrides(
+            tx,
+            overrideComponents,
+            year,
+            month
+          );
+          const overridesByStaffId = groupStaffSalaryOverridesByStaff(resolvedOverrideRows);
 
           for (const staff of staffEligibleForPayroll) {
             const salaryCharts = mapSalaryChartsForStaff(
