@@ -2,26 +2,6 @@ import { EmploymentType, Prisma, SalaryComponentType, Status } from "@prisma/cli
 import { activePayrollPeriodService } from "./activePayrollPeriodService";
 import prisma from "../utils/prisma";
 
-// const staffSalaryChartSelect = {
-//   id: true,
-//   gradeLevelId: true,
-//   step: true,
-//   employmentType: true,
-//   componentId: true,
-//   amount: true,
-//   component: {
-//     select: {
-//       id: true,
-//       name: true,
-//       shortName: true,
-//       type: true,
-//       rank: true,
-//       isTaxable: true,
-//       isPensionable: true,
-//       isFunction: true,
-//     },
-//   },
-// } satisfies Prisma.SalaryChartSelect;
 const staffSalaryChartSelect = {
   gradeLevelId: true,
   step: true,
@@ -90,6 +70,54 @@ function mapSalaryChartsForStaff(
       ...chart,
       component: activeComponentById.get(chart.componentId)!,
     }));
+}
+
+type StaffPayrollChartRow = StaffSalaryChartRow & {
+  component: ActiveSalaryComponent;
+  amount: Prisma.Decimal;
+};
+
+function groupStaffSalaryOverridesByStaff(
+  rows: Array<{ staffId: string; componentId: string; amount: Prisma.Decimal }>
+): Map<string, Map<string, Prisma.Decimal>> {
+  const byStaff = new Map<string, Map<string, Prisma.Decimal>>();
+  for (const row of rows) {
+    let byComponent = byStaff.get(row.staffId);
+    if (!byComponent) {
+      byComponent = new Map();
+      byStaff.set(row.staffId, byComponent);
+    }
+    byComponent.set(row.componentId, row.amount);
+  }
+  return byStaff;
+}
+
+function buildStaffPayrollCharts(
+  charts: Array<StaffSalaryChartRow & { component: ActiveSalaryComponent }>,
+  overridesByComponentId: Map<string, Prisma.Decimal>
+): StaffPayrollChartRow[] {
+  return charts.map((chart) => ({
+    ...chart,
+    amount: new Prisma.Decimal(overridesByComponentId.get(chart.componentId) ?? chart.amount),
+  }));
+}
+
+function computePayrollTotals(charts: StaffPayrollChartRow[]): {
+  netEarnings: number;
+  netDeductions: number;
+  netAllowances: number;
+  netPay: number;
+} {
+  const netEarnings = charts
+    .filter((chart) => chart.component.type === SalaryComponentType.EARNING)
+    .reduce((acc, chart) => acc + Number(chart.amount), 0);
+  const netDeductions = charts
+    .filter((chart) => chart.component.type === SalaryComponentType.DEDUCTION)
+    .reduce((acc, chart) => acc + Number(chart.amount), 0);
+  const netAllowances = charts
+    .filter((chart) => chart.component.type === SalaryComponentType.EARNING)
+    .reduce((acc, chart) => acc + Number(chart.amount), 0);
+  return { netEarnings, netDeductions, netAllowances, netPay: netEarnings - netDeductions };
 }
 
 const payrollReportComponentSelect = {
@@ -476,109 +504,90 @@ export class PayrollService {
       });
 
       const chartsBySlot = groupSalaryChartsBySlot(salaryChartRows);
-      // get only active salary components
       const activeSalaryComponents = await prisma.salaryComponent.findMany({
         where: { status: Status.Active },
         select: salaryComponentSelect,
       });
 
-      const postedInPeriod = await prisma.payrollProcess.count({
-        where: {
-          year: activePayrollPeriod.year,
-          month: activePayrollPeriod.month,
-          isPosted: true,
-        },
-      });
-      if (postedInPeriod > 0) {
-        return {
-          success: false,
-          message: "Cannot recompute payroll for a period that contains posted records",
-        };
-      }
+      const { year, month } = activePayrollPeriod;
 
-      await prisma.payrollComponent.deleteMany({
-        where: { year: activePayrollPeriod.year, month: activePayrollPeriod.month },
-      });
-      await prisma.payrollProcess.deleteMany({
-        where: { year: activePayrollPeriod.year, month: activePayrollPeriod.month },
-      });
-      for (const staff of activeStaffs) {
-        const salaryCharts = mapSalaryChartsForStaff(staff, chartsBySlot, activeSalaryComponents);
+      const staffPayrollPlans = activeStaffs
+        .map((staff) => ({
+          staff,
+          salaryCharts: mapSalaryChartsForStaff(staff, chartsBySlot, activeSalaryComponents),
+        }))
+        .filter((plan) => plan.salaryCharts.length > 0);
 
-        // TODO: compute payroll using salaryCharts for activePayrollPeriod year/month
-        // insert into payroll table
-        try {
-          if (salaryCharts.length > 0) {
-            // find the staff salary override components for the staff
-            const staffSalaryOverrideComponents =
-              await prisma.staffSalaryOverrideComponent.findMany({
-                where: { staffId: staff.id, status: Status.Active },
-              });
-            const staffSalaryOverrideComponentsById = new Map(
-              staffSalaryOverrideComponents.map((component) => [component.componentId, component])
-            );
-            await prisma.$transaction(async (tx) => {
-              // sun up all salary components that are earnings
-              salaryCharts.forEach((chart) => {
-                const staffSalaryOverrideComponent = staffSalaryOverrideComponentsById.get(
-                  chart.componentId
-                );
-                if (staffSalaryOverrideComponent) {
-                  chart.amount = new Prisma.Decimal(staffSalaryOverrideComponent.amount);
-                } else {
-                  chart.amount = new Prisma.Decimal(chart.amount);
-                }
-              });
-              const netEarnings = salaryCharts
-                .filter((chart) => chart.component.type === SalaryComponentType.EARNING)
-                .reduce((acc, chart) => acc + Number(chart.amount), 0);
-              // sum up all salary components that are deductions
-              const netDeductions = salaryCharts
-                .filter((chart) => chart.component.type === SalaryComponentType.DEDUCTION)
-                .reduce((acc, chart) => acc + Number(chart.amount), 0);
-              // sum up all salary components that are allowances
-              const netAllowances = salaryCharts
-                .filter((chart) => chart.component.type === SalaryComponentType.EARNING)
-                .reduce((acc, chart) => acc + Number(chart.amount), 0);
-              const netPay = netEarnings - netDeductions;
-              const payrollProcess = await tx.payrollProcess.create({
-                data: {
-                  staffId: staff.id,
-                  year: activePayrollPeriod.year,
-                  month: activePayrollPeriod.month,
-                  gradeLevelId: staff.gradeLevelId ?? "",
-                  step: staff.step,
-                  employmentType: staff.employmentType,
-                  grossEarnings: netEarnings,
-                  netAllowances: netAllowances,
-                  netEarnings: netEarnings,
-                  netDeductions: netDeductions,
-                  netPay: netPay,
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
-                },
-              });
-              await tx.payrollComponent.createMany({
-                data: salaryCharts.map((chart) => ({
-                  payrollProcessId: payrollProcess.id,
-                  month: activePayrollPeriod.month,
-                  year: activePayrollPeriod.year,
-                  componentId: chart.componentId,
-                  amount: chart.amount,
-                })),
-              });
-            });
-            // console.log("salaryCharts", salaryCharts);
+      const staffIdsWithCharts = staffPayrollPlans.map((plan) => plan.staff.id);
+      // console.log("staffIdsWithCharts", staffIdsWithCharts);
+
+      await prisma.$transaction(
+        async (tx) => {
+          const postedInPeriod = await tx.payrollProcess.count({
+            where: { year, month, isPosted: true },
+          });
+          if (postedInPeriod > 0) {
+            throw new Error("Cannot recompute payroll for a period that contains posted records");
           }
-        } catch (error) {
-          console.error("Error computing payroll for staff", staff.id, error);
-        }
 
-        void salaryCharts;
-      }
+          await tx.payrollComponent.deleteMany({ where: { year, month } });
+          await tx.payrollProcess.deleteMany({ where: { year, month } });
+          await tx.staffSalaryProcessOverride.deleteMany({ where: { year, month } });
+
+          const overrideRows =
+            staffIdsWithCharts.length > 0
+              ? await tx.staffSalaryOverrideComponent.findMany({
+                  where: { staffId: { in: staffIdsWithCharts }, status: Status.Active },
+                  select: { staffId: true, componentId: true, amount: true },
+                })
+              : [];
+          console.log("overrideRows", overrideRows);
+          const overridesByStaffId = groupStaffSalaryOverridesByStaff(overrideRows);
+          console.log("overridesByStaffId", overridesByStaffId);
+          for (const { staff, salaryCharts } of staffPayrollPlans) {
+            const chartsWithAmounts = buildStaffPayrollCharts(
+              salaryCharts,
+              overridesByStaffId.get(staff.id) ?? new Map()
+            );
+            const { netEarnings, netDeductions, netAllowances, netPay } =
+              computePayrollTotals(chartsWithAmounts);
+
+            const payrollProcess = await tx.payrollProcess.create({
+              data: {
+                staffId: staff.id,
+                year,
+                month,
+                gradeLevelId: staff.gradeLevelId!,
+                step: staff.step,
+                employmentType: staff.employmentType,
+                grossEarnings: netEarnings,
+                netAllowances,
+                netEarnings,
+                netDeductions,
+                netPay,
+              },
+            });
+
+            await tx.payrollComponent.createMany({
+              data: chartsWithAmounts.map((chart) => ({
+                payrollProcessId: payrollProcess.id,
+                month,
+                year,
+                componentId: chart.componentId,
+                amount: chart.amount,
+              })),
+            });
+          }
+        },
+        { maxWait: 10_000, timeout: 120_000 }
+      );
 
       return { success: true, message: "Payroll computation completed successfully" };
-    } catch {
+    } catch (error: unknown) {
+      if (error instanceof Error && error.message.includes("posted records")) {
+        return { success: false, message: error.message };
+      }
+      console.error("Payroll computation failed", error);
       return { success: false, message: "Failed to compute payroll" };
     }
   }
