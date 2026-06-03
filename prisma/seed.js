@@ -747,6 +747,7 @@ async function main() {
       // payroll
       { route: "/payroll/salary-components", caption: "Salary components" },
       { route: "/payroll/salary-charts", caption: "Salary charts" },
+      { route: "/payroll/report", caption: "Payroll reports" },
     ];
 
     for (const item of sidebarMenus) {
