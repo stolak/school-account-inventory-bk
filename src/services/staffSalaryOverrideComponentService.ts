@@ -13,6 +13,7 @@ const overrideInclude = {
       rank: true,
       isTaxable: true,
       isPensionable: true,
+      isStatutory: true,
       isFunction: true,
       accountId: true,
     },

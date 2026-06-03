@@ -13,6 +13,7 @@ const salaryChartInclude = {
       rank: true,
       isTaxable: true,
       isPensionable: true,
+      isStatutory: true,
       isFunction: true,
     },
   },
@@ -48,6 +49,7 @@ export interface SalaryChartComponentDetail {
   rank?: number;
   isTaxable?: boolean;
   isPensionable?: boolean;
+  isStatutory?: boolean;
   isFunction?: boolean;
 }
 
@@ -116,6 +118,7 @@ function groupRows(rows: SalaryChartRow[]): SalaryChartGrouped[] {
         rank: row.component.rank,
         isTaxable: row.component.isTaxable,
         isPensionable: row.component.isPensionable ?? false,
+        isStatutory: row.component.isStatutory ?? false,
         isFunction: row.component.isFunction ?? false,
       },
     });
@@ -168,6 +171,7 @@ function mapRow(row: SalaryChartRow): SalaryChartData {
       rank: row.component.rank ?? null,
       isTaxable: row.component.isTaxable,
       isPensionable: row.component.isPensionable ?? false,
+      isStatutory: row.component.isStatutory ?? false,
       isFunction: row.component.isFunction ?? false,
     },
   };

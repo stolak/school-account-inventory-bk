@@ -18,6 +18,7 @@ export interface SalaryComponentData {
   status: Status;
   isTaxable: boolean;
   isPensionable: boolean;
+  isStatutory: boolean;
   isFunction: boolean;
   functionPercentage: string | null;
   functionElements: string[] | null;
@@ -67,6 +68,7 @@ function mapRow(row: SalaryComponentRow): SalaryComponentData {
     status: row.status,
     isTaxable: row.isTaxable,
     isPensionable: row.isPensionable,
+    isStatutory: row.isStatutory,
     isFunction: row.isFunction,
     functionPercentage: row.functionPercentage?.toString() ?? null,
     functionElements: parseFunctionElementsJson(row.functionElements),
@@ -171,6 +173,7 @@ export class SalaryComponentService {
     status?: Status;
     isTaxable?: boolean;
     isPensionable?: boolean;
+    isStatutory?: boolean;
     isFunction?: boolean;
     functionPercentage?: string | number | null;
     functionElements?: string[] | null;
@@ -199,6 +202,7 @@ export class SalaryComponentService {
         ...(input.status !== undefined ? { status: input.status } : {}),
         ...(input.isTaxable !== undefined ? { isTaxable: input.isTaxable } : {}),
         ...(input.isPensionable !== undefined ? { isPensionable: input.isPensionable } : {}),
+        ...(input.isStatutory !== undefined ? { isStatutory: input.isStatutory } : {}),
         ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
         ...(input.rank !== undefined ? { rank: input.rank } : {}),
         functionPercentage,
@@ -260,6 +264,7 @@ export class SalaryComponentService {
       status?: Status;
       isTaxable?: boolean;
       isPensionable?: boolean;
+      isStatutory?: boolean;
       isFunction?: boolean;
       functionPercentage?: string | number | null;
       functionElements?: string[] | null;
@@ -305,6 +310,7 @@ export class SalaryComponentService {
           ...(input.status !== undefined ? { status: input.status } : {}),
           ...(input.isTaxable !== undefined ? { isTaxable: input.isTaxable } : {}),
           ...(input.isPensionable !== undefined ? { isPensionable: input.isPensionable } : {}),
+          ...(input.isStatutory !== undefined ? { isStatutory: input.isStatutory } : {}),
           ...(input.isFunction !== undefined ? { isFunction: input.isFunction } : {}),
           ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
           ...(input.rank !== undefined ? { rank: input.rank } : {}),

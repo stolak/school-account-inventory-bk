@@ -39,6 +39,7 @@ const salaryComponentSelect = {
   rank: true,
   isTaxable: true,
   isPensionable: true,
+  isStatutory: true,
   isFunction: true,
 } satisfies Prisma.SalaryComponentSelect;
 
@@ -91,7 +92,183 @@ function mapSalaryChartsForStaff(
     }));
 }
 
+const payrollReportComponentSelect = {
+  id: true,
+  name: true,
+  shortName: true,
+  type: true,
+  rank: true,
+  status: true,
+  isTaxable: true,
+  isPensionable: true,
+  isStatutory: true,
+  isFunction: true,
+  accountId: true,
+} satisfies Prisma.SalaryComponentSelect;
+
+export type PayrollReportPeriodComponent = Prisma.SalaryComponentGetPayload<{
+  select: typeof payrollReportComponentSelect;
+}>;
+
+export interface PayrollReportPayrollComponentRow {
+  id: string;
+  payrollProcessId: string;
+  componentId: string;
+  amount: string;
+}
+
+export interface PayrollReportStaffPayrollRow {
+  id: string;
+  staffId: string;
+  year: number;
+  month: number;
+  gradeLevelId: string;
+  step: number;
+  employmentType: EmploymentType;
+  grossEarnings: string;
+  netAllowances: string;
+  netEarnings: string;
+  netDeductions: string;
+  netPay: string;
+  createdAt: Date;
+  updatedAt: Date;
+  staff: { id: string; StaffNumber: string; name: string };
+  gradeLevel: { id: string; name: string };
+  payrollComponents: PayrollReportPayrollComponentRow[];
+}
+
+export interface PayrollReportResult {
+  periodComponent: PayrollReportPeriodComponent[];
+  staffPayroll: PayrollReportStaffPayrollRow[];
+}
+
+function sortSalaryComponentsForReport(
+  components: PayrollReportPeriodComponent[]
+): PayrollReportPeriodComponent[] {
+  const typeOrder = (type: SalaryComponentType) => (type === SalaryComponentType.EARNING ? 0 : 1);
+  return [...components].sort((a, b) => {
+    const byType = typeOrder(a.type) - typeOrder(b.type);
+    if (byType !== 0) return byType;
+    return a.rank - b.rank || a.name.localeCompare(b.name);
+  });
+}
+
+function sortPayrollComponentsForReport<
+  T extends { component: { type: SalaryComponentType; rank: number; name: string } },
+>(rows: T[]): T[] {
+  const typeOrder = (type: SalaryComponentType) => (type === SalaryComponentType.EARNING ? 0 : 1);
+  return [...rows].sort((a, b) => {
+    const byType = typeOrder(a.component.type) - typeOrder(b.component.type);
+    if (byType !== 0) return byType;
+    return a.component.rank - b.component.rank || a.component.name.localeCompare(b.component.name);
+  });
+}
+
+function mapPayrollReportComponentRow(row: {
+  id: string;
+  payrollProcessId: string;
+  componentId: string;
+  amount: { toString(): string };
+}): PayrollReportPayrollComponentRow {
+  return {
+    id: row.id,
+    payrollProcessId: row.payrollProcessId,
+    componentId: row.componentId,
+    amount: row.amount.toString(),
+  };
+}
+
+function validateReportYearMonth(year: number, month: number): void {
+  if (!Number.isInteger(year) || year < 1900 || year > 2100) {
+    throw new Error("year must be an integer between 1900 and 2100");
+  }
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    throw new Error("month must be an integer between 1 and 12");
+  }
+}
+
 export class PayrollService {
+  async getPayrollReport(params: {
+    year: number;
+    month: number;
+    staffId?: string;
+  }): Promise<PayrollReportResult> {
+    validateReportYearMonth(params.year, params.month);
+
+    if (params.staffId) {
+      const staff = await prisma.staff.findUnique({
+        where: { id: params.staffId },
+        select: { id: true },
+      });
+      if (!staff) throw new Error("Invalid staffId");
+    }
+
+    const periodPayrollComponents = await prisma.payrollComponent.findMany({
+      where: {
+        year: params.year,
+        month: params.month,
+      },
+      select: { componentId: true },
+      distinct: ["componentId"],
+    });
+
+    const uniqueComponentIds = periodPayrollComponents.map((r) => r.componentId);
+
+    const periodComponentRows =
+      uniqueComponentIds.length > 0
+        ? await prisma.salaryComponent.findMany({
+            where: { id: { in: uniqueComponentIds } },
+            select: payrollReportComponentSelect,
+          })
+        : [];
+
+    const periodComponent = sortSalaryComponentsForReport(periodComponentRows);
+
+    const payrollProcesses = await prisma.payrollProcess.findMany({
+      where: {
+        year: params.year,
+        month: params.month,
+        ...(params.staffId ? { staffId: params.staffId } : {}),
+      },
+      include: {
+        staff: { select: { id: true, StaffNumber: true, name: true } },
+        gradeLevel: { select: { id: true, name: true } },
+        payrollComponents: {
+          where: { year: params.year, month: params.month },
+          include: {
+            component: { select: payrollReportComponentSelect },
+          },
+          orderBy: [{ component: { type: "asc" } }, { component: { rank: "asc" } }],
+        },
+      },
+      orderBy: [{ staff: { name: "asc" } }],
+    });
+
+    const staffPayroll: PayrollReportStaffPayrollRow[] = payrollProcesses.map((process) => ({
+      id: process.id,
+      staffId: process.staffId,
+      year: process.year,
+      month: process.month,
+      gradeLevelId: process.gradeLevelId,
+      step: process.step,
+      employmentType: process.employmentType,
+      grossEarnings: process.grossEarnings.toString(),
+      netAllowances: process.netAllowances.toString(),
+      netEarnings: process.netEarnings.toString(),
+      netDeductions: process.netDeductions.toString(),
+      netPay: process.netPay.toString(),
+      createdAt: process.createdAt,
+      updatedAt: process.updatedAt,
+      staff: process.staff,
+      gradeLevel: process.gradeLevel,
+      payrollComponents: sortPayrollComponentsForReport(process.payrollComponents).map(
+        mapPayrollReportComponentRow
+      ),
+    }));
+
+    return { periodComponent, staffPayroll };
+  }
+
   async compute(): Promise<{ success: boolean; message: string }> {
     try {
       const activePayrollPeriod = await activePayrollPeriodService.getActivePayrollPeriod();
@@ -130,7 +307,14 @@ export class PayrollService {
       });
 
       // const salaryComponentsByType = groupSalaryComponentsByType(activeSalaryComponents);
-
+      // delete all payroll components for the active payroll period
+      await prisma.payrollComponent.deleteMany({
+        where: { year: activePayrollPeriod.year, month: activePayrollPeriod.month },
+      });
+      // delete all payroll processes for the active payroll period
+      await prisma.payrollProcess.deleteMany({
+        where: { year: activePayrollPeriod.year, month: activePayrollPeriod.month },
+      });
       for (const staff of activeStaffs) {
         const salaryCharts = mapSalaryChartsForStaff(staff, chartsBySlot, activeSalaryComponents);
 
@@ -138,11 +322,24 @@ export class PayrollService {
         // insert into payroll table
         try {
           if (salaryCharts.length > 0) {
+            // find the staff salary override components for the staff
+            const staffSalaryOverrideComponents =
+              await prisma.staffSalaryOverrideComponent.findMany({
+                where: { staffId: staff.id, status: Status.Active },
+              });
+            const staffSalaryOverrideComponentsById = new Map(
+              staffSalaryOverrideComponents.map((component) => [component.componentId, component])
+            );
             await prisma.$transaction(async (tx) => {
               // sun up all salary components that are earnings
               salaryCharts.forEach((chart) => {
-                if (chart.component.type === SalaryComponentType.EARNING) {
-                  chart.amount = new Prisma.Decimal(80000);
+                const staffSalaryOverrideComponent = staffSalaryOverrideComponentsById.get(
+                  chart.componentId
+                );
+                if (staffSalaryOverrideComponent) {
+                  chart.amount = new Prisma.Decimal(staffSalaryOverrideComponent.amount);
+                } else {
+                  chart.amount = new Prisma.Decimal(chart.amount);
                 }
               });
               const netEarnings = salaryCharts
@@ -186,7 +383,7 @@ export class PayrollService {
                 })),
               });
             });
-            console.log("salaryCharts", salaryCharts);
+            // console.log("salaryCharts", salaryCharts);
           }
         } catch (error) {
           console.error("Error computing payroll for staff", staff.id, error);

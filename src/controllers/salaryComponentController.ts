@@ -131,6 +131,8 @@ function httpStatusForSalaryComponentError(message: string): number {
  *                 type: boolean
  *               isPensionable:
  *                 type: boolean
+ *               isStatutory:
+ *                 type: boolean
  *               isFunction:
  *                 type: boolean
  *                 description: When true, functionPercentage and functionElements are required
@@ -210,6 +212,7 @@ export const salaryComponentController = {
         status,
         isTaxable,
         isPensionable,
+        isStatutory,
         isFunction,
         functionPercentage,
         functionElements,
@@ -266,6 +269,11 @@ export const salaryComponentController = {
         return res.status(400).json({ success: false, message: "isPensionable must be a boolean" });
       }
 
+      const parsedIsStatutory = parseOptionalBoolean(isStatutory);
+      if (parsedIsStatutory === "invalid") {
+        return res.status(400).json({ success: false, message: "isStatutory must be a boolean" });
+      }
+
       const parsedFunctionPct = parseFunctionPercentage(functionPercentage);
       if (parsedFunctionPct === "invalid") {
         return res
@@ -290,6 +298,7 @@ export const salaryComponentController = {
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
         ...(parsedIsTaxable !== undefined ? { isTaxable: parsedIsTaxable } : {}),
         ...(parsedIsPensionable !== undefined ? { isPensionable: parsedIsPensionable } : {}),
+        ...(parsedIsStatutory !== undefined ? { isStatutory: parsedIsStatutory } : {}),
         ...(parsedIsFunction !== undefined ? { isFunction: parsedIsFunction } : {}),
         ...(parsedFunctionPct !== undefined ? { functionPercentage: parsedFunctionPct } : {}),
         ...(parsedElements !== undefined ? { functionElements: parsedElements } : {}),
@@ -415,6 +424,8 @@ export const salaryComponentController = {
    *                 type: boolean
    *               isPensionable:
    *                 type: boolean
+   *               isStatutory:
+   *                 type: boolean
    *               isFunction:
    *                 type: boolean
    *               functionPercentage:
@@ -497,6 +508,7 @@ export const salaryComponentController = {
         status,
         isTaxable,
         isPensionable,
+        isStatutory,
         isFunction,
         functionPercentage,
         functionElements,
@@ -511,6 +523,7 @@ export const salaryComponentController = {
         status !== undefined ||
         isTaxable !== undefined ||
         isPensionable !== undefined ||
+        isStatutory !== undefined ||
         isFunction !== undefined ||
         functionPercentage !== undefined ||
         functionElements !== undefined ||
@@ -560,6 +573,11 @@ export const salaryComponentController = {
         return res.status(400).json({ success: false, message: "isPensionable must be a boolean" });
       }
 
+      const parsedIsStatutory = parseOptionalBoolean(isStatutory);
+      if (parsedIsStatutory === "invalid") {
+        return res.status(400).json({ success: false, message: "isStatutory must be a boolean" });
+      }
+
       const parsedFunctionPct = parseFunctionPercentage(functionPercentage);
       if (parsedFunctionPct === "invalid") {
         return res
@@ -597,6 +615,7 @@ export const salaryComponentController = {
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
         ...(parsedIsTaxable !== undefined ? { isTaxable: parsedIsTaxable } : {}),
         ...(parsedIsPensionable !== undefined ? { isPensionable: parsedIsPensionable } : {}),
+        ...(parsedIsStatutory !== undefined ? { isStatutory: parsedIsStatutory } : {}),
         ...(parsedIsFunction !== undefined ? { isFunction: parsedIsFunction } : {}),
         ...(parsedFunctionPct !== undefined ? { functionPercentage: parsedFunctionPct } : {}),
         ...(parsedElements !== undefined ? { functionElements: parsedElements } : {}),
