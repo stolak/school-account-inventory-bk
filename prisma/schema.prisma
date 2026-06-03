@@ -1222,6 +1222,7 @@ model SalaryComponent {
   rank                          Int                            @default(0) @map("rank")
   staffSalaryOverrideComponents StaffSalaryOverrideComponent[]
   payrollComponents             PayrollComponent[]
+  isPrimary                     Boolean                        @default(false) @map("is_primary")
 
   @@map("salary_components")
 }

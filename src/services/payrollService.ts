@@ -417,7 +417,7 @@ function buildStaffPayrollCharts(
 
   const rows: StaffPayrollChartRow[] = [];
   for (const component of sortedComponents) {
-    const amount = resolvedAmounts.get(component.id) ?? new Prisma.Decimal(0);
+    let amount = resolvedAmounts.get(component.id) ?? new Prisma.Decimal(0);
 
     rows.push({
       gradeLevelId: staff.gradeLevelId,
@@ -428,8 +428,20 @@ function buildStaffPayrollCharts(
       amount,
     });
   }
+  const sortedRows = sortPayrollChartRows(rows);
+  sortedRows.forEach((row) => {
+    if (
+      row.component.id === "f556684d-e8c1-4abd-8d60-87236ca895ca" &&
+      row.component.isFunction &&
+      row.component.functionPercentage?.toString() === "100"
+    ) {
+      row.amount = new Prisma.Decimal(
+        calculateAnnualProgressiveTax(Number(row.amount), sortedRows)
+      );
+    }
+  });
 
-  return sortPayrollChartRows(rows);
+  return sortedRows;
 }
 
 function computePayrollTotals(charts: StaffPayrollChartRow[]): {
@@ -604,6 +616,48 @@ export interface PayrollApprovalInput extends PayrollPeriodActionInput {
   approved: boolean;
 }
 
+function calculateAnnualProgressiveTax(income: number, charts: StaffPayrollChartRow[]): number {
+  const nonTaxableDeductions = charts
+    .filter(
+      (chart) =>
+        chart.component.type === SalaryComponentType.DEDUCTION &&
+        !chart.component.isTaxable &&
+        chart.component.id !== "f556684d-e8c1-4abd-8d60-87236ca895ca"
+    )
+    .reduce((acc, chart) => acc + Number(chart.amount), 0);
+
+  const taxableIncome = Math.max(0, income - nonTaxableDeductions);
+
+  return calculateAnnualProgressiveTaxActualIncome(taxableIncome);
+}
+
+function calculateAnnualProgressiveTaxActualIncome(actualTaxableIncome: number): number {
+  if (actualTaxableIncome <= 0) return 0;
+  let tax = 0;
+
+  let remainingIncome = actualTaxableIncome * 12;
+
+  const brackets: [number, number][] = [
+    [800000, 0.0],
+    [2200000, 0.15],
+    [9000000, 0.18],
+    [13000000, 0.21],
+    [25000000, 0.23],
+    [Number.MAX_VALUE, 0.25],
+  ];
+
+  for (const [limit, rate] of brackets) {
+    if (remainingIncome <= 0) break;
+
+    const taxable = Math.min(remainingIncome, limit);
+
+    tax += taxable * rate;
+
+    remainingIncome -= taxable;
+  }
+  tax = tax / 12;
+  return Number(tax.toFixed(2));
+}
 export class PayrollService {
   async getPayrollReport(params: {
     year: number;
@@ -904,7 +958,7 @@ export class PayrollService {
               staffOverrides,
               activeSalaryComponents
             );
-
+            // console.log("chartsWithAmounts", chartsWithAmounts);
             const { netEarnings, netGross, netDeductions, netAllowances, netPay } =
               computePayrollTotals(chartsWithAmounts);
 
