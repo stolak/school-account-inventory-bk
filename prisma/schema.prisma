@@ -109,20 +109,26 @@ model User {
   createdInventoryTransactions  InventoryTransaction[] @relation("InventoryTransactionCreatedBy")
   staffProfile                  Staff?                 @relation("StaffUser")
 
-  createdProjects         Project[]                @relation("ProjectCreatedBy")
-  managedStores           Store[]                  @relation("StoreManager")
-  createdFacility         Facility[]               @relation("FacilityCreatedBy")
+  createdProjects               Project[]                      @relation("ProjectCreatedBy")
+  managedStores                 Store[]                        @relation("StoreManager")
+  createdFacility               Facility[]                     @relation("FacilityCreatedBy")
   /**
    * Stores this user is granted access to (many-to-many; separate from primary manager role).
    */
-  storeAccesses           UserStore[]
-  tempJournalTransfers    TempJournalTransfer[]
-  studentJournalTransfers StudentJournalTransfer[]
-  inventoryTransactions   InventoryTransaction[]
-  privileges              Privilege[]
-  auditLogs               AuditLog[]
-  cashiers                Cashier[]
-  staffJournalTransfers   StaffJournalTransfer[]
+  storeAccesses                 UserStore[]
+  tempJournalTransfers          TempJournalTransfer[]
+  studentJournalTransfers       StudentJournalTransfer[]
+  inventoryTransactions         InventoryTransaction[]
+  privileges                    Privilege[]
+  auditLogs                     AuditLog[]
+  cashiers                      Cashier[]
+  staffJournalTransfers         StaffJournalTransfer[]
+  salaryChartsCreated           SalaryChart[]                  @relation("SalaryChartCreatedBy")
+  salaryChartsUpdated           SalaryChart[]                  @relation("SalaryChartUpdatedBy")
+  staffSalaryOverrideComponents StaffSalaryOverrideComponent[] @relation("StaffSalaryOverrideCreatedBy")
+  payrollProcesses              PayrollProcess[]               @relation("PayrollProcesses")
+  payrollProcessesApproved      PayrollProcess[]               @relation("PayrollProcessesApproved")
+  payrollProcessesPosted        PayrollProcess[]               @relation("PayrollProcessesPosted")
 
   @@map("users")
 }
@@ -537,34 +543,36 @@ enum EmploymentType {
 }
 
 model Staff {
-  id                    String                 @id @default(uuid()) @db.Char(36)
-  StaffNumber           String                 @unique @map("staff_number") @db.Char(36)
-  email                 String                 @unique
-  name                  String
-  position              StaffPosition          @default(teacher)
-  employmentType        EmploymentType         @default(Permanent)
-  status                Status                 @default(Active)
-  profileImageUrl       String?                @map("profile_image_url")
-  createdById           String                 @map("created_by") @db.Char(36)
-  createdAt             DateTime               @default(now()) @map("created_at")
-  updatedAt             DateTime               @default(now()) @map("updated_at")
-  gradeLevelId          String?                @map("grade_level_id") @db.Char(36)
-  gradeLevel            GradeLevel?            @relation(fields: [gradeLevelId], references: [id], onDelete: SetNull)
-  step                  Int                    @default(0) @map("step")
-  salary                Decimal                @default(0) @map("salary") @db.Decimal(12, 2)
-  createdBy             User                   @relation("StaffCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
-  departmentId          String?                @map("department_id") @db.Char(36)
-  department            Department?            @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  userId                String?                @unique @db.Char(36)
-  user                  User?                  @relation("StaffUser", fields: [userId], references: [id], onDelete: SetNull)
-  inventoryTransactions InventoryTransaction[]
-  cashiers              Cashier[]
-  staffBankDetails      StaffBankDetails[]
-  dateOfBirth           DateTime?              @map("date_of_birth") @db.Date
-  dateOfAppointment     DateTime?              @map("date_of_appointment") @db.Date
-  dateOfResignation     DateTime?              @map("date_of_resignation") @db.Date
-  dateOfTermination     DateTime?              @map("date_of_termination") @db.Date
-  staffJournalTransfers StaffJournalTransfer[]
+  id                            String                         @id @default(uuid()) @db.Char(36)
+  StaffNumber                   String                         @unique @map("staff_number") @db.Char(36)
+  email                         String                         @unique
+  name                          String
+  position                      StaffPosition                  @default(teacher)
+  employmentType                EmploymentType                 @default(Permanent)
+  status                        Status                         @default(Active)
+  profileImageUrl               String?                        @map("profile_image_url")
+  createdById                   String                         @map("created_by") @db.Char(36)
+  createdAt                     DateTime                       @default(now()) @map("created_at")
+  updatedAt                     DateTime                       @default(now()) @map("updated_at")
+  gradeLevelId                  String?                        @map("grade_level_id") @db.Char(36)
+  gradeLevel                    GradeLevel?                    @relation(fields: [gradeLevelId], references: [id], onDelete: SetNull)
+  step                          Int                            @default(0) @map("step")
+  salary                        Decimal                        @default(0) @map("salary") @db.Decimal(12, 2)
+  createdBy                     User                           @relation("StaffCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  departmentId                  String?                        @map("department_id") @db.Char(36)
+  department                    Department?                    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  userId                        String?                        @unique @db.Char(36)
+  user                          User?                          @relation("StaffUser", fields: [userId], references: [id], onDelete: SetNull)
+  inventoryTransactions         InventoryTransaction[]
+  cashiers                      Cashier[]
+  staffBankDetails              StaffBankDetails[]
+  dateOfBirth                   DateTime?                      @map("date_of_birth") @db.Date
+  dateOfAppointment             DateTime?                      @map("date_of_appointment") @db.Date
+  dateOfResignation             DateTime?                      @map("date_of_resignation") @db.Date
+  dateOfTermination             DateTime?                      @map("date_of_termination") @db.Date
+  staffJournalTransfers         StaffJournalTransfer[]
+  staffSalaryOverrideComponents StaffSalaryOverrideComponent[]
+  payrollProcesses              PayrollProcess[]
 
   @@index([userId])
   @@index([StaffNumber])
@@ -784,6 +792,7 @@ model AccountChart {
   // suppliers               Supplier[]
   cashiers                Cashier[]
   staffJournalTransfers   StaffJournalTransfer[]
+  salaryComponents        SalaryComponent[]
 
   @@index([groupId])
   @@index([headId])
@@ -1133,10 +1142,12 @@ model Department {
 }
 
 model GradeLevel {
-  id     String  @id @default(uuid()) @db.Char(36)
-  name   String
-  status Status  @default(Active)
-  staff  Staff[]
+  id               String           @id @default(uuid()) @db.Char(36)
+  name             String
+  status           Status           @default(Active)
+  staff            Staff[]
+  salaryCharts     SalaryChart[]
+  payrollProcesses PayrollProcess[]
 
   @@index([id])
   @@map("grade_levels")
@@ -1186,4 +1197,158 @@ model StaffJournalTransfer {
   @@index([transactionDate])
   @@index([batchStatus])
   @@map("staff_journal_transfer")
+}
+
+enum SalaryComponentType {
+  EARNING
+  DEDUCTION
+}
+
+model SalaryComponent {
+  id                            String                         @id @default(uuid()) @db.Char(36)
+  name                          String                         @unique
+  shortName                     String?                        @map("short_name")
+  type                          SalaryComponentType
+  status                        Status                         @default(Active)
+  isTaxable                     Boolean                        @default(false) @map("is_taxable")
+  isPensionable                 Boolean                        @default(false) @map("is_pensionable")
+  isStatutory                   Boolean                        @default(false) @map("is_statutory")
+  isFunction                    Boolean                        @default(false) @map("is_function")
+  salaryCharts                  SalaryChart[]
+  functionPercentage            Decimal?                       @map("function_percentage") @db.Decimal(14, 2)
+  functionElements              Json?                          @map("function_elements") // array of strings representing the ids of the salary components that are part of the function
+  accountId                     Int?                           @map("account_id")
+  account                       AccountChart?                  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  rank                          Int                            @default(0) @map("rank")
+  staffSalaryOverrideComponents StaffSalaryOverrideComponent[]
+  payrollComponents             PayrollComponent[]
+
+  @@map("salary_components")
+}
+
+model SalaryChart {
+  id             String          @id @default(uuid()) @db.Char(36)
+  gradeLevelId   String          @map("grade_level_id") @db.Char(36)
+  gradeLevel     GradeLevel      @relation(fields: [gradeLevelId], references: [id])
+  step           Int             @map("step")
+  employmentType EmploymentType  @map("employment_type")
+  componentId    String          @map("component_id") @db.Char(36)
+  component      SalaryComponent @relation(fields: [componentId], references: [id])
+  amount         Decimal         @map("amount") @db.Decimal(14, 2)
+  status         Status          @default(Active)
+  createdBy      String?         @map("created_by") @db.Char(36)
+  createdByUser  User?           @relation("SalaryChartCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  updatedBy      String?         @map("updated_by") @db.Char(36)
+  updatedByUser  User?           @relation("SalaryChartUpdatedBy", fields: [updatedBy], references: [id], onDelete: SetNull)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  @@unique([gradeLevelId, step, employmentType, componentId])
+  @@index([gradeLevelId])
+  @@index([componentId])
+  @@index([employmentType])
+  @@index([step])
+  @@map("salary_charts")
+}
+
+model StaffSalaryOverrideComponent {
+  id                          String                       @id @default(uuid()) @db.Char(36)
+  staffId                     String                       @map("staff_id") @db.Char(36)
+  staff                       Staff                        @relation(fields: [staffId], references: [id])
+  componentId                 String                       @map("component_id") @db.Char(36)
+  component                   SalaryComponent              @relation(fields: [componentId], references: [id])
+  amount                      Decimal                      @map("amount") @db.Decimal(14, 2)
+  isContinuous                Boolean                      @default(false) @map("is_continuous")
+  targetAmount                Decimal?                     @map("target_amount") @db.Decimal(14, 2)
+  createdBy                   String?                      @map("created_by") @db.Char(36)
+  createdByUser               User?                        @relation("StaffSalaryOverrideCreatedBy", fields: [createdBy], references: [id], onDelete: SetNull)
+  createdAt                   DateTime                     @default(now()) @map("created_at")
+  updatedAt                   DateTime                     @updatedAt @map("updated_at")
+  status                      Status                       @default(Active)
+  staffSalaryProcessOverrides StaffSalaryProcessOverride[]
+
+  @@index([staffId])
+  @@index([componentId])
+  @@map("staff_salary_override_components")
+}
+
+model StaffSalaryProcessOverride {
+  id                             String                       @id @default(uuid()) @db.Char(36)
+  staffSalaryOverrideComponentId String                       @map("staff_salary_override_component_id") @db.Char(36)
+  staffSalaryOverrideComponent   StaffSalaryOverrideComponent @relation(fields: [staffSalaryOverrideComponentId], references: [id])
+  amount                         Decimal                      @map("amount") @db.Decimal(14, 2)
+  status                         Status                       @default(Active)
+  year                           Int                          @map("year")
+  month                          Int                          @map("month")
+  createdAt                      DateTime                     @default(now()) @map("created_at")
+  updatedAt                      DateTime                     @updatedAt @map("updated_at")
+
+  @@map("staff_salary_process_overrides")
+}
+
+model PayrollProcess {
+  id                String             @id @default(uuid()) @db.Char(36)
+  staffId           String             @map("staff_id") @db.Char(36)
+  staff             Staff              @relation(fields: [staffId], references: [id])
+  year              Int                @map("year")
+  month             Int                @map("month")
+  gradeLevelId      String             @map("grade_level_id") @db.Char(36)
+  gradeLevel        GradeLevel         @relation(fields: [gradeLevelId], references: [id])
+  step              Int                @map("step")
+  employmentType    EmploymentType     @map("employment_type")
+  grossEarnings     Decimal            @default(0) @map("gross_earnings") @db.Decimal(14, 2)
+  netAllowances     Decimal            @default(0) @map("net_allowances") @db.Decimal(14, 2)
+  netEarnings       Decimal            @default(0) @map("net_earnings") @db.Decimal(14, 2)
+  netDeductions     Decimal            @default(0) @map("deductions") @db.Decimal(14, 2)
+  netPay            Decimal            @default(0) @map("net_pay") @db.Decimal(14, 2)
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  payrollComponents PayrollComponent[]
+  isPosted          Boolean            @default(false) @map("is_posted")
+  isApproved        Boolean            @default(false) @map("is_approved")
+  approvedAt        DateTime?          @map("approved_at")
+  approvedBy        String?            @map("approved_by") @db.Char(36)
+  approvedByUser    User?              @relation("PayrollProcessesApproved", fields: [approvedBy], references: [id], onDelete: SetNull)
+  postedAt          DateTime?          @map("posted_at")
+  postedBy          String?            @map("posted_by") @db.Char(36)
+  postedByUser      User?              @relation("PayrollProcessesPosted", fields: [postedBy], references: [id], onDelete: SetNull)
+  userId            String?            @map("user_id") @db.Char(36)
+  user              User?              @relation("PayrollProcesses", fields: [userId], references: [id], onDelete: SetNull)
+  remarks           String?            @map("remarks")
+
+  @@index([staffId])
+  @@index([gradeLevelId])
+  @@index([step])
+  @@index([employmentType])
+  @@map("payroll_processes")
+}
+
+model PayrollComponent {
+  id               String          @id @default(uuid()) @db.Char(36)
+  payrollProcessId String          @map("payroll_process_id") @db.Char(36)
+  payrollProcess   PayrollProcess  @relation(fields: [payrollProcessId], references: [id])
+  componentId      String          @map("component_id") @db.Char(36)
+  component        SalaryComponent @relation(fields: [componentId], references: [id])
+  amount           Decimal         @default(0) @map("amount") @db.Decimal(14, 2)
+  month            Int             @map("month")
+  year             Int             @map("year")
+  status           Status          @default(Active)
+  isApproved       Boolean         @default(false) @map("is_approved")
+  isPosted         Boolean         @default(false) @map("is_posted")
+
+  @@index([payrollProcessId])
+  @@index([componentId])
+  @@map("payroll_components")
+}
+
+model ActivePayrollPeriod {
+  id        String   @id @default(uuid()) @db.Char(36)
+  year      Int      @map("year")
+  month     Int      @map("month")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([year])
+  @@index([month])
+  @@map("active_payroll_period")
 }
