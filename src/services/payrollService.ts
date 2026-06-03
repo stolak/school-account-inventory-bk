@@ -21,6 +21,8 @@ const salaryComponentSelect = {
   isPensionable: true,
   isStatutory: true,
   isFunction: true,
+  functionPercentage: true,
+  functionElements: true,
 } satisfies Prisma.SalaryComponentSelect;
 
 type ActiveSalaryComponent = Prisma.SalaryComponentGetPayload<{
