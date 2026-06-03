@@ -113,9 +113,7 @@ function buildStaffPayrollCharts(
 
   const fromCharts: StaffPayrollChartRow[] = charts.map((chart) => ({
     ...chart,
-    amount: new Prisma.Decimal(
-      overridesByComponentId.get(chart.componentId) ?? chart.amount
-    ),
+    amount: new Prisma.Decimal(overridesByComponentId.get(chart.componentId) ?? chart.amount),
   }));
 
   const overrideOnlyCharts: StaffPayrollChartRow[] = [];
@@ -139,10 +137,16 @@ function buildStaffPayrollCharts(
 
 function computePayrollTotals(charts: StaffPayrollChartRow[]): {
   netEarnings: number;
+  netGross: number;
   netDeductions: number;
   netAllowances: number;
   netPay: number;
 } {
+  const netGross = charts
+    .filter(
+      (chart) => chart.component.type === SalaryComponentType.EARNING && chart.component.isStatutory
+    )
+    .reduce((acc, chart) => acc + Number(chart.amount), 0);
   const netEarnings = charts
     .filter((chart) => chart.component.type === SalaryComponentType.EARNING)
     .reduce((acc, chart) => acc + Number(chart.amount), 0);
@@ -150,9 +154,18 @@ function computePayrollTotals(charts: StaffPayrollChartRow[]): {
     .filter((chart) => chart.component.type === SalaryComponentType.DEDUCTION)
     .reduce((acc, chart) => acc + Number(chart.amount), 0);
   const netAllowances = charts
-    .filter((chart) => chart.component.type === SalaryComponentType.EARNING)
+    .filter(
+      (chart) =>
+        chart.component.type === SalaryComponentType.EARNING && !chart.component.isStatutory
+    )
     .reduce((acc, chart) => acc + Number(chart.amount), 0);
-  return { netEarnings, netDeductions, netAllowances, netPay: netEarnings - netDeductions };
+  return {
+    netEarnings,
+    netGross,
+    netDeductions,
+    netAllowances,
+    netPay: netEarnings - netDeductions,
+  };
 }
 
 const payrollReportComponentSelect = {
@@ -596,7 +609,7 @@ export class PayrollService {
               activeSalaryComponents
             );
 
-            const { netEarnings, netDeductions, netAllowances, netPay } =
+            const { netEarnings, netGross, netDeductions, netAllowances, netPay } =
               computePayrollTotals(chartsWithAmounts);
 
             const payrollProcess = await tx.payrollProcess.create({
@@ -607,7 +620,7 @@ export class PayrollService {
                 gradeLevelId: staff.gradeLevelId,
                 step: staff.step,
                 employmentType: staff.employmentType,
-                grossEarnings: netEarnings,
+                grossEarnings: netGross,
                 netAllowances,
                 netEarnings,
                 netDeductions,
