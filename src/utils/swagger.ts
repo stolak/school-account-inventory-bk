@@ -106,6 +106,14 @@ const options: swaggerJSDoc.Options = {
         name: "StaffSalaryOverrideComponents",
         description: "Staff-specific salary component override amounts (CRUD)",
       },
+      {
+        name: "Payroll",
+        description: "Payroll computation and processing",
+      },
+      {
+        name: "ActivePayrollPeriod",
+        description: "Active payroll period singleton (year and month for current payroll run)",
+      },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
       { name: "Sales", description: "Inventory sales transactions (bulk create, list, grouped by reference)" },

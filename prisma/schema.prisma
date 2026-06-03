@@ -1139,11 +1139,12 @@ model Department {
 }
 
 model GradeLevel {
-  id           String        @id @default(uuid()) @db.Char(36)
-  name         String
-  status       Status        @default(Active)
-  staff        Staff[]
-  salaryCharts SalaryChart[]
+  id               String           @id @default(uuid()) @db.Char(36)
+  name             String
+  status           Status           @default(Active)
+  staff            Staff[]
+  salaryCharts     SalaryChart[]
+  payrollProcesses PayrollProcess[]
 
   @@index([id])
   @@map("grade_levels")
@@ -1208,6 +1209,7 @@ model SalaryComponent {
   status                        Status                         @default(Active)
   isTaxable                     Boolean                        @default(false) @map("is_taxable")
   isPensionable                 Boolean                        @default(false) @map("is_pensionable")
+  isStatutory                   Boolean                        @default(false) @map("is_statutory")
   isFunction                    Boolean                        @default(false) @map("is_function")
   salaryCharts                  SalaryChart[]
   functionPercentage            Decimal?                       @map("function_percentage") @db.Decimal(14, 2)
@@ -1241,6 +1243,8 @@ model SalaryChart {
   @@unique([gradeLevelId, step, employmentType, componentId])
   @@index([gradeLevelId])
   @@index([componentId])
+  @@index([employmentType])
+  @@index([step])
   @@map("salary_charts")
 }
 
@@ -1285,10 +1289,23 @@ model PayrollProcess {
   staff             Staff              @relation(fields: [staffId], references: [id])
   year              Int                @map("year")
   month             Int                @map("month")
+  gradeLevelId      String             @map("grade_level_id") @db.Char(36)
+  gradeLevel        GradeLevel         @relation(fields: [gradeLevelId], references: [id])
+  step              Int                @map("step")
+  employmentType    EmploymentType     @map("employment_type")
+  grossEarnings     Decimal            @default(0) @map("gross_earnings") @db.Decimal(14, 2)
+  netAllowances     Decimal            @default(0) @map("net_allowances") @db.Decimal(14, 2)
+  netEarnings       Decimal            @default(0) @map("net_earnings") @db.Decimal(14, 2)
+  netDeductions     Decimal            @default(0) @map("deductions") @db.Decimal(14, 2)
+  netPay            Decimal            @default(0) @map("net_pay") @db.Decimal(14, 2)
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
   payrollComponents PayrollComponent[]
 
+  @@index([staffId])
+  @@index([gradeLevelId])
+  @@index([step])
+  @@index([employmentType])
   @@map("payroll_processes")
 }
 
@@ -1298,7 +1315,9 @@ model PayrollComponent {
   payrollProcess   PayrollProcess  @relation(fields: [payrollProcessId], references: [id])
   componentId      String          @map("component_id") @db.Char(36)
   component        SalaryComponent @relation(fields: [componentId], references: [id])
-  amount           Decimal         @map("amount") @db.Decimal(14, 2)
+  amount           Decimal         @default(0) @map("amount") @db.Decimal(14, 2)
+  month            Int             @map("month")
+  year             Int             @map("year")
   status           Status          @default(Active)
   createdAt        DateTime        @default(now()) @map("created_at")
   updatedAt        DateTime        @updatedAt @map("updated_at")
@@ -1306,4 +1325,16 @@ model PayrollComponent {
   @@index([payrollProcessId])
   @@index([componentId])
   @@map("payroll_components")
+}
+
+model ActivePayrollPeriod {
+  id        String   @id @default(uuid()) @db.Char(36)
+  year      Int      @map("year")
+  month     Int      @map("month")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([year])
+  @@index([month])
+  @@map("active_payroll_period")
 }
