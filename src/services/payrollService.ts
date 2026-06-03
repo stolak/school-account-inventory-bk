@@ -97,13 +97,44 @@ function groupStaffSalaryOverridesByStaff(
 }
 
 function buildStaffPayrollCharts(
+  staff: {
+    gradeLevelId: string;
+    step: number;
+    employmentType: EmploymentType;
+  },
   charts: Array<StaffSalaryChartRow & { component: ActiveSalaryComponent }>,
-  overridesByComponentId: Map<string, Prisma.Decimal>
+  overridesByComponentId: Map<string, Prisma.Decimal>,
+  activeSalaryComponents: ActiveSalaryComponent[]
 ): StaffPayrollChartRow[] {
-  return charts.map((chart) => ({
+  const activeComponentById = new Map(
+    activeSalaryComponents.map((component) => [component.id, component])
+  );
+  const chartComponentIds = new Set(charts.map((chart) => chart.componentId));
+
+  const fromCharts: StaffPayrollChartRow[] = charts.map((chart) => ({
     ...chart,
-    amount: new Prisma.Decimal(overridesByComponentId.get(chart.componentId) ?? chart.amount),
+    amount: new Prisma.Decimal(
+      overridesByComponentId.get(chart.componentId) ?? chart.amount
+    ),
   }));
+
+  const overrideOnlyCharts: StaffPayrollChartRow[] = [];
+  for (const [componentId, amount] of overridesByComponentId) {
+    if (chartComponentIds.has(componentId)) continue;
+    const component = activeComponentById.get(componentId);
+    if (!component) continue;
+
+    overrideOnlyCharts.push({
+      gradeLevelId: staff.gradeLevelId,
+      step: staff.step,
+      employmentType: staff.employmentType,
+      componentId,
+      component,
+      amount: new Prisma.Decimal(amount),
+    });
+  }
+
+  return [...fromCharts, ...overrideOnlyCharts];
 }
 
 function computePayrollTotals(charts: StaffPayrollChartRow[]): {
@@ -514,16 +545,11 @@ export class PayrollService {
       });
 
       const { year, month } = activePayrollPeriod;
-      console.log("activeSalaryComponents", activeSalaryComponents);
-      const staffPayrollPlans = activeStaffs
-        .map((staff) => ({
-          staff,
-          salaryCharts: mapSalaryChartsForStaff(staff, chartsBySlot, activeSalaryComponents),
-        }))
-        .filter((plan) => plan.salaryCharts.length > 0);
 
-      const staffIdsWithCharts = staffPayrollPlans.map((plan) => plan.staff.id);
-      // console.log("staffIdsWithCharts", staffIdsWithCharts);
+      const staffEligibleForPayroll = activeStaffs.filter(
+        (staff): staff is (typeof activeStaffs)[number] & { gradeLevelId: string } =>
+          Boolean(staff.gradeLevelId)
+      );
 
       await prisma.$transaction(
         async (tx) => {
@@ -538,22 +564,38 @@ export class PayrollService {
           await tx.payrollProcess.deleteMany({ where: { year, month } });
           await tx.staffSalaryProcessOverride.deleteMany({ where: { year, month } });
 
+          const staffIds = staffEligibleForPayroll.map((staff) => staff.id);
           const overrideRows =
-            staffIdsWithCharts.length > 0
+            staffIds.length > 0
               ? await tx.staffSalaryOverrideComponent.findMany({
-                  where: { staffId: { in: staffIdsWithCharts }, status: Status.Active },
+                  where: { staffId: { in: staffIds }, status: Status.Active },
                   select: { staffId: true, componentId: true, amount: true },
                 })
               : [];
-          console.log("overrideRows", overrideRows);
           const overridesByStaffId = groupStaffSalaryOverridesByStaff(overrideRows);
-          console.log("overridesByStaffId", overridesByStaffId);
 
-          for (const { staff, salaryCharts } of staffPayrollPlans) {
-            const chartsWithAmounts = buildStaffPayrollCharts(
-              salaryCharts,
-              overridesByStaffId.get(staff.id) ?? new Map()
+          for (const staff of staffEligibleForPayroll) {
+            const salaryCharts = mapSalaryChartsForStaff(
+              staff,
+              chartsBySlot,
+              activeSalaryComponents
             );
+            const staffOverrides = overridesByStaffId.get(staff.id) ?? new Map();
+            if (salaryCharts.length === 0 && staffOverrides.size === 0) {
+              continue;
+            }
+
+            const chartsWithAmounts = buildStaffPayrollCharts(
+              {
+                gradeLevelId: staff.gradeLevelId,
+                step: staff.step,
+                employmentType: staff.employmentType,
+              },
+              salaryCharts,
+              staffOverrides,
+              activeSalaryComponents
+            );
+
             const { netEarnings, netDeductions, netAllowances, netPay } =
               computePayrollTotals(chartsWithAmounts);
 
@@ -562,7 +604,7 @@ export class PayrollService {
                 staffId: staff.id,
                 year,
                 month,
-                gradeLevelId: staff.gradeLevelId!,
+                gradeLevelId: staff.gradeLevelId,
                 step: staff.step,
                 employmentType: staff.employmentType,
                 grossEarnings: netEarnings,
