@@ -130,6 +130,10 @@ export interface PayrollReportStaffPayrollRow {
   netEarnings: string;
   netDeductions: string;
   netPay: string;
+  isApproved: boolean;
+  isPosted: boolean;
+  approvedAt: Date | null;
+  postedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   staff: { id: string; StaffNumber: string; name: string };
@@ -178,6 +182,8 @@ function mapPayrollReportComponentRow(row: {
   };
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function validateReportYearMonth(year: number, month: number): void {
   if (!Number.isInteger(year) || year < 1900 || year > 2100) {
     throw new Error("year must be an integer between 1900 and 2100");
@@ -185,6 +191,54 @@ function validateReportYearMonth(year: number, month: number): void {
   if (!Number.isInteger(month) || month < 1 || month > 12) {
     throw new Error("month must be an integer between 1 and 12");
   }
+}
+
+function normalizePayrollProcessIds(ids: unknown): string[] | undefined {
+  if (ids === undefined) return undefined;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    throw new Error("ids must be a non-empty array when provided");
+  }
+  const unique = [...new Set(ids.map((id) => (typeof id === "string" ? id.trim() : "")))];
+  if (unique.some((id) => !UUID_RE.test(id))) {
+    throw new Error("ids must contain valid UUID payroll process ids");
+  }
+  return unique;
+}
+
+function payrollProcessPeriodWhere(
+  year: number,
+  month: number,
+  ids?: string[]
+): Prisma.PayrollProcessWhereInput {
+  return {
+    year,
+    month,
+    ...(ids ? { id: { in: ids } } : {}),
+  };
+}
+
+async function assertPayrollProcessesMatchPeriod(
+  year: number,
+  month: number,
+  ids: string[]
+): Promise<void> {
+  const count = await prisma.payrollProcess.count({
+    where: payrollProcessPeriodWhere(year, month, ids),
+  });
+  if (count !== ids.length) {
+    throw new Error("One or more payroll process ids are invalid for the given year and month");
+  }
+}
+
+export interface PayrollPeriodActionInput {
+  year: number;
+  month: number;
+  actedBy: string;
+  ids?: string[];
+}
+
+export interface PayrollApprovalInput extends PayrollPeriodActionInput {
+  approved: boolean;
 }
 
 export class PayrollService {
@@ -257,6 +311,10 @@ export class PayrollService {
       netEarnings: process.netEarnings.toString(),
       netDeductions: process.netDeductions.toString(),
       netPay: process.netPay.toString(),
+      isApproved: process.isApproved,
+      isPosted: process.isPosted,
+      approvedAt: process.approvedAt,
+      postedAt: process.postedAt,
       createdAt: process.createdAt,
       updatedAt: process.updatedAt,
       staff: process.staff,
@@ -267,6 +325,124 @@ export class PayrollService {
     }));
 
     return { periodComponent, staffPayroll };
+  }
+
+  async setApproval(input: PayrollApprovalInput): Promise<{ count: number; approved: boolean }> {
+    validateReportYearMonth(input.year, input.month);
+    const actedBy = input.actedBy?.trim();
+    if (!actedBy) throw new Error("actedBy is required");
+
+    const ids = normalizePayrollProcessIds(input.ids);
+    if (ids) await assertPayrollProcessesMatchPeriod(input.year, input.month, ids);
+
+    const where = payrollProcessPeriodWhere(input.year, input.month, ids);
+
+    if (!input.approved) {
+      const postedCount = await prisma.payrollProcess.count({
+        where: { ...where, isPosted: true },
+      });
+      if (postedCount > 0) {
+        throw new Error("Posted payroll records cannot be unapproved");
+      }
+    }
+
+    const now = new Date();
+    const processData: Prisma.PayrollProcessUncheckedUpdateManyInput = input.approved
+      ? {
+          isApproved: true,
+          approvedBy: actedBy,
+          approvedAt: now,
+        }
+      : {
+          isApproved: false,
+          approvedBy: null,
+          approvedAt: null,
+        };
+
+    const componentData: Prisma.PayrollComponentUncheckedUpdateManyInput = input.approved
+      ? { isApproved: true }
+      : { isApproved: false };
+
+    return prisma.$transaction(async (tx) => {
+      const processes = await tx.payrollProcess.findMany({
+        where,
+        select: { id: true },
+      });
+      if (processes.length === 0) {
+        return { count: 0, approved: input.approved };
+      }
+
+      const processIds = processes.map((p) => p.id);
+
+      const processResult = await tx.payrollProcess.updateMany({
+        where: { id: { in: processIds } },
+        data: processData,
+      });
+
+      await tx.payrollComponent.updateMany({
+        where: {
+          payrollProcessId: { in: processIds },
+          year: input.year,
+          month: input.month,
+        },
+        data: componentData,
+      });
+
+      return { count: processResult.count, approved: input.approved };
+    });
+  }
+
+  async postPayroll(input: PayrollPeriodActionInput): Promise<{ count: number }> {
+    validateReportYearMonth(input.year, input.month);
+    const actedBy = input.actedBy?.trim();
+    if (!actedBy) throw new Error("actedBy is required");
+
+    const ids = normalizePayrollProcessIds(input.ids);
+    if (ids) await assertPayrollProcessesMatchPeriod(input.year, input.month, ids);
+
+    const where = payrollProcessPeriodWhere(input.year, input.month, ids);
+
+    const notApprovedCount = await prisma.payrollProcess.count({
+      where: { ...where, isApproved: false },
+    });
+    if (notApprovedCount > 0) {
+      throw new Error("Only approved payroll records can be posted");
+    }
+
+    const now = new Date();
+
+    return prisma.$transaction(async (tx) => {
+      const toPost = await tx.payrollProcess.findMany({
+        where: { ...where, isPosted: false },
+        select: { id: true },
+      });
+      if (toPost.length === 0) {
+        return { count: 0 };
+      }
+
+      const processIds = toPost.map((p) => p.id);
+
+      const result = await tx.payrollProcess.updateMany({
+        where: { id: { in: processIds }, isPosted: false },
+        data: {
+          isPosted: true,
+          postedBy: actedBy,
+          postedAt: now,
+        },
+      });
+
+      await tx.payrollComponent.updateMany({
+        where: {
+          payrollProcessId: { in: processIds },
+          year: input.year,
+          month: input.month,
+          isPosted: false,
+        },
+        data: { isPosted: true },
+      });
+
+      return { count: result.count };
+    });
   }
 
   async compute(): Promise<{ success: boolean; message: string }> {
@@ -306,12 +482,23 @@ export class PayrollService {
         select: salaryComponentSelect,
       });
 
-      // const salaryComponentsByType = groupSalaryComponentsByType(activeSalaryComponents);
-      // delete all payroll components for the active payroll period
+      const postedInPeriod = await prisma.payrollProcess.count({
+        where: {
+          year: activePayrollPeriod.year,
+          month: activePayrollPeriod.month,
+          isPosted: true,
+        },
+      });
+      if (postedInPeriod > 0) {
+        return {
+          success: false,
+          message: "Cannot recompute payroll for a period that contains posted records",
+        };
+      }
+
       await prisma.payrollComponent.deleteMany({
         where: { year: activePayrollPeriod.year, month: activePayrollPeriod.month },
       });
-      // delete all payroll processes for the active payroll period
       await prisma.payrollProcess.deleteMany({
         where: { year: activePayrollPeriod.year, month: activePayrollPeriod.month },
       });
@@ -378,8 +565,6 @@ export class PayrollService {
                   year: activePayrollPeriod.year,
                   componentId: chart.componentId,
                   amount: chart.amount,
-                  createdAt: new Date(),
-                  updatedAt: new Date(),
                 })),
               });
             });
