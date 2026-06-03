@@ -87,7 +87,11 @@ function groupStaffSalaryOverridesByStaff(
       byComponent = new Map();
       byStaff.set(row.staffId, byComponent);
     }
-    byComponent.set(row.componentId, row.amount);
+    const existing = byComponent.get(row.componentId);
+    byComponent.set(
+      row.componentId,
+      existing ? existing.add(row.amount) : new Prisma.Decimal(row.amount)
+    );
   }
   return byStaff;
 }
@@ -510,7 +514,7 @@ export class PayrollService {
       });
 
       const { year, month } = activePayrollPeriod;
-
+      console.log("activeSalaryComponents", activeSalaryComponents);
       const staffPayrollPlans = activeStaffs
         .map((staff) => ({
           staff,
@@ -544,6 +548,7 @@ export class PayrollService {
           console.log("overrideRows", overrideRows);
           const overridesByStaffId = groupStaffSalaryOverridesByStaff(overrideRows);
           console.log("overridesByStaffId", overridesByStaffId);
+
           for (const { staff, salaryCharts } of staffPayrollPlans) {
             const chartsWithAmounts = buildStaffPayrollCharts(
               salaryCharts,
