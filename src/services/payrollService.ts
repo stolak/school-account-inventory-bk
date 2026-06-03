@@ -29,6 +29,23 @@ type ActiveSalaryComponent = Prisma.SalaryComponentGetPayload<{
   select: typeof salaryComponentSelect;
 }>;
 
+function compareSalaryComponentsByTypeAndRank<
+  T extends { type: SalaryComponentType; rank: number; name: string },
+>(a: T, b: T): number {
+  const typeOrder = (type: SalaryComponentType) => (type === SalaryComponentType.EARNING ? 0 : 1);
+  const byType = typeOrder(a.type) - typeOrder(b.type);
+  if (byType !== 0) return byType;
+  return a.rank - b.rank || a.name.localeCompare(b.name);
+}
+
+function sortActiveSalaryComponents(components: ActiveSalaryComponent[]): ActiveSalaryComponent[] {
+  return [...components].sort(compareSalaryComponentsByTypeAndRank);
+}
+
+function sortPayrollChartRows(rows: StaffPayrollChartRow[]): StaffPayrollChartRow[] {
+  return [...rows].sort((a, b) => compareSalaryComponentsByTypeAndRank(a.component, b.component));
+}
+
 function salaryChartSlotKey(
   gradeLevelId: string,
   step: number,
@@ -221,6 +238,108 @@ function groupStaffSalaryOverridesByStaff(
   return byStaff;
 }
 
+function parseFunctionElementIds(value: Prisma.JsonValue | null): string[] {
+  if (value == null || !Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string" && item.trim().length > 0)
+    .map((item) => item.trim());
+}
+
+function getEffectiveOverrideAmount(
+  overridesByComponentId: Map<string, Prisma.Decimal>,
+  componentId: string
+): Prisma.Decimal | undefined {
+  const override = overridesByComponentId.get(componentId);
+  if (override == null || override.isZero()) return undefined;
+  return new Prisma.Decimal(override);
+}
+
+function applyOverridePriority(
+  baseAmount: Prisma.Decimal,
+  overridesByComponentId: Map<string, Prisma.Decimal>,
+  componentId: string
+): Prisma.Decimal {
+  return getEffectiveOverrideAmount(overridesByComponentId, componentId) ?? baseAmount;
+}
+
+function calculateFunctionComponentAmount(
+  component: ActiveSalaryComponent,
+  resolvedAmounts: Map<string, Prisma.Decimal>
+): Prisma.Decimal {
+  const elementIds = parseFunctionElementIds(component.functionElements);
+  if (elementIds.length === 0 || component.functionPercentage == null) {
+    return new Prisma.Decimal(0);
+  }
+
+  let elementSum = new Prisma.Decimal(0);
+  for (const elementId of elementIds) {
+    const elementAmount = resolvedAmounts.get(elementId);
+    if (elementAmount != null) {
+      elementSum = elementSum.add(elementAmount);
+    }
+  }
+
+  const percentage = new Prisma.Decimal(component.functionPercentage);
+  return elementSum.mul(percentage).div(100);
+}
+
+function resolveFunctionComponentAmounts(
+  functionComponentIds: string[],
+  activeComponentById: Map<string, ActiveSalaryComponent>,
+  overridesByComponentId: Map<string, Prisma.Decimal>,
+  resolvedAmounts: Map<string, Prisma.Decimal>
+): void {
+  let pending = [...functionComponentIds];
+  let iterations = 0;
+
+  while (pending.length > 0 && iterations <= pending.length) {
+    iterations += 1;
+    const deferred: string[] = [];
+
+    for (const componentId of pending) {
+      const override = getEffectiveOverrideAmount(overridesByComponentId, componentId);
+      if (override) {
+        resolvedAmounts.set(componentId, override);
+        continue;
+      }
+
+      const component = activeComponentById.get(componentId);
+      if (!component?.isFunction) continue;
+
+      const elementIds = parseFunctionElementIds(component.functionElements);
+      const allElementsResolved = elementIds.every((id) => resolvedAmounts.has(id));
+      if (!allElementsResolved) {
+        deferred.push(componentId);
+        continue;
+      }
+
+      resolvedAmounts.set(
+        componentId,
+        calculateFunctionComponentAmount(component, resolvedAmounts)
+      );
+    }
+
+    if (deferred.length === pending.length) {
+      for (const componentId of deferred) {
+        const override = getEffectiveOverrideAmount(overridesByComponentId, componentId);
+        if (override) {
+          resolvedAmounts.set(componentId, override);
+          continue;
+        }
+        const component = activeComponentById.get(componentId);
+        if (!component) continue;
+        resolvedAmounts.set(
+          componentId,
+          calculateFunctionComponentAmount(component, resolvedAmounts)
+        );
+      }
+      break;
+    }
+
+    pending = deferred;
+  }
+}
+
 function buildStaffPayrollCharts(
   staff: {
     gradeLevelId: string;
@@ -234,30 +353,83 @@ function buildStaffPayrollCharts(
   const activeComponentById = new Map(
     activeSalaryComponents.map((component) => [component.id, component])
   );
-  const chartComponentIds = new Set(charts.map((chart) => chart.componentId));
+  const chartByComponentId = new Map(charts.map((chart) => [chart.componentId, chart]));
 
-  const fromCharts: StaffPayrollChartRow[] = charts.map((chart) => ({
-    ...chart,
-    amount: new Prisma.Decimal(overridesByComponentId.get(chart.componentId) ?? chart.amount),
-  }));
+  const componentIds = new Set<string>();
+  for (const chart of charts) componentIds.add(chart.componentId);
+  for (const componentId of overridesByComponentId.keys()) componentIds.add(componentId);
+  for (const component of activeSalaryComponents) {
+    if (component.isFunction) componentIds.add(component.id);
+  }
 
-  const overrideOnlyCharts: StaffPayrollChartRow[] = [];
-  for (const [componentId, amount] of overridesByComponentId) {
-    if (chartComponentIds.has(componentId)) continue;
+  const sortedComponents = sortActiveSalaryComponents(
+    [...componentIds]
+      .map((componentId) => activeComponentById.get(componentId))
+      .filter((component): component is ActiveSalaryComponent => component != null)
+  );
+
+  const nonFunctionIds = sortedComponents
+    .filter((component) => !component.isFunction)
+    .map((component) => component.id);
+  const functionIds = sortedComponents
+    .filter((component) => component.isFunction)
+    .map((component) => component.id);
+
+  const resolvedAmounts = new Map<string, Prisma.Decimal>();
+
+  for (const componentId of nonFunctionIds) {
+    const chart = chartByComponentId.get(componentId);
+    const baseAmount = chart ? new Prisma.Decimal(chart.amount) : new Prisma.Decimal(0);
+    resolvedAmounts.set(
+      componentId,
+      applyOverridePriority(baseAmount, overridesByComponentId, componentId)
+    );
+  }
+
+  resolveFunctionComponentAmounts(
+    functionIds,
+    activeComponentById,
+    overridesByComponentId,
+    resolvedAmounts
+  );
+
+  for (const componentId of functionIds) {
+    if (resolvedAmounts.has(componentId)) continue;
+    const override = getEffectiveOverrideAmount(overridesByComponentId, componentId);
+    if (override) {
+      resolvedAmounts.set(componentId, override);
+      continue;
+    }
     const component = activeComponentById.get(componentId);
-    if (!component) continue;
+    if (component) {
+      resolvedAmounts.set(
+        componentId,
+        calculateFunctionComponentAmount(component, resolvedAmounts)
+      );
+    }
+  }
 
-    overrideOnlyCharts.push({
+  for (const componentId of functionIds) {
+    if (!resolvedAmounts.has(componentId)) {
+      resolvedAmounts.set(componentId, new Prisma.Decimal(0));
+    }
+  }
+
+  const rows: StaffPayrollChartRow[] = [];
+  for (const component of sortedComponents) {
+    const amount = resolvedAmounts.get(component.id) ?? new Prisma.Decimal(0);
+
+    rows.push({
       gradeLevelId: staff.gradeLevelId,
       step: staff.step,
       employmentType: staff.employmentType,
-      componentId,
+      componentId: component.id,
       component,
-      amount: new Prisma.Decimal(amount),
+      amount,
     });
   }
 
-  return [...fromCharts, ...overrideOnlyCharts];
+  return sortPayrollChartRows(rows);
 }
 
 function computePayrollTotals(charts: StaffPayrollChartRow[]): {
@@ -350,23 +522,13 @@ export interface PayrollReportResult {
 function sortSalaryComponentsForReport(
   components: PayrollReportPeriodComponent[]
 ): PayrollReportPeriodComponent[] {
-  const typeOrder = (type: SalaryComponentType) => (type === SalaryComponentType.EARNING ? 0 : 1);
-  return [...components].sort((a, b) => {
-    const byType = typeOrder(a.type) - typeOrder(b.type);
-    if (byType !== 0) return byType;
-    return a.rank - b.rank || a.name.localeCompare(b.name);
-  });
+  return [...components].sort(compareSalaryComponentsByTypeAndRank);
 }
 
 function sortPayrollComponentsForReport<
   T extends { component: { type: SalaryComponentType; rank: number; name: string } },
 >(rows: T[]): T[] {
-  const typeOrder = (type: SalaryComponentType) => (type === SalaryComponentType.EARNING ? 0 : 1);
-  return [...rows].sort((a, b) => {
-    const byType = typeOrder(a.component.type) - typeOrder(b.component.type);
-    if (byType !== 0) return byType;
-    return a.component.rank - b.component.rank || a.component.name.localeCompare(b.component.name);
-  });
+  return [...rows].sort((a, b) => compareSalaryComponentsByTypeAndRank(a.component, b.component));
 }
 
 function mapPayrollReportComponentRow(row: {
@@ -677,11 +839,13 @@ export class PayrollService {
       });
 
       const chartsBySlot = groupSalaryChartsBySlot(salaryChartRows);
-      const activeSalaryComponents = await prisma.salaryComponent.findMany({
-        where: { status: Status.Active },
-        select: salaryComponentSelect,
-      });
-      console.log("activeSalaryComponents", activeSalaryComponents);
+      const activeSalaryComponents = sortActiveSalaryComponents(
+        await prisma.salaryComponent.findMany({
+          where: { status: Status.Active },
+          select: salaryComponentSelect,
+        })
+      );
+      // console.log("activeSalaryComponents", activeSalaryComponents);
       const { year, month } = activePayrollPeriod;
 
       const staffEligibleForPayroll = activeStaffs.filter(
