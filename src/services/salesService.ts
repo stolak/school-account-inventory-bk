@@ -173,7 +173,7 @@ export class SalesService {
     }
 
     const salesLedger =
-      await defaultAccountSettingsService.getAccountChartBySettingsId("SALES_LEDGER");
+      await defaultAccountSettingsService.getAccountChartBySettingsId("SALES_ACCOUNT");
 
     const salesIncomeAccountId = String(salesLedger.accountId);
     let staffAccountId = null;

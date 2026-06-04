@@ -215,27 +215,33 @@ async function upsertStaffWithUser(hashedPassword, input) {
     },
   });
 
+  const position = input.position ?? input.role ?? "teacher";
+  const staffData = {
+    email: normalizedEmail,
+    name: normalizedName,
+    position,
+    employmentType: input.employmentType ?? "Permanent",
+    status: input.status ?? "Active",
+    profileImageUrl: input.profileImageUrl ?? null,
+    createdById: input.createdById,
+    userId: user.id,
+    gradeLevelId: input.gradeLevelId ?? null,
+    departmentId: input.departmentId ?? null,
+    step: input.step ?? 0,
+    salary: input.salary ?? 0,
+    dateOfBirth: input.dateOfBirth ?? null,
+    dateOfAppointment: input.dateOfAppointment ?? null,
+    dateOfResignation: input.dateOfResignation ?? null,
+    dateOfTermination: input.dateOfTermination ?? null,
+  };
+
   await prisma.staff.upsert({
     where: { StaffNumber: normalizedStaffNumber },
-    update: {
-      email: normalizedEmail,
-      name: normalizedName,
-      position: input.position ?? "teacher",
-      status: input.status ?? "Active",
-      profileImageUrl: input.profileImageUrl ?? null,
-      createdById: input.createdById,
-      userId: user.id,
-    },
+    update: staffData,
     create: {
       id: input.id,
       StaffNumber: normalizedStaffNumber,
-      email: normalizedEmail,
-      name: normalizedName,
-      position: input.position ?? "teacher",
-      status: input.status ?? "Active",
-      profileImageUrl: input.profileImageUrl ?? null,
-      createdById: input.createdById,
-      userId: user.id,
+      ...staffData,
     },
   });
 }
@@ -1435,6 +1441,175 @@ async function main() {
         status: "Active",
         rank: 35,
       },
+      // Additional payroll expense ledgers (subhead 11)
+      {
+        id: 36,
+        groupId: 4,
+        headId: 6,
+        subheadId: 11,
+        accountNo: "4101005",
+        accountRef: "EXP-MEAL",
+        accountDescription: "Meal Allowance Expense",
+        status: "Active",
+        rank: 36,
+      },
+      {
+        id: 37,
+        groupId: 4,
+        headId: 6,
+        subheadId: 11,
+        accountNo: "4101006",
+        accountRef: "EXP-OVERTIME",
+        accountDescription: "Overtime Expense",
+        status: "Active",
+        rank: 37,
+      },
+      {
+        id: 38,
+        groupId: 4,
+        headId: 6,
+        subheadId: 11,
+        accountNo: "4101007",
+        accountRef: "EXP-BONUS",
+        accountDescription: "Bonus Expense",
+        status: "Active",
+        rank: 38,
+      },
+      {
+        id: 39,
+        groupId: 4,
+        headId: 6,
+        subheadId: 11,
+        accountNo: "4101008",
+        accountRef: "EXP-LEAVE",
+        accountDescription: "Leave Allowance Expense",
+        status: "Active",
+        rank: 39,
+      },
+      // Additional payroll liability ledgers (subhead 19 — Accounts Payable)
+      {
+        id: 40,
+        groupId: 2,
+        headId: 3,
+        subheadId: 19,
+        accountNo: "2103006",
+        accountRef: "AP-NSITF",
+        accountDescription: "NSITF Payable",
+        status: "Active",
+        rank: 40,
+      },
+      {
+        id: 41,
+        groupId: 2,
+        headId: 3,
+        subheadId: 19,
+        accountNo: "2103007",
+        accountRef: "AP-ITF",
+        accountDescription: "ITF Payable",
+        status: "Active",
+        rank: 41,
+      },
+      {
+        id: 42,
+        groupId: 2,
+        headId: 3,
+        subheadId: 19,
+        accountNo: "2103008",
+        accountRef: "AP-COOP",
+        accountDescription: "Cooperative Payable",
+        status: "Active",
+        rank: 42,
+      },
+      {
+        id: 43,
+        groupId: 2,
+        headId: 3,
+        subheadId: 19,
+        accountNo: "2103009",
+        accountRef: "AP-UNION",
+        accountDescription: "Union Dues Payable",
+        status: "Active",
+        rank: 43,
+      },
+      // Staff payroll receivables (subhead 2 — Accounts Receivable)
+      {
+        id: 44,
+        groupId: 1,
+        headId: 1,
+        subheadId: 2,
+        accountNo: "1102003",
+        accountRef: "AR-STAFF-ADVANCE",
+        accountDescription: "Staff Advance Salary Receivable",
+        status: "Active",
+        rank: 44,
+      },
+      {
+        id: 45,
+        groupId: 1,
+        headId: 1,
+        subheadId: 2,
+        accountNo: "1102004",
+        accountRef: "AR-STAFF",
+        accountDescription: "Staff Accounts Receivable",
+        status: "Active",
+        rank: 45,
+      },
+      {
+        id: 46,
+        groupId: 5,
+        headId: 7,
+        subheadId: 17,
+        accountNo: "5102002",
+        accountRef: "INC-SALES",
+        accountDescription: "Sales Income",
+        status: "Active",
+        rank: 46,
+      },
+      // Cashier tills (subhead 1 — Cash and Bank)
+      {
+        id: 47,
+        groupId: 1,
+        headId: 1,
+        subheadId: 1,
+        accountNo: "1101010",
+        accountRef: "CASH-ADMIN",
+        accountDescription: "Cashier Ledger - School Admin",
+        status: "Active",
+        rank: 47,
+      },
+      {
+        id: 48,
+        groupId: 1,
+        headId: 1,
+        subheadId: 1,
+        accountNo: "1101011",
+        accountRef: "CASH-ACCTS",
+        accountDescription: "Cashier Ledger - Accounts Office",
+        status: "Active",
+        rank: 48,
+      },
+      {
+        id: 49,
+        groupId: 1,
+        headId: 1,
+        subheadId: 1,
+        accountNo: "1101012",
+        accountRef: "CASH-STORE",
+        accountDescription: "Cashier Ledger - Store Sales",
+        status: "Active",
+        rank: 49,
+      },
+      {
+        id: 50,
+        groupId: 1,
+        headId: 1,
+        subheadId: 1,
+        accountNo: "1101013",
+        accountRef: "CASH-RECEPTION",
+        accountDescription: "Cashier Ledger - Reception",
+        status: "Active",
+        rank: 50,
+      },
     ];
 
     for (const c of accountCharts) {
@@ -1483,6 +1658,11 @@ async function main() {
         settings: "Default subhead for consumable expense postings",
         subheadId: 12,
       },
+      {
+        settingsId: "STAFF_SUBHEAD",
+        settings: "Default subhead for staff receivable postings (mirrors student AR subhead)",
+        subheadId: 2,
+      },
     ];
 
     for (const s of defaultSubheadSettings) {
@@ -1524,6 +1704,22 @@ async function main() {
         settingsId: "COMSUMABLE_EXPENSE_ACCOUNT",
         settings: "Default account for consumable expense postings",
         accountId: 13,
+      },
+      {
+        settingsId: "SALES_ACCOUNT",
+        settings: "Default income account for inventory and sales postings",
+        accountId: 46,
+      },
+      {
+        settingsId: "STAFF_ACCOUNT",
+        settings:
+          "Default accounts receivable ledger for staff (sales, collections, and staff sub-ledger)",
+        accountId: 45,
+      },
+      {
+        settingsId: "STAFF_SALARY_PAYABLE_ACCOUNT",
+        settings: "Default accounts payable ledger for net staff salary liability",
+        accountId: 23,
       },
     ];
 
@@ -2673,6 +2869,301 @@ async function main() {
     console.log(`   ✓ ${facilities.length} facilities`);
 
     // Departments
+
+    // Salary components (earnings → expense accounts; deductions → payable; loan/advance → receivable)
+    console.log("💰 Seeding salary components...");
+    const SC = {
+      BAS: "comp0001-0000-4000-8000-000000000001",
+      HOU: "comp0001-0000-4000-8000-000000000002",
+      TRN: "comp0001-0000-4000-8000-000000000003",
+      MEA: "comp0001-0000-4000-8000-000000000004",
+      OVT: "comp0001-0000-4000-8000-000000000005",
+      BON: "comp0001-0000-4000-8000-000000000006",
+      LEV: "comp0001-0000-4000-8000-000000000007",
+      PAYE: "comp0001-0000-4000-8000-000000000008",
+      PEN: "comp0001-0000-4000-8000-000000000009",
+      NHF: "comp0001-0000-4000-8000-000000000010",
+      NSITF: "comp0001-0000-4000-8000-000000000011",
+      ITF: "comp0001-0000-4000-8000-000000000012",
+      LOAN: "comp0001-0000-4000-8000-000000000013",
+      COOP: "comp0001-0000-4000-8000-000000000014",
+      UNI: "comp0001-0000-4000-8000-000000000015",
+      ADV: "comp0001-0000-4000-8000-000000000016",
+    };
+
+    const salaryComponents = [
+      {
+        id: SC.BAS,
+        name: "Basic Salary",
+        shortName: "BAS",
+        type: "EARNING",
+        status: "Active",
+        isTaxable: true,
+        isPensionable: true,
+        isStatutory: true,
+        isFunction: false,
+        accountId: 20,
+        rank: 1,
+        isPrimary: true,
+      },
+      {
+        id: SC.HOU,
+        name: "Housing",
+        shortName: "HOU",
+        type: "EARNING",
+        status: "Active",
+        isTaxable: true,
+        isPensionable: true,
+        isStatutory: false,
+        isFunction: false,
+        accountId: 21,
+        rank: 2,
+        isPrimary: false,
+      },
+      {
+        id: SC.TRN,
+        name: "Transport",
+        shortName: "TRN",
+        type: "EARNING",
+        status: "Active",
+        isTaxable: true,
+        isPensionable: true,
+        isStatutory: false,
+        isFunction: false,
+        accountId: 22,
+        rank: 3,
+        isPrimary: false,
+      },
+      {
+        id: SC.MEA,
+        name: "Meal Allowance",
+        shortName: "MEA",
+        type: "EARNING",
+        status: "Active",
+        isTaxable: true,
+        isPensionable: true,
+        isStatutory: false,
+        isFunction: false,
+        accountId: 36,
+        rank: 4,
+        isPrimary: false,
+      },
+      {
+        id: SC.OVT,
+        name: "Overtime",
+        shortName: "OVT",
+        type: "EARNING",
+        status: "Active",
+        isTaxable: true,
+        isPensionable: false,
+        isStatutory: false,
+        isFunction: false,
+        accountId: 37,
+        rank: 5,
+        isPrimary: false,
+      },
+      {
+        id: SC.BON,
+        name: "Bonus",
+        shortName: "BON",
+        type: "EARNING",
+        status: "Active",
+        isTaxable: true,
+        isPensionable: false,
+        isStatutory: false,
+        isFunction: false,
+        accountId: 38,
+        rank: 6,
+        isPrimary: false,
+      },
+      {
+        id: SC.LEV,
+        name: "Leave Allowance",
+        shortName: "LEV",
+        type: "EARNING",
+        status: "Active",
+        isTaxable: true,
+        isPensionable: false,
+        isStatutory: false,
+        isFunction: false,
+        accountId: 39,
+        rank: 7,
+        isPrimary: false,
+      },
+      {
+        id: SC.PAYE,
+        name: "PAYE",
+        shortName: "PAYE",
+        type: "DEDUCTION",
+        status: "Active",
+        isTaxable: false,
+        isPensionable: false,
+        isStatutory: true,
+        isFunction: true,
+        functionPercentage: 100,
+        functionElements: [SC.BAS, SC.HOU, SC.TRN, SC.MEA],
+        accountId: 24,
+        rank: 1,
+        isPrimary: true,
+      },
+      {
+        id: SC.PEN,
+        name: "Pension",
+        shortName: "PEN",
+        type: "DEDUCTION",
+        status: "Active",
+        isTaxable: false,
+        isPensionable: false,
+        isStatutory: true,
+        isFunction: true,
+        functionPercentage: 8,
+        functionElements: [SC.BAS, SC.HOU, SC.TRN],
+        accountId: 25,
+        rank: 2,
+        isPrimary: true,
+      },
+      {
+        id: SC.NHF,
+        name: "NHF",
+        shortName: "NHF",
+        type: "DEDUCTION",
+        status: "Active",
+        isTaxable: false,
+        isPensionable: false,
+        isStatutory: true,
+        isFunction: true,
+        functionPercentage: 2,
+        functionElements: [SC.BAS, SC.MEA],
+        accountId: 27,
+        rank: 3,
+        isPrimary: true,
+      },
+      {
+        id: SC.NSITF,
+        name: "NSITF",
+        shortName: "NSITF",
+        type: "DEDUCTION",
+        status: "Active",
+        isTaxable: false,
+        isPensionable: false,
+        isStatutory: true,
+        isFunction: true,
+        functionPercentage: 1,
+        functionElements: [SC.BAS],
+        accountId: 40,
+        rank: 4,
+        isPrimary: true,
+      },
+      {
+        id: SC.ITF,
+        name: "ITF",
+        shortName: "ITF",
+        type: "DEDUCTION",
+        status: "Active",
+        isTaxable: false,
+        isPensionable: false,
+        isStatutory: true,
+        isFunction: true,
+        functionPercentage: 1,
+        functionElements: [SC.BAS],
+        accountId: 41,
+        rank: 5,
+        isPrimary: true,
+      },
+      {
+        id: SC.LOAN,
+        name: "Loan Repayment",
+        shortName: "LOAN",
+        type: "DEDUCTION",
+        status: "Active",
+        isTaxable: false,
+        isPensionable: false,
+        isStatutory: false,
+        isFunction: false,
+        accountId: 28,
+        rank: 6,
+        isPrimary: true,
+      },
+      {
+        id: SC.COOP,
+        name: "Cooperative",
+        shortName: "COOP",
+        type: "DEDUCTION",
+        status: "Active",
+        isTaxable: false,
+        isPensionable: false,
+        isStatutory: false,
+        isFunction: false,
+        accountId: 42,
+        rank: 7,
+        isPrimary: false,
+      },
+      {
+        id: SC.UNI,
+        name: "Union Dues",
+        shortName: "UNI",
+        type: "DEDUCTION",
+        status: "Active",
+        isTaxable: false,
+        isPensionable: false,
+        isStatutory: false,
+        isFunction: false,
+        accountId: 43,
+        rank: 8,
+        isPrimary: false,
+      },
+      {
+        id: SC.ADV,
+        name: "Advance Salary",
+        shortName: "ADV",
+        type: "DEDUCTION",
+        status: "Active",
+        isTaxable: false,
+        isPensionable: false,
+        isStatutory: false,
+        isFunction: false,
+        accountId: 44,
+        rank: 9,
+        isPrimary: true,
+      },
+    ];
+
+    for (const component of salaryComponents) {
+      const functionPercentage =
+        component.isFunction && component.functionPercentage != null
+          ? component.functionPercentage
+          : null;
+      const functionElements =
+        component.isFunction && Array.isArray(component.functionElements)
+          ? component.functionElements
+          : null;
+
+      await prisma.salaryComponent.upsert({
+        where: { id: component.id },
+        update: {
+          name: component.name,
+          shortName: component.shortName,
+          type: component.type,
+          status: component.status,
+          isTaxable: component.isTaxable,
+          isPensionable: component.isPensionable,
+          isStatutory: component.isStatutory,
+          isFunction: component.isFunction,
+          functionPercentage,
+          functionElements,
+          accountId: component.accountId,
+          rank: component.rank,
+          isPrimary: component.isPrimary,
+        },
+        create: {
+          ...component,
+          functionPercentage,
+          functionElements,
+        },
+      });
+    }
+    console.log(`   ✓ ${salaryComponents.length} salary components`);
+
     console.log("🏬 Seeding departments...");
     const departments = [
       { id: "depa0001-0000-4000-8000-000000000001", name: "Administration", status: "Active" },
@@ -2697,12 +3188,12 @@ async function main() {
     // Grade levels
     console.log("🏫 Seeding grade levels...");
     const gradeLevels = [
-      { id: "grad0001-0000-4000-8000-000000000001", name: "JSS 1", status: "Active" },
-      { id: "grad0001-0000-4000-8000-000000000002", name: "JSS 2", status: "Active" },
-      { id: "grad0001-0000-4000-8000-000000000003", name: "JSS 3", status: "Active" },
-      { id: "grad0001-0000-4000-8000-000000000004", name: "SS 1", status: "Active" },
-      { id: "grad0001-0000-4000-8000-000000000005", name: "SS 2", status: "Active" },
-      { id: "grad0001-0000-4000-8000-000000000006", name: "SS 3", status: "Active" },
+      { id: "grad0001-0000-4000-8000-000000000001", name: "GL1", status: "Active" },
+      { id: "grad0001-0000-4000-8000-000000000002", name: "GL2", status: "Active" },
+      { id: "grad0001-0000-4000-8000-000000000003", name: "GL3", status: "Active" },
+      { id: "grad0001-0000-4000-8000-000000000004", name: "GL4", status: "Active" },
+      { id: "grad0001-0000-4000-8000-000000000005", name: "GL5", status: "Active" },
+      { id: "grad0001-0000-4000-8000-000000000006", name: "GL6", status: "Active" },
     ];
 
     for (const gl of gradeLevels) {
@@ -2714,6 +3205,158 @@ async function main() {
     }
     console.log(`   ✓ ${gradeLevels.length} grade levels`);
 
+    const DEPT = {
+      ADMIN: "depa0001-0000-4000-8000-000000000001",
+      ACADEMICS: "depa0001-0000-4000-8000-000000000002",
+      ACCOUNTS: "depa0001-0000-4000-8000-000000000003",
+      ICT: "depa0001-0000-4000-8000-000000000004",
+      MAINTENANCE: "depa0001-0000-4000-8000-000000000005",
+      SECURITY: "depa0001-0000-4000-8000-000000000006",
+      BOARDING: "depa0001-0000-4000-8000-000000000007",
+      LIBRARY: "depa0001-0000-4000-8000-000000000008",
+    };
+
+    const GL = {
+      GL1: "grad0001-0000-4000-8000-000000000001",
+      GL2: "grad0001-0000-4000-8000-000000000002",
+      GL3: "grad0001-0000-4000-8000-000000000003",
+      GL4: "grad0001-0000-4000-8000-000000000004",
+      GL5: "grad0001-0000-4000-8000-000000000005",
+      GL6: "grad0001-0000-4000-8000-000000000006",
+    };
+
+    // Salary charts — one row per (gradeLevel, step, employmentType, component); deductions only Union Dues
+    console.log("📋 Seeding salary charts...");
+    const salaryChartSlots = [
+      {
+        slot: "000001",
+        gradeLevelId: GL.GL1,
+        step: 1,
+        employmentType: "Contractual",
+        amounts: {
+          [SC.BAS]: 185000,
+          [SC.HOU]: 18500,
+          [SC.TRN]: 12000,
+          [SC.MEA]: 8000,
+          [SC.UNI]: 500,
+        },
+      },
+      {
+        slot: "000002",
+        gradeLevelId: GL.GL2,
+        step: 2,
+        employmentType: "Permanent",
+        amounts: {
+          [SC.BAS]: 295000,
+          [SC.HOU]: 45000,
+          [SC.TRN]: 25000,
+          [SC.MEA]: 15000,
+          [SC.UNI]: 1000,
+        },
+      },
+      {
+        slot: "000003",
+        gradeLevelId: GL.GL3,
+        step: 3,
+        employmentType: "Permanent",
+        amounts: {
+          [SC.BAS]: 385000,
+          [SC.HOU]: 55000,
+          [SC.TRN]: 35000,
+          [SC.MEA]: 20000,
+          [SC.OVT]: 15000,
+          [SC.UNI]: 1500,
+        },
+      },
+      {
+        slot: "000004",
+        gradeLevelId: GL.GL4,
+        step: 4,
+        employmentType: "Permanent",
+        amounts: {
+          [SC.BAS]: 485000,
+          [SC.HOU]: 70000,
+          [SC.TRN]: 45000,
+          [SC.MEA]: 25000,
+          [SC.OVT]: 20000,
+          [SC.BON]: 50000,
+          [SC.UNI]: 2000,
+        },
+      },
+      {
+        slot: "000005",
+        gradeLevelId: GL.GL5,
+        step: 5,
+        employmentType: "Permanent",
+        amounts: {
+          [SC.BAS]: 720000,
+          [SC.HOU]: 120000,
+          [SC.TRN]: 60000,
+          [SC.MEA]: 35000,
+          [SC.OVT]: 30000,
+          [SC.BON]: 80000,
+          [SC.LEV]: 40000,
+          [SC.UNI]: 2500,
+        },
+      },
+      {
+        slot: "000006",
+        gradeLevelId: GL.GL6,
+        step: 6,
+        employmentType: "Permanent",
+        amounts: {
+          [SC.BAS]: 850000,
+          [SC.HOU]: 150000,
+          [SC.TRN]: 75000,
+          [SC.MEA]: 40000,
+          [SC.OVT]: 40000,
+          [SC.BON]: 100000,
+          [SC.LEV]: 60000,
+          [SC.UNI]: 3000,
+        },
+      },
+    ];
+
+    let salaryChartRowIndex = 0;
+    for (const chartSlot of salaryChartSlots) {
+      let componentIndex = 0;
+      for (const [componentId, amount] of Object.entries(chartSlot.amounts)) {
+        componentIndex += 1;
+        salaryChartRowIndex += 1;
+        const chartId = `chart0001-0000-4000-8000-${chartSlot.slot}${String(componentIndex).padStart(2, "0")}`;
+        await prisma.salaryChart.upsert({
+          where: {
+            gradeLevelId_step_employmentType_componentId: {
+              gradeLevelId: chartSlot.gradeLevelId,
+              step: chartSlot.step,
+              employmentType: chartSlot.employmentType,
+              componentId,
+            },
+          },
+          update: {
+            amount,
+            status: "Active",
+            createdBy: adminUserId,
+            updatedBy: adminUserId,
+          },
+          create: {
+            id: chartId,
+            gradeLevelId: chartSlot.gradeLevelId,
+            step: chartSlot.step,
+            employmentType: chartSlot.employmentType,
+            componentId,
+            amount,
+            status: "Active",
+            createdBy: adminUserId,
+            updatedBy: adminUserId,
+          },
+        });
+      }
+    }
+    console.log(
+      `   ✓ ${salaryChartRowIndex} salary chart rows (${salaryChartSlots.length} staff payroll slots)`
+    );
+
     // Staff (+ linked user accounts, same as StaffService.createStaffWithUser)
     console.log("👔 Seeding staff...");
     const staffMembers = [
@@ -2723,7 +3366,13 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909001",
         email: "ngozi.okonkwo@staff.school.ng",
         name: "Dr. Ngozi Okonkwo",
-        role: "principal",
+        position: "principal",
+        employmentType: "Permanent",
+        departmentId: DEPT.ADMIN,
+        gradeLevelId: GL.GL6,
+        step: 6,
+        salary: 850000,
+        dateOfAppointment: new Date("2015-09-01"),
         status: "Active",
         createdById: adminUserId,
       },
@@ -2733,7 +3382,13 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909002",
         email: "tunde.bello@staff.school.ng",
         name: "Mr. Tunde Bello",
-        role: "vice_principal",
+        position: "vice_principal",
+        employmentType: "Permanent",
+        departmentId: DEPT.ADMIN,
+        gradeLevelId: GL.GL5,
+        step: 5,
+        salary: 720000,
+        dateOfAppointment: new Date("2017-01-15"),
         status: "Active",
         createdById: adminUserId,
       },
@@ -2743,7 +3398,13 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909003",
         email: "ada.musa@staff.school.ng",
         name: "Mrs. Ada Musa",
-        role: "class_teacher",
+        position: "class_teacher",
+        employmentType: "Permanent",
+        departmentId: DEPT.ACADEMICS,
+        gradeLevelId: GL.GL4,
+        step: 4,
+        salary: 485000,
+        dateOfAppointment: new Date("2019-09-01"),
         status: "Active",
         createdById: adminUserId,
       },
@@ -2753,7 +3414,13 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909004",
         email: "james.eze@staff.school.ng",
         name: "Mr. James Eze",
-        role: "subject_teacher",
+        position: "subject_teacher",
+        employmentType: "Permanent",
+        departmentId: DEPT.ACADEMICS,
+        gradeLevelId: GL.GL3,
+        step: 3,
+        salary: 385000,
+        dateOfAppointment: new Date("2020-09-01"),
         status: "Active",
         createdById: adminUserId,
       },
@@ -2763,7 +3430,13 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909005",
         email: "fatima.yusuf@staff.school.ng",
         name: "Mrs. Fatima Yusuf",
-        role: "subject_teacher",
+        position: "subject_teacher",
+        employmentType: "Permanent",
+        departmentId: DEPT.ACADEMICS,
+        gradeLevelId: GL.GL3,
+        step: 3,
+        salary: 385000,
+        dateOfAppointment: new Date("2021-01-10"),
         status: "Active",
         createdById: adminUserId,
       },
@@ -2773,7 +3446,13 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909006",
         email: "chidi.okafor@staff.school.ng",
         name: "Mr. Chidi Okafor",
-        role: "teacher",
+        position: "teacher",
+        employmentType: "Permanent",
+        departmentId: DEPT.ACADEMICS,
+        gradeLevelId: GL.GL2,
+        step: 2,
+        salary: 295000,
+        dateOfAppointment: new Date("2022-09-01"),
         status: "Active",
         createdById: adminUserId,
       },
@@ -2783,7 +3462,13 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909007",
         email: "bola.adeyemi@staff.school.ng",
         name: "Mrs. Bola Adeyemi",
-        role: "admin",
+        position: "admin",
+        employmentType: "Permanent",
+        departmentId: DEPT.ACCOUNTS,
+        gradeLevelId: GL.GL4,
+        step: 4,
+        salary: 420000,
+        dateOfAppointment: new Date("2018-03-01"),
         status: "Active",
         createdById: adminUserId,
       },
@@ -2793,7 +3478,13 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909008",
         email: "emmanuel.nwosu@staff.school.ng",
         name: "Mr. Emmanuel Nwosu",
-        role: "assistant_teacher",
+        position: "assistant_teacher",
+        employmentType: "Contractual",
+        departmentId: DEPT.ACADEMICS,
+        gradeLevelId: GL.GL1,
+        step: 1,
+        salary: 185000,
+        dateOfAppointment: new Date("2024-09-01"),
         status: "Active",
         createdById: adminUserId,
       },
@@ -2803,6 +3494,73 @@ async function main() {
       await upsertStaffWithUser(hashedPassword, member);
     }
     console.log(`   ✓ ${staffMembers.length} staff (with user accounts, password: 12345)`);
+
+    // Cashiers (linked user or staff + cash ledger for sales posting)
+    console.log("💵 Seeding cashiers...");
+    const cashiers = [
+      {
+        id: "cash0001-0000-4000-8000-000000000001",
+        name: "School Admin Cashier",
+        userId: "77e7a005-b0a5-4a6e-897c-f827333924d4",
+        staffId: null,
+        accountChartId: 47,
+        status: "Active",
+      },
+      {
+        id: "cash0001-0000-4000-8000-000000000002",
+        name: "Accounts Office Cashier",
+        staffId: "a8b9c0d1-e2f3-4234-a012-345678909007",
+        accountChartId: 48,
+        status: "Active",
+      },
+      {
+        id: "cash0001-0000-4000-8000-000000000003",
+        name: "Store Sales Cashier",
+        staffId: "a8b9c0d1-e2f3-4234-a012-345678909004",
+        accountChartId: 49,
+        userId: "77e7a005-b0a5-4a6e-897c-f827333924d4",
+        status: "Active",
+      },
+      {
+        id: "cash0001-0000-4000-8000-000000000004",
+        name: "Reception Cashier",
+        staffId: "a8b9c0d1-e2f3-4234-a012-345678909003",
+        accountChartId: 50,
+        status: "Active",
+      },
+    ];
+
+    for (const cashier of cashiers) {
+      let staffId = cashier.staffId ?? null;
+      let userId = cashier.userId ?? null;
+      if (staffId && !userId) {
+        const staff = await prisma.staff.findUnique({
+          where: { id: staffId },
+          select: { userId: true },
+        });
+        userId = staff?.userId ?? null;
+      }
+
+      await prisma.cashier.upsert({
+        where: { id: cashier.id },
+        update: {
+          name: cashier.name,
+          staffId,
+          userId,
+          accountChartId: cashier.accountChartId,
+          status: cashier.status,
+        },
+        create: {
+          id: cashier.id,
+          name: cashier.name,
+          staffId,
+          userId,
+          accountChartId: cashier.accountChartId,
+          status: cashier.status,
+        },
+      });
+    }
+    console.log(`   ✓ ${cashiers.length} cashiers`);
 
     // School classes and sub-classes (required for student class assignment)
     console.log("🎓 Seeding school classes and sub-classes...");
