@@ -502,10 +502,7 @@ const payrollComponentAccountSelect = {
   accountId: true,
 } satisfies Prisma.SalaryComponentSelect;
 
-function formatSalaryComponentLabel(component: {
-  name: string;
-  shortName: string | null;
-}): string {
+function formatSalaryComponentLabel(component: { name: string; shortName: string | null }): string {
   const shortName = component.shortName?.trim();
   return shortName && shortName.length > 0 ? shortName : component.name;
 }
