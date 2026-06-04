@@ -60,6 +60,8 @@ import salaryChartRouter from "./salaryChart";
 import staffSalaryOverrideComponentRouter from "./staffSalaryOverrideComponent";
 import payrollRouter from "./payroll";
 import activePayrollPeriodRouter from "./activePayrollPeriod";
+import administrativeExpenseComponentRouter from "./administrativeExpenseComponent";
+import administrativeExpenseRouter from "./administrativeExpense";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -125,6 +127,8 @@ router.use("/salary-charts", salaryChartRouter);
 router.use("/staff-salary-override-components", staffSalaryOverrideComponentRouter);
 router.use("/payroll", payrollRouter);
 router.use("/active-payroll-period", activePayrollPeriodRouter);
+router.use("/administrative-expense-components", administrativeExpenseComponentRouter);
+router.use("/administrative-expenses", administrativeExpenseRouter);
 
 router.use("/upload", uploadRouter);
 

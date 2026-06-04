@@ -114,6 +114,14 @@ const options: swaggerJSDoc.Options = {
         name: "ActivePayrollPeriod",
         description: "Active payroll period singleton (year and month for current payroll run)",
       },
+      {
+        name: "AdministrativeExpenseComponents",
+        description: "Administrative expense categories/components with optional ledger account (CRUD)",
+      },
+      {
+        name: "AdministrativeExpenses",
+        description: "Administrative expense transactions linked to a component (CRUD)",
+      },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
       { name: "Sales", description: "Inventory sales transactions (bulk create, list, grouped by reference)" },

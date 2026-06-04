@@ -734,7 +734,9 @@ async function main() {
       { route: "/reports/balance-sheet", caption: "Balance sheet" },
       { route: "/reports/student-billing-summary", caption: "Student billing summary" },
       { route: "/reports/student-balances", caption: "Student balances" },
+      { route: "/reports/staff-balances", caption: "Staff balances" },
       { route: "/reports/student-transaction-log", caption: "Student transaction log" },
+      { route: "/reports/staff-transaction-log", caption: "Staff transaction log" },
       { route: "/reports/profit-and-loss", caption: "Profit & loss" },
       // Accounting
       { route: "/account-subheads", caption: "Account setup" },
@@ -743,6 +745,7 @@ async function main() {
       { route: "/class-default-billings", caption: "Class default billing" },
       { route: "/journal-transfers", caption: "Journal transfers" },
       { route: "/student-journal-transfers", caption: "Student journal transfers" },
+      { route: "/staff-journal-transfers", caption: "Staff journal transfers" },
       // Setup
       { route: "/inventory", caption: "Inventory" },
       { route: "/default-account-settings", caption: "Default account settings" },

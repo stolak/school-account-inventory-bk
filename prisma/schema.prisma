@@ -129,6 +129,8 @@ model User {
   payrollProcesses              PayrollProcess[]               @relation("PayrollProcesses")
   payrollProcessesApproved      PayrollProcess[]               @relation("PayrollProcessesApproved")
   payrollProcessesPosted        PayrollProcess[]               @relation("PayrollProcessesPosted")
+  administrativeExpensesCreated AdministrativeExpense[]        @relation("AdministrativeExpenseCreatedBy")
+  administrativeExpensesUpdated AdministrativeExpense[]        @relation("AdministrativeExpenseUpdatedBy")
 
   @@map("users")
 }
@@ -777,22 +779,23 @@ model AccountChart {
   rank               Int
   createdAt          DateTime @default(now()) @map("created_at")
 
-  group                   AccountGroup             @relation(fields: [groupId], references: [id], onDelete: Restrict)
-  head                    AccountHead              @relation(fields: [headId], references: [id], onDelete: Restrict)
-  subhead                 AccountSubhead           @relation(fields: [subheadId], references: [id], onDelete: Restrict)
-  accountTransactions     AccountTransaction[]
-  tempJournalTransfers    TempJournalTransfer[]
-  defaultAccountSettings  DefaultAccountSettings[]
-  concessionDiscounts     ConcessionDiscount[]
-  billingItems            BillingItem[]
-  students                Student[]
-  consumableCategories    Category[]               @relation("CategoryConsumableAccount")
-  assetCategories         Category[]               @relation("CategoryAssetAccount")
-  studentJournalTransfers StudentJournalTransfer[]
+  group                           AccountGroup                     @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  head                            AccountHead                      @relation(fields: [headId], references: [id], onDelete: Restrict)
+  subhead                         AccountSubhead                   @relation(fields: [subheadId], references: [id], onDelete: Restrict)
+  accountTransactions             AccountTransaction[]
+  tempJournalTransfers            TempJournalTransfer[]
+  defaultAccountSettings          DefaultAccountSettings[]
+  concessionDiscounts             ConcessionDiscount[]
+  billingItems                    BillingItem[]
+  students                        Student[]
+  consumableCategories            Category[]                       @relation("CategoryConsumableAccount")
+  assetCategories                 Category[]                       @relation("CategoryAssetAccount")
+  studentJournalTransfers         StudentJournalTransfer[]
   // suppliers               Supplier[]
-  cashiers                Cashier[]
-  staffJournalTransfers   StaffJournalTransfer[]
-  salaryComponents        SalaryComponent[]
+  cashiers                        Cashier[]
+  staffJournalTransfers           StaffJournalTransfer[]
+  salaryComponents                SalaryComponent[]
+  administrativeExpenseComponents AdministrativeExpenseComponent[]
 
   @@index([groupId])
   @@index([headId])
@@ -1352,4 +1355,34 @@ model ActivePayrollPeriod {
   @@index([year])
   @@index([month])
   @@map("active_payroll_period")
+}
+
+model AdministrativeExpenseComponent {
+  id                     String                  @id @default(uuid()) @db.Char(36)
+  name                   String                  @map("name")
+  status                 Status                  @default(Active)
+  accountId              Int?                    @map("account_id")
+  account                AccountChart?           @relation(fields: [accountId], references: [id])
+  administrativeExpenses AdministrativeExpense[]
+
+  @@map("administrative_expense_components")
+}
+
+model AdministrativeExpense {
+  id                               String                         @id @default(uuid()) @db.Char(36)
+  status                           Status                         @default(Active)
+  administrativeExpenseComponentId String                         @map("administrative_expense_category_id") @db.Char(36)
+  administrativeExpenseComponent   AdministrativeExpenseComponent @relation(fields: [administrativeExpenseComponentId], references: [id], onDelete: Restrict)
+  amount                           Decimal                        @map("amount") @db.Decimal(14, 2)
+  transactionDate                  DateTime                       @map("transaction_date") @db.Date
+  remarks                          String?                        @map("remarks")
+  referenceNo                      String?                        @map("reference_no")
+  createdAt                        DateTime                       @default(now()) @map("created_at")
+  updatedAt                        DateTime                       @updatedAt @map("updated_at")
+  createdById                      String?                        @map("created_by") @db.Char(36)
+  createdBy                        User?                          @relation("AdministrativeExpenseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedById                      String?                        @map("updated_by") @db.Char(36)
+  updatedBy                        User?                          @relation("AdministrativeExpenseUpdatedBy", fields: [updatedById], references: [id])
+
+  @@map("administrative_expenses")
 }
