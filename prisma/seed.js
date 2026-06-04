@@ -1543,6 +1543,73 @@ async function main() {
         status: "Active",
         rank: 44,
       },
+      {
+        id: 45,
+        groupId: 1,
+        headId: 1,
+        subheadId: 2,
+        accountNo: "1102004",
+        accountRef: "AR-STAFF",
+        accountDescription: "Staff Accounts Receivable",
+        status: "Active",
+        rank: 45,
+      },
+      {
+        id: 46,
+        groupId: 5,
+        headId: 7,
+        subheadId: 17,
+        accountNo: "5102002",
+        accountRef: "INC-SALES",
+        accountDescription: "Sales Income",
+        status: "Active",
+        rank: 46,
+      },
+      // Cashier tills (subhead 1 — Cash and Bank)
+      {
+        id: 47,
+        groupId: 1,
+        headId: 1,
+        subheadId: 1,
+        accountNo: "1101010",
+        accountRef: "CASH-ADMIN",
+        accountDescription: "Cashier Ledger - School Admin",
+        status: "Active",
+        rank: 47,
+      },
+      {
+        id: 48,
+        groupId: 1,
+        headId: 1,
+        subheadId: 1,
+        accountNo: "1101011",
+        accountRef: "CASH-ACCTS",
+        accountDescription: "Cashier Ledger - Accounts Office",
+        status: "Active",
+        rank: 48,
+      },
+      {
+        id: 49,
+        groupId: 1,
+        headId: 1,
+        subheadId: 1,
+        accountNo: "1101012",
+        accountRef: "CASH-STORE",
+        accountDescription: "Cashier Ledger - Store Sales",
+        status: "Active",
+        rank: 49,
+      },
+      {
+        id: 50,
+        groupId: 1,
+        headId: 1,
+        subheadId: 1,
+        accountNo: "1101013",
+        accountRef: "CASH-RECEPTION",
+        accountDescription: "Cashier Ledger - Reception",
+        status: "Active",
+        rank: 50,
+      },
     ];
 
     for (const c of accountCharts) {
@@ -1591,6 +1658,11 @@ async function main() {
         settings: "Default subhead for consumable expense postings",
         subheadId: 12,
       },
+      {
+        settingsId: "STAFF_SUBHEAD",
+        settings: "Default subhead for staff receivable postings (mirrors student AR subhead)",
+        subheadId: 2,
+      },
     ];
 
     for (const s of defaultSubheadSettings) {
@@ -1632,6 +1704,22 @@ async function main() {
         settingsId: "COMSUMABLE_EXPENSE_ACCOUNT",
         settings: "Default account for consumable expense postings",
         accountId: 13,
+      },
+      {
+        settingsId: "SALES_ACCOUNT",
+        settings: "Default income account for inventory and sales postings",
+        accountId: 46,
+      },
+      {
+        settingsId: "STAFF_ACCOUNT",
+        settings:
+          "Default accounts receivable ledger for staff (sales, collections, and staff sub-ledger)",
+        accountId: 45,
+      },
+      {
+        settingsId: "STAFF_SALARY_PAYABLE_ACCOUNT",
+        settings: "Default accounts payable ledger for net staff salary liability",
+        accountId: 23,
       },
     ];
 
@@ -3406,6 +3494,73 @@ async function main() {
       await upsertStaffWithUser(hashedPassword, member);
     }
     console.log(`   ✓ ${staffMembers.length} staff (with user accounts, password: 12345)`);
+
+    // Cashiers (linked user or staff + cash ledger for sales posting)
+    console.log("💵 Seeding cashiers...");
+    const cashiers = [
+      {
+        id: "cash0001-0000-4000-8000-000000000001",
+        name: "School Admin Cashier",
+        userId: "77e7a005-b0a5-4a6e-897c-f827333924d4",
+        staffId: null,
+        accountChartId: 47,
+        status: "Active",
+      },
+      {
+        id: "cash0001-0000-4000-8000-000000000002",
+        name: "Accounts Office Cashier",
+        staffId: "a8b9c0d1-e2f3-4234-a012-345678909007",
+        accountChartId: 48,
+        status: "Active",
+      },
+      {
+        id: "cash0001-0000-4000-8000-000000000003",
+        name: "Store Sales Cashier",
+        staffId: "a8b9c0d1-e2f3-4234-a012-345678909004",
+        accountChartId: 49,
+        userId: "77e7a005-b0a5-4a6e-897c-f827333924d4",
+        status: "Active",
+      },
+      {
+        id: "cash0001-0000-4000-8000-000000000004",
+        name: "Reception Cashier",
+        staffId: "a8b9c0d1-e2f3-4234-a012-345678909003",
+        accountChartId: 50,
+        status: "Active",
+      },
+    ];
+
+    for (const cashier of cashiers) {
+      let staffId = cashier.staffId ?? null;
+      let userId = cashier.userId ?? null;
+      if (staffId && !userId) {
+        const staff = await prisma.staff.findUnique({
+          where: { id: staffId },
+          select: { userId: true },
+        });
+        userId = staff?.userId ?? null;
+      }
+
+      await prisma.cashier.upsert({
+        where: { id: cashier.id },
+        update: {
+          name: cashier.name,
+          staffId,
+          userId,
+          accountChartId: cashier.accountChartId,
+          status: cashier.status,
+        },
+        create: {
+          id: cashier.id,
+          name: cashier.name,
+          staffId,
+          userId,
+          accountChartId: cashier.accountChartId,
+          status: cashier.status,
+        },
+      });
+    }
+    console.log(`   ✓ ${cashiers.length} cashiers`);
 
     // School classes and sub-classes (required for student class assignment)
     console.log("🎓 Seeding school classes and sub-classes...");

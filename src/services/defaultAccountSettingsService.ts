@@ -39,7 +39,9 @@ export class DefaultAccountSettingsService {
       select: { settingsId: true, accountId: true },
     });
     if (!row) {
-      throw new Error("Default account settings not found");
+      const splitttedId = trimmedId.split("_");
+
+      throw new Error(`Default account settings: ${splitttedId.join(" ")} not found`);
     }
     if (!row.accountId) {
       throw new Error("Default account settings has no accountId configured");
@@ -70,7 +72,7 @@ export class DefaultAccountSettingsService {
    */
   async update(
     settingsId: string,
-    input: { settings?: string; accountId?: number | null },
+    input: { settings?: string; accountId?: number | null }
   ): Promise<DefaultAccountSettingsRow> {
     const trimmedId = settingsId.trim();
     if (!trimmedId) {
