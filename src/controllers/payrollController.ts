@@ -35,7 +35,8 @@ function httpStatusForPayrollActionError(message: string): number {
     message.includes("required") ||
     message.includes("invalid") ||
     message.includes("cannot") ||
-    message.includes("Only approved")
+    message.includes("Only approved") ||
+    message.includes("valid account number")
   ) {
     return 400;
   }

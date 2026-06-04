@@ -495,6 +495,78 @@ export type PayrollReportPeriodComponent = Prisma.SalaryComponentGetPayload<{
   select: typeof payrollReportComponentSelect;
 }>;
 
+const payrollComponentAccountSelect = {
+  id: true,
+  name: true,
+  shortName: true,
+  accountId: true,
+} satisfies Prisma.SalaryComponentSelect;
+
+function formatSalaryComponentLabel(component: {
+  name: string;
+  shortName: string | null;
+}): string {
+  const shortName = component.shortName?.trim();
+  return shortName && shortName.length > 0 ? shortName : component.name;
+}
+
+async function assertPayrollSalaryComponentsHaveValidAccounts(
+  db: Prisma.TransactionClient | typeof prisma,
+  componentIds: string[]
+): Promise<void> {
+  const uniqueComponentIds = [...new Set(componentIds)];
+  if (uniqueComponentIds.length === 0) return;
+
+  const components = await db.salaryComponent.findMany({
+    where: { id: { in: uniqueComponentIds } },
+    select: payrollComponentAccountSelect,
+  });
+
+  const componentById = new Map(components.map((component) => [component.id, component]));
+  const accountIds = [
+    ...new Set(
+      components
+        .map((component) => component.accountId)
+        .filter((id): id is number => id != null && Number.isInteger(id) && id > 0)
+    ),
+  ];
+
+  const activeAccountIds = new Set(
+    accountIds.length > 0
+      ? (
+          await db.accountChart.findMany({
+            where: { id: { in: accountIds }, status: Status.Active },
+            select: { id: true },
+          })
+        ).map((account) => account.id)
+      : []
+  );
+
+  const invalidLabels: string[] = [];
+  for (const componentId of uniqueComponentIds) {
+    const component = componentById.get(componentId);
+    if (!component) {
+      invalidLabels.push(componentId);
+      continue;
+    }
+    if (component.accountId == null || !activeAccountIds.has(component.accountId)) {
+      invalidLabels.push(formatSalaryComponentLabel(component));
+    }
+  }
+
+  if (invalidLabels.length === 0) return;
+
+  if (invalidLabels.length === 1) {
+    throw new Error(
+      `${invalidLabels[0]} does not have a valid account number please contact the administrator`
+    );
+  }
+
+  throw new Error(
+    `${invalidLabels.join(", ")} do not have valid account numbers please contact the administrator`
+  );
+}
+
 export interface PayrollReportPayrollComponentRow {
   id: string;
   payrollProcessId: string;
@@ -825,6 +897,31 @@ export class PayrollService {
     if (notApprovedCount > 0) {
       throw new Error("Only approved payroll records can be posted");
     }
+
+    const processesToPost = await prisma.payrollProcess.findMany({
+      where: { ...where, isApproved: true, isPosted: false },
+      select: { id: true },
+    });
+    if (processesToPost.length === 0) {
+      return { count: 0 };
+    }
+
+    const processIdsToPost = processesToPost.map((process) => process.id);
+    const payrollComponentRows = await prisma.payrollComponent.findMany({
+      where: {
+        payrollProcessId: { in: processIdsToPost },
+        year: input.year,
+        month: input.month,
+        isPosted: false,
+      },
+      select: { componentId: true },
+      distinct: ["componentId"],
+    });
+
+    await assertPayrollSalaryComponentsHaveValidAccounts(
+      prisma,
+      payrollComponentRows.map((row) => row.componentId)
+    );
 
     const now = new Date();
 
