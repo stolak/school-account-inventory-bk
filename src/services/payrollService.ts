@@ -431,7 +431,7 @@ function buildStaffPayrollCharts(
   const sortedRows = sortPayrollChartRows(rows);
   sortedRows.forEach((row) => {
     if (
-      row.component.id === "f556684d-e8c1-4abd-8d60-87236ca895ca" &&
+      row.component.id === "comp0001-0000-4000-8000-000000000008" &&
       row.component.isFunction &&
       row.component.functionPercentage?.toString() === "100"
     ) {
@@ -691,7 +691,7 @@ function calculateAnnualProgressiveTax(income: number, charts: StaffPayrollChart
       (chart) =>
         chart.component.type === SalaryComponentType.DEDUCTION &&
         !chart.component.isTaxable &&
-        chart.component.id !== "f556684d-e8c1-4abd-8d60-87236ca895ca"
+        chart.component.id !== "comp0001-0000-4000-8000-000000000008"
     )
     .reduce((acc, chart) => acc + Number(chart.amount), 0);
 
