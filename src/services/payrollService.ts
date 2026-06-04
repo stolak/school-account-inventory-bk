@@ -1,6 +1,8 @@
 import { EmploymentType, Prisma, SalaryComponentType, Status } from "@prisma/client";
 import { activePayrollPeriodService } from "./activePayrollPeriodService";
 import prisma from "../utils/prisma";
+import { defaultAccountSettingsService } from "./defaultAccountSettingsService";
+import { accountTransactionService } from "./accountTransactionService";
 
 const staffSalaryChartSelect = {
   gradeLevelId: true,
@@ -25,6 +27,32 @@ const salaryComponentSelect = {
   functionElements: true,
 } satisfies Prisma.SalaryComponentSelect;
 
+const salaryComponentSelectForPosting = {
+  id: true,
+  name: true,
+  shortName: true,
+  type: true,
+  rank: true,
+  isTaxable: true,
+  isPensionable: true,
+  isStatutory: true,
+  isFunction: true,
+  functionPercentage: true,
+  functionElements: true,
+  accountId: true,
+  account: {
+    select: {
+      id: true,
+
+      group: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.SalaryComponentSelect;
 type ActiveSalaryComponent = Prisma.SalaryComponentGetPayload<{
   select: typeof salaryComponentSelect;
 }>;
@@ -951,7 +979,109 @@ export class PayrollService {
         },
         data: { isPosted: true },
       });
+      const sumByComponentId = await tx.payrollComponent.groupBy({
+        by: ["componentId"],
+        _sum: { amount: true },
+        where: {
+          payrollProcessId: { in: processIds },
+          year: input.year,
+          month: input.month,
+          isPosted: true,
+        },
+      });
 
+      const componentIds = sumByComponentId.map((row) => row.componentId);
+      const components =
+        componentIds.length > 0
+          ? await tx.salaryComponent.findMany({
+              where: { id: { in: componentIds } },
+              select: salaryComponentSelectForPosting,
+            })
+          : [];
+      const componentById = new Map(components.map((component) => [component.id, component]));
+
+      const sumOfComponents = sumByComponentId.map((row) => ({
+        componentId: row.componentId,
+        amount: row._sum.amount ?? new Prisma.Decimal(0),
+        component: componentById.get(row.componentId)!,
+      }));
+      console.log("sumOfComponents", sumOfComponents);
+      // get the salary payable setting account id
+      const salaryPayableSetting = await defaultAccountSettingsService.getAccountChartBySettingsId(
+        "STAFF_SALARY_PAYABLE_ACCOUNT",
+        tx
+      );
+      if (!salaryPayableSetting) {
+        throw new Error("Salary payable setting account not found");
+      }
+
+      for (const component of sumOfComponents) {
+        if (component.component.type === SalaryComponentType.EARNING) {
+          await accountTransactionService.creditAccount(
+            {
+              accountId: String(component.component.accountId),
+              amount: Number(component.amount),
+              ref: `PAYROLL-${now.toISOString()}`,
+              manualRef: `PAYROLL-${now.toISOString()}`,
+              transactionDate: now.toISOString(),
+              postedBy: actedBy,
+              remarks: `Payroll for ${component.component.name}`,
+            },
+            tx
+          );
+          await accountTransactionService.debitAccount(
+            {
+              accountId: String(salaryPayableSetting.accountId),
+              amount: Number(component.amount),
+              ref: `PAYROLL-${now.toISOString()}`,
+              manualRef: `PAYROLL-${now.toISOString()}`,
+              transactionDate: now.toISOString(),
+              postedBy: actedBy,
+              remarks: `Payroll for ${component.component.name}`,
+            },
+            tx
+          );
+        } else {
+          await accountTransactionService.creditAccount(
+            {
+              accountId: String(salaryPayableSetting.accountId),
+              amount: Number(component.amount),
+              ref: `PAYROLL-${now.toISOString()}`,
+              manualRef: `PAYROLL-${now.toISOString()}`,
+              transactionDate: now.toISOString(),
+              postedBy: actedBy,
+              remarks: `Payroll for ${component.component.name}`,
+            },
+            tx
+          );
+          if (component.component.account?.group?.id === 1) {
+            // split by staff involved in the payroll process
+            // const payrollComponentsbyStaffId = await tx.payrollComponent.findMany({
+            //   where: {
+            //     payrollProcessId: { in: processIds },
+            //     year: input.year,
+            //     month: input.month,
+            //     isPosted: true,
+            //     componentId: component.componentId,
+            //   },
+            //   select: { payrollProcessId: true, amount: true, staffId: true },
+            // });
+          } else {
+            await accountTransactionService.debitAccount(
+              {
+                accountId: String(component.component.accountId),
+                amount: Number(component.amount),
+                ref: `PAYROLL-${now.toISOString()}`,
+                manualRef: `PAYROLL-${now.toISOString()}`,
+                transactionDate: now.toISOString(),
+                postedBy: actedBy,
+                remarks: `Payroll for ${component.component.name}`,
+              },
+              tx
+            );
+          }
+        }
+      }
       return { count: result.count };
     });
   }

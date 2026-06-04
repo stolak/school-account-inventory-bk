@@ -1,6 +1,8 @@
 import { Prisma } from "@prisma/client";
 import prisma from "../utils/prisma";
 
+type DbClient = Pick<Prisma.TransactionClient, "defaultAccountSettings" | "accountChart">;
+
 export type DefaultAccountSettingsRow = Prisma.DefaultAccountSettingsGetPayload<
   Record<string, never>
 >;
@@ -24,17 +26,21 @@ export class DefaultAccountSettingsService {
   /**
    * Resolve `accountId` from default account settings, then return the account chart row.
    */
-  async getAccountChartBySettingsId(settingsId: string): Promise<{
+  async getAccountChartBySettingsId(
+    settingsId: string,
+    db?: DbClient
+  ): Promise<{
     settingsId: string;
     accountId: number;
     accountChart: AccountChartBySettingsIdRow;
   }> {
+    const prisma = db ?? this.prisma;
     const trimmedId = settingsId.trim();
     if (!trimmedId) {
       throw new Error("settingsId is required");
     }
 
-    const row = await this.prisma.defaultAccountSettings.findUnique({
+    const row = await prisma.defaultAccountSettings.findUnique({
       where: { settingsId: trimmedId },
       select: { settingsId: true, accountId: true },
     });
@@ -47,7 +53,7 @@ export class DefaultAccountSettingsService {
       throw new Error("Default account settings has no accountId configured");
     }
 
-    const accountChart = await this.prisma.accountChart.findUnique({
+    const accountChart = await prisma.accountChart.findUnique({
       where: { id: row.accountId },
       include: {
         group: true,
