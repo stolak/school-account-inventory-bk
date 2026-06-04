@@ -1005,19 +1005,49 @@ export class PayrollService {
         amount: row._sum.amount ?? new Prisma.Decimal(0),
         component: componentById.get(row.componentId)!,
       }));
-      console.log("sumOfComponents", sumOfComponents);
-      // get the salary payable setting account id
+
+      const postedPayrollLines = await tx.payrollComponent.findMany({
+        where: {
+          payrollProcessId: { in: processIds },
+          year: input.year,
+          month: input.month,
+          isPosted: true,
+        },
+        select: {
+          componentId: true,
+          amount: true,
+          payrollProcess: {
+            select: {
+              staffId: true,
+              staff: { select: { id: true, name: true, StaffNumber: true } },
+            },
+          },
+        },
+      });
+
+      const payrollLinesByComponentId = new Map<
+        string,
+        Array<(typeof postedPayrollLines)[number]>
+      >();
+      for (const line of postedPayrollLines) {
+        const list = payrollLinesByComponentId.get(line.componentId) ?? [];
+        list.push(line);
+        payrollLinesByComponentId.set(line.componentId, list);
+      }
+
       const salaryPayableSetting = await defaultAccountSettingsService.getAccountChartBySettingsId(
         "STAFF_SALARY_PAYABLE_ACCOUNT",
         tx
       );
-      if (!salaryPayableSetting) {
-        throw new Error("Salary payable setting account not found");
-      }
+      const staffAccountSetting = await defaultAccountSettingsService.getAccountChartBySettingsId(
+        "STAFF_ACCOUNT",
+        tx
+      );
+      const payrollRefBase = `PAYROLL-${input.year}-${input.month}`;
 
       for (const component of sumOfComponents) {
         if (component.component.type === SalaryComponentType.EARNING) {
-          await accountTransactionService.creditAccount(
+          await accountTransactionService.debitAccount(
             {
               accountId: String(component.component.accountId),
               amount: Number(component.amount),
@@ -1029,7 +1059,7 @@ export class PayrollService {
             },
             tx
           );
-          await accountTransactionService.debitAccount(
+          await accountTransactionService.creditAccount(
             {
               accountId: String(salaryPayableSetting.accountId),
               amount: Number(component.amount),
@@ -1042,7 +1072,7 @@ export class PayrollService {
             tx
           );
         } else {
-          await accountTransactionService.creditAccount(
+          await accountTransactionService.debitAccount(
             {
               accountId: String(salaryPayableSetting.accountId),
               amount: Number(component.amount),
@@ -1055,19 +1085,27 @@ export class PayrollService {
             tx
           );
           if (component.component.account?.group?.id === 1) {
-            // split by staff involved in the payroll process
-            // const payrollComponentsbyStaffId = await tx.payrollComponent.findMany({
-            //   where: {
-            //     payrollProcessId: { in: processIds },
-            //     year: input.year,
-            //     month: input.month,
-            //     isPosted: true,
-            //     componentId: component.componentId,
-            //   },
-            //   select: { payrollProcessId: true, amount: true, staffId: true },
-            // });
+            const staffPayrollLines = payrollLinesByComponentId.get(component.componentId) ?? [];
+            for (const line of staffPayrollLines) {
+              const amount = Number(line.amount);
+              if (!Number.isFinite(amount) || amount <= 0) continue;
+
+              await accountTransactionService.creditAccount(
+                {
+                  accountId: String(staffAccountSetting.accountId),
+                  amount,
+                  ref: payrollRefBase,
+                  manualRef: `${payrollRefBase}-${component.componentId}-${line.payrollProcess.staffId}`,
+                  transactionDate: now.toISOString(),
+                  postedBy: actedBy,
+                  accountSub: line.payrollProcess.staffId,
+                  remarks: `Payroll ${component.component.name} - ${line.payrollProcess.staff.name}`,
+                },
+                tx
+              );
+            }
           } else {
-            await accountTransactionService.debitAccount(
+            await accountTransactionService.creditAccount(
               {
                 accountId: String(component.component.accountId),
                 amount: Number(component.amount),
