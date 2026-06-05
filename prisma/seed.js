@@ -740,6 +740,8 @@ async function main() {
       { route: "/reports/profit-and-loss", caption: "Profit & loss" },
       // Accounting
       { route: "/account-subheads", caption: "Account setup" },
+      // { route: "/administrative-expense-components", caption: "Administrative expense components" },
+      { route: "/administrative-expenses", caption: "Administrative expenses" },
       { route: "/billing-items", caption: "Billing & discounts" },
       { route: "/student-billing", caption: "Student billing" },
       { route: "/class-default-billings", caption: "Class default billing" },
