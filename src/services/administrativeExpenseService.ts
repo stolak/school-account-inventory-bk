@@ -139,50 +139,83 @@ export class AdministrativeExpenseService {
     }
 
     await this.assertComponentExists(componentId);
-    // GET AUTOMATIC REFERENCE NUMBER
-    const referenceNo = await generateReferenceNo("ADM");
-    const row = await this.prisma.administrativeExpense.create({
-      data: {
-        administrativeExpenseComponentId: componentId,
-        amount: parseAmount(input.amount),
-        transactionDate: input.transactionDate,
-        remarks:
-          input.remarks === undefined || input.remarks === null
-            ? null
-            : input.remarks.trim() || null,
-        referenceNo,
 
-        ...(input.status !== undefined ? { status: input.status } : {}),
-        ...(input.createdById !== undefined ? { createdById: input.createdById } : {}),
-      },
-      include: expenseInclude,
+    const referenceNo = generateReferenceNo("ADM");
+
+    const row = await this.prisma.$transaction(async (tx) => {
+      const defaultAccountSettings =
+        await defaultAccountSettingsService.getAccountChartBySettingsId(
+          "ADMINISTRATIVE_ASSET_ACCOUNT",
+          tx
+        );
+      // if input.referenceNo?.trim() exist verify if is unique
+      if (input.referenceNo?.trim()) {
+        const existing = await tx.administrativeExpense.findFirst({
+          where: { referenceNo: input.referenceNo?.trim() },
+        });
+        if (existing) {
+          throw new Error("Reference number must be unique for administrative expenses");
+        }
+      }
+      const created = await tx.administrativeExpense.create({
+        data: {
+          administrativeExpenseComponentId: componentId,
+          amount: parseAmount(input.amount),
+          transactionDate: input.transactionDate,
+          remarks:
+            input.remarks === undefined || input.remarks === null
+              ? null
+              : input.remarks.trim() || null,
+          referenceNo,
+          ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.createdById !== undefined ? { createdById: input.createdById } : {}),
+        },
+        include: expenseInclude,
+      });
+
+      const componentAccountId = created.administrativeExpenseComponent.accountId;
+      if (componentAccountId === null || componentAccountId === undefined) {
+        throw new Error("Administrative expense component has no accountId configured");
+      }
+
+      const createdById = created.createdById?.trim() ?? "";
+      if (!createdById) {
+        throw new Error("createdById is required to post account transactions");
+      }
+
+      const remarks = created.remarks ?? "";
+      const transactionDate = created.transactionDate.toISOString();
+      const manualRef = input.referenceNo?.trim() || referenceNo;
+      const amount = Number(created.amount);
+
+      await accountTransactionService.debitAccount(
+        {
+          accountId: String(componentAccountId),
+          amount,
+          transactionDate,
+          ref: referenceNo,
+          manualRef,
+          remarks,
+          postedBy: createdById,
+        },
+        tx
+      );
+      await accountTransactionService.creditAccount(
+        {
+          accountId: String(defaultAccountSettings.accountId),
+          amount,
+          transactionDate,
+          ref: referenceNo,
+          manualRef,
+          remarks,
+          postedBy: createdById,
+        },
+        tx
+      );
+
+      return created;
     });
-    // GET DEFAULT ACCOUNT SETTINGS
-    const defaultAccountSettings = await defaultAccountSettingsService.getAccountChartBySettingsId(
-      "ADMINISTRATIVE_EXPENSE_ACCOUNT"
-    );
-    //  POST TO ACCOUNT TRANSACTION
-    const createdById = row.createdById ?? "";
-    const remarks = row.remarks ?? "";
-    const transactionDate = row.transactionDate.toISOString();
-    await accountTransactionService.debitAccount({
-      accountId: String(row.administrativeExpenseComponent.accountId),
-      amount: Number(row.amount),
-      transactionDate: transactionDate,
-      ref: referenceNo,
-      manualRef: input.referenceNo ?? referenceNo,
-      remarks: remarks,
-      postedBy: createdById,
-    });
-    await accountTransactionService.creditAccount({
-      accountId: String(defaultAccountSettings.accountId),
-      amount: Number(row.amount),
-      transactionDate: transactionDate,
-      ref: referenceNo,
-      manualRef: input.referenceNo ?? referenceNo,
-      remarks: remarks,
-      postedBy: createdById,
-    });
+
     return mapRow(row);
   }
 

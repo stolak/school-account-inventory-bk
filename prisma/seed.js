@@ -1726,6 +1726,12 @@ async function main() {
         settings: "Default accounts payable ledger for net staff salary liability",
         accountId: 23,
       },
+      {
+        settingsId: "ADMINISTRATIVE_ASSET_ACCOUNT",
+        settings:
+          "Default asset (cash) ledger administrative expenses are paid from — Cashier Ledger - School Admin",
+        accountId: 47,
+      },
     ];
 
     for (const s of defaultAccountSettings) {
