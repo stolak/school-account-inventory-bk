@@ -2,7 +2,7 @@ import prisma from "../utils/prisma";
 import { activePeriodService } from "./activePeriodService";
 import { resolveStoreIdForIssuer } from "./resolveStoreForIssuer";
 import { InventoryTransactionStatus, InventoryTransactionType, Prisma } from "@prisma/client";
-import { randomUUID } from "crypto";
+import { generateReferenceNo } from "../utils/referenceNo";
 
 export interface FacilityCollectionTransactionData {
   id: string;
@@ -47,14 +47,6 @@ export interface ListFacilityCollectionsParams {
 
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
-}
-
-function generateReferenceNo(): string {
-  const d = new Date();
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `FCOL-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
 const collectionInclude = {
@@ -138,7 +130,7 @@ export class FacilityCollectionService {
     const active = await this.getActivePeriodIdsOrNull();
     const finalReferenceNo =
       input.referenceNo === undefined || input.referenceNo === null || input.referenceNo.trim() === ""
-        ? generateReferenceNo()
+        ? generateReferenceNo("FCOL")
         : input.referenceNo.trim();
 
     return await this.prisma.inventoryTransaction.create({
@@ -193,7 +185,7 @@ export class FacilityCollectionService {
     const active = await this.getActivePeriodIdsOrNull();
     const finalReferenceNo =
       input.referenceNo === undefined || input.referenceNo === null || input.referenceNo.trim() === ""
-        ? generateReferenceNo()
+        ? generateReferenceNo("FCOL")
         : input.referenceNo.trim();
     const txDate = input.transactionDate ?? new Date();
 
@@ -292,7 +284,7 @@ export class FacilityCollectionService {
                 input.referenceNo === null
                   ? null
                   : String(input.referenceNo).trim() === ""
-                    ? generateReferenceNo()
+                    ? generateReferenceNo("FCOL")
                     : String(input.referenceNo).trim(),
             }
           : {}),
@@ -386,7 +378,7 @@ export class FacilityCollectionService {
                     u.referenceNo === null
                       ? null
                       : String(u.referenceNo).trim() === ""
-                        ? generateReferenceNo()
+                        ? generateReferenceNo("FCOL")
                         : String(u.referenceNo).trim(),
                 }
               : {}),

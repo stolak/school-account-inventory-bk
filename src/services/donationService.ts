@@ -1,7 +1,7 @@
 import prisma from "../utils/prisma";
 import { activePeriodService } from "./activePeriodService";
 import { InventoryTransactionStatus, InventoryTransactionType, Prisma } from "@prisma/client";
-import { randomUUID } from "crypto";
+import { generateReferenceNo } from "../utils/referenceNo";
 
 export interface DonationTransactionData {
   id: string;
@@ -47,14 +47,6 @@ export interface DonationReferenceGroup {
 
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
-}
-
-function generateReferenceNo(): string {
-  const d = new Date();
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `DON-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
 const donationInclude = {
@@ -132,7 +124,7 @@ export class DonationService {
       input.referenceNo === undefined ||
       input.referenceNo === null ||
       input.referenceNo.trim() === ""
-        ? generateReferenceNo()
+        ? generateReferenceNo("DON")
         : input.referenceNo.trim();
 
     return await this.prisma.inventoryTransaction.create({
@@ -179,7 +171,7 @@ export class DonationService {
       input.referenceNo === undefined ||
       input.referenceNo === null ||
       input.referenceNo.trim() === ""
-        ? generateReferenceNo()
+        ? generateReferenceNo("DON")
         : input.referenceNo.trim();
     const txDate = input.transactionDate ?? new Date();
 
@@ -333,7 +325,7 @@ export class DonationService {
                 input.referenceNo === null
                   ? null
                   : String(input.referenceNo).trim() === ""
-                    ? generateReferenceNo()
+                    ? generateReferenceNo("DON")
                     : String(input.referenceNo).trim(),
             }
           : {}),
@@ -402,7 +394,7 @@ export class DonationService {
                     u.referenceNo === null
                       ? null
                       : String(u.referenceNo).trim() === ""
-                        ? generateReferenceNo()
+                        ? generateReferenceNo("DON")
                         : String(u.referenceNo).trim(),
                 }
               : {}),

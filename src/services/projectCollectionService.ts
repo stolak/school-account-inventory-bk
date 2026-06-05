@@ -2,7 +2,7 @@ import prisma from "../utils/prisma";
 import { activePeriodService } from "./activePeriodService";
 import { resolveStoreIdForIssuer } from "./resolveStoreForIssuer";
 import { InventoryTransactionStatus, InventoryTransactionType, Prisma } from "@prisma/client";
-import { randomUUID } from "crypto";
+import { generateReferenceNo } from "../utils/referenceNo";
 
 export interface ProjectCollectionTransactionData {
   id: string;
@@ -47,14 +47,6 @@ export interface ListProjectCollectionsParams {
 
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
-}
-
-function generateReferenceNo(): string {
-  const d = new Date();
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `PCOL-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
 const collectionInclude = {
@@ -139,7 +131,7 @@ export class ProjectCollectionService {
     const active = await this.getActivePeriodIdsOrNull();
     const finalReferenceNo =
       input.referenceNo === undefined || input.referenceNo === null || input.referenceNo.trim() === ""
-        ? generateReferenceNo()
+        ? generateReferenceNo("PCOL")
         : input.referenceNo.trim();
 
     return await this.prisma.inventoryTransaction.create({
@@ -194,7 +186,7 @@ export class ProjectCollectionService {
     const active = await this.getActivePeriodIdsOrNull();
     const finalReferenceNo =
       input.referenceNo === undefined || input.referenceNo === null || input.referenceNo.trim() === ""
-        ? generateReferenceNo()
+        ? generateReferenceNo("PCOL")
         : input.referenceNo.trim();
     const txDate = input.transactionDate ?? new Date();
 
@@ -293,7 +285,7 @@ export class ProjectCollectionService {
                 input.referenceNo === null
                   ? null
                   : String(input.referenceNo).trim() === ""
-                    ? generateReferenceNo()
+                    ? generateReferenceNo("PCOL")
                     : String(input.referenceNo).trim(),
             }
           : {}),
@@ -387,7 +379,7 @@ export class ProjectCollectionService {
                     u.referenceNo === null
                       ? null
                       : String(u.referenceNo).trim() === ""
-                        ? generateReferenceNo()
+                        ? generateReferenceNo("PCOL")
                         : String(u.referenceNo).trim(),
                 }
               : {}),

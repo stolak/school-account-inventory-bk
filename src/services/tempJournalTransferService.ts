@@ -1,6 +1,6 @@
 import { BatchStatus, JournalTransferType, Prisma, Status } from "@prisma/client";
 import prisma from "../utils/prisma";
-import { randomUUID } from "crypto";
+import { generateReferenceNo } from "../utils/referenceNo";
 import { accountTransactionService } from "./accountTransactionService";
 
 const tempJournalTransferInclude = {
@@ -60,14 +60,6 @@ type AppendManyByReferenceNoInput = {
 
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
-}
-
-function generateReferenceNo(): string {
-  const d = new Date();
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `TJT-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
 export class TempJournalTransferService {
@@ -143,7 +135,7 @@ export class TempJournalTransferService {
     const normalizedReferenceNo = this.normalizeOptionalString(referenceNo);
     return normalizedReferenceNo && normalizedReferenceNo.length > 0
       ? normalizedReferenceNo
-      : generateReferenceNo();
+      : generateReferenceNo("TJT");
   }
 
   private normalizeRequiredUserId(value: string): string {

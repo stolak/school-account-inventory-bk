@@ -1,7 +1,7 @@
 import prisma from "../utils/prisma";
 import { activePeriodService } from "./activePeriodService";
 import { InventoryTransactionStatus, InventoryTransactionType, Prisma } from "@prisma/client";
-import { randomUUID } from "crypto";
+import { generateReferenceNo } from "../utils/referenceNo";
 
 export interface StoreTransferTransactionRow {
   id: string;
@@ -79,14 +79,6 @@ const transferInclude = {
   store: { select: { id: true, name: true } },
   createdBy: { select: { firstName: true, lastName: true } },
 } satisfies Prisma.InventoryTransactionInclude;
-
-function generateReferenceNo(): string {
-  const d = new Date();
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `TRF-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
-}
 
 function toPositiveDecimal(qty: string | number): Prisma.Decimal {
   const d = new Prisma.Decimal(typeof qty === "string" ? qty.trim() : qty);
@@ -473,7 +465,7 @@ export class StoreTransferService {
       input.referenceNo === undefined ||
       input.referenceNo === null ||
       String(input.referenceNo).trim() === ""
-        ? generateReferenceNo()
+        ? generateReferenceNo("TRF")
         : String(input.referenceNo).trim();
 
     const txDate = input.transactionDate ?? new Date();

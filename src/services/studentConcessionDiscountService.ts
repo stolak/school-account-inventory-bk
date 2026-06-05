@@ -1,6 +1,6 @@
 import { Prisma, StudentBillingStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
-import { randomUUID } from "crypto";
+import { generateReferenceNo } from "../utils/referenceNo";
 import { accountTransactionService } from "./accountTransactionService";
 import { defaultAccountSettingsService } from "./defaultAccountSettingsService";
 
@@ -74,14 +74,6 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function generateReferentId(): string {
-  const d = new Date();
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `SCD-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
-}
-
 export class StudentConcessionDiscountService {
   private prisma = prisma;
 
@@ -103,7 +95,7 @@ export class StudentConcessionDiscountService {
   private normalizeReferentId(value?: string | null): string {
     const normalized = this.normalizeOptionalString(value);
     if (normalized === undefined || normalized === null) {
-      return generateReferentId();
+      return generateReferenceNo("SCD");
     }
     return normalized;
   }

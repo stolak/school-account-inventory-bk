@@ -1,5 +1,8 @@
 import prisma from "../utils/prisma";
 import { Prisma, Status } from "@prisma/client";
+import { accountTransactionService } from "./accountTransactionService";
+import { defaultAccountSettingsService } from "./defaultAccountSettingsService";
+import { generateReferenceNo } from "../utils/referenceNo";
 
 const expenseInclude = {
   administrativeExpenseComponent: {
@@ -136,7 +139,8 @@ export class AdministrativeExpenseService {
     }
 
     await this.assertComponentExists(componentId);
-
+    // GET AUTOMATIC REFERENCE NUMBER
+    const referenceNo = await generateReferenceNo("ADM");
     const row = await this.prisma.administrativeExpense.create({
       data: {
         administrativeExpenseComponentId: componentId,
@@ -146,16 +150,39 @@ export class AdministrativeExpenseService {
           input.remarks === undefined || input.remarks === null
             ? null
             : input.remarks.trim() || null,
-        referenceNo:
-          input.referenceNo === undefined || input.referenceNo === null
-            ? null
-            : input.referenceNo.trim() || null,
+        referenceNo,
+
         ...(input.status !== undefined ? { status: input.status } : {}),
         ...(input.createdById !== undefined ? { createdById: input.createdById } : {}),
       },
       include: expenseInclude,
     });
-
+    // GET DEFAULT ACCOUNT SETTINGS
+    const defaultAccountSettings = await defaultAccountSettingsService.getAccountChartBySettingsId(
+      "ADMINISTRATIVE_EXPENSE_ACCOUNT"
+    );
+    //  POST TO ACCOUNT TRANSACTION
+    const createdById = row.createdById ?? "";
+    const remarks = row.remarks ?? "";
+    const transactionDate = row.transactionDate.toISOString();
+    await accountTransactionService.debitAccount({
+      accountId: String(row.administrativeExpenseComponent.accountId),
+      amount: Number(row.amount),
+      transactionDate: transactionDate,
+      ref: referenceNo,
+      manualRef: input.referenceNo ?? referenceNo,
+      remarks: remarks,
+      postedBy: createdById,
+    });
+    await accountTransactionService.creditAccount({
+      accountId: String(defaultAccountSettings.accountId),
+      amount: Number(row.amount),
+      transactionDate: transactionDate,
+      ref: referenceNo,
+      manualRef: input.referenceNo ?? referenceNo,
+      remarks: remarks,
+      postedBy: createdById,
+    });
     return mapRow(row);
   }
 
@@ -225,11 +252,17 @@ export class AdministrativeExpenseService {
             ? { administrativeExpenseComponentId: input.administrativeExpenseComponentId.trim() }
             : {}),
           ...(input.amount !== undefined ? { amount: parseAmount(input.amount) } : {}),
-          ...(input.transactionDate !== undefined ? { transactionDate: input.transactionDate } : {}),
+          ...(input.transactionDate !== undefined
+            ? { transactionDate: input.transactionDate }
+            : {}),
           ...(input.remarks !== undefined
             ? {
                 remarks:
-                  input.remarks === null ? null : input.remarks.trim() ? input.remarks.trim() : null,
+                  input.remarks === null
+                    ? null
+                    : input.remarks.trim()
+                      ? input.remarks.trim()
+                      : null,
               }
             : {}),
           ...(input.referenceNo !== undefined

@@ -1,7 +1,7 @@
 import { BatchStatus, JournalTransferType, Prisma, Status, StudentStatus } from "@prisma/client";
 import prisma from "../utils/prisma";
 import { defaultAccountSettingsService } from "./defaultAccountSettingsService";
-import { randomUUID } from "crypto";
+import { generateReferenceNo } from "../utils/referenceNo";
 
 export type AccountTransactionRow = Prisma.AccountTransactionGetPayload<Record<string, never>>;
 
@@ -541,22 +541,6 @@ type DbClient = Pick<Prisma.TransactionClient, "accountChart" | "project" | "acc
 
 export class AccountTransactionService {
   private prisma = prisma;
-
-  private generateStudentJournalTransferRef(): string {
-    const d = new Date();
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(d.getUTCDate()).padStart(2, "0");
-    return `SJT-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
-  }
-
-  private generateStaffJournalTransferRef(): string {
-    const d = new Date();
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const day = String(d.getUTCDate()).padStart(2, "0");
-    return `STJT-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
-  }
 
   private defaultYearIntervalToToday(): { from: Date; to: Date } {
     const now = new Date();
@@ -2137,7 +2121,7 @@ export class AccountTransactionService {
       await defaultAccountSettingsService.getAccountChartBySettingsId("STUDENT_ACCOUNT");
     const studentAccountId = String(studentAccount.accountId);
     const txDate = input.transactionDate.toISOString();
-    const ref = this.generateStudentJournalTransferRef();
+    const ref = generateReferenceNo("SJT");
 
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -2430,7 +2414,7 @@ export class AccountTransactionService {
       await defaultAccountSettingsService.getAccountChartBySettingsId("STAFF_ACCOUNT");
     const staffAccountId = String(staffAccount.accountId);
     const txDate = input.transactionDate.toISOString();
-    const ref = this.generateStaffJournalTransferRef();
+    const ref = generateReferenceNo("STJT");
 
     try {
       await this.prisma.$transaction(async (tx) => {

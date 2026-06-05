@@ -7,7 +7,7 @@ import {
   Prisma,
   StudentStatus,
 } from "@prisma/client";
-import { randomUUID } from "crypto";
+import { generateReferenceNo } from "../utils/referenceNo";
 
 export interface StudentCollectionData {
   id: string;
@@ -80,15 +80,6 @@ export interface ListStudentCollectionsParams {
 
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
-}
-
-function generateReferenceNo(): string {
-  // Human-ish, reasonably unique; no DB constraint exists so collisions are extremely unlikely.
-  const d = new Date();
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `SC-${y}${m}${day}-${randomUUID().slice(0, 8).toUpperCase()}`;
 }
 
 export class StudentCollectionService {
@@ -178,7 +169,7 @@ export class StudentCollectionService {
       input.referenceNo === undefined ||
       input.referenceNo === null ||
       input.referenceNo.trim() === ""
-        ? generateReferenceNo()
+        ? generateReferenceNo("SC")
         : input.referenceNo;
 
     return await this.prisma.inventoryTransaction.create({
@@ -240,7 +231,7 @@ export class StudentCollectionService {
       input.referenceNo === undefined ||
       input.referenceNo === null ||
       input.referenceNo.trim() === ""
-        ? generateReferenceNo()
+        ? generateReferenceNo("SC")
         : input.referenceNo;
 
     const txDate = input.transactionDate ?? new Date();
