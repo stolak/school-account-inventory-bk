@@ -1700,11 +1700,7 @@ async function main() {
         settings: "Default account for discount/concession postings",
         accountId: 16,
       },
-      {
-        settingsId: "COLLECTION_ACCOUNT",
-        settings: "Default account for collection postings",
-        accountId: 19,
-      },
+
       {
         settingsId: "COMSUMABLE_EXPENSE_ACCOUNT",
         settings: "Default account for consumable expense postings",
@@ -3195,6 +3191,82 @@ async function main() {
       });
     }
     console.log(`   ✓ ${departments.length} departments`);
+
+    // Administrative expense components (category + expense ledger for postings)
+    console.log("📋 Seeding administrative expense components...");
+    const AEC = {
+      UTIL: "admec001-0000-4000-8000-000000000001",
+      MAINT: "admec001-0000-4000-8000-000000000002",
+      OFFICE: "admec001-0000-4000-8000-000000000003",
+      PRINT: "admec001-0000-4000-8000-000000000004",
+      FUEL: "admec001-0000-4000-8000-000000000005",
+      SEC: "admec001-0000-4000-8000-000000000006",
+      COMM: "admec001-0000-4000-8000-000000000007",
+      MISC: "admec001-0000-4000-8000-000000000008",
+    };
+    const administrativeExpenseComponents = [
+      {
+        id: AEC.UTIL,
+        name: "Utilities",
+        status: "Active",
+        accountId: 14, // Utilities Expense (EXP-UTIL)
+      },
+      {
+        id: AEC.MAINT,
+        name: "Maintenance and Repairs",
+        status: "Active",
+        accountId: 15, // Maintenance Expense (EXP-MAINT)
+      },
+      {
+        id: AEC.OFFICE,
+        name: "Office Consumables",
+        status: "Active",
+        accountId: 13, // Consumable Expenses (EXP-CONS)
+      },
+      {
+        id: AEC.PRINT,
+        name: "Printing and Stationery",
+        status: "Active",
+        accountId: 13,
+      },
+      {
+        id: AEC.FUEL,
+        name: "Fuel and Vehicle Running",
+        status: "Active",
+        accountId: 15,
+      },
+      {
+        id: AEC.SEC,
+        name: "Security Services",
+        status: "Active",
+        accountId: 15,
+      },
+      {
+        id: AEC.COMM,
+        name: "Communications and Internet",
+        status: "Active",
+        accountId: 14,
+      },
+      {
+        id: AEC.MISC,
+        name: "Miscellaneous Administration",
+        status: "Inactive",
+        accountId: 13,
+      },
+    ];
+
+    for (const component of administrativeExpenseComponents) {
+      await prisma.administrativeExpenseComponent.upsert({
+        where: { id: component.id },
+        update: {
+          name: component.name,
+          status: component.status,
+          accountId: component.accountId,
+        },
+        create: component,
+      });
+    }
+    console.log(`   ✓ ${administrativeExpenseComponents.length} administrative expense components`);
 
     // Grade levels
     console.log("🏫 Seeding grade levels...");
