@@ -35,7 +35,7 @@ export class EmailService {
       port: parseInt(process.env.MAIL_PORT || "465"),
       secure: process.env.MAIL_ENCRYPTION === "ssl", // true for 465, false for other ports
       auth: {
-        user: process.env.MAIL_USERNAME || "test@mbrcomputers.com",
+        user: process.env.MAIL_USERNAME || "skultrack@stolaksoftech.com.ng",
         pass: process.env.MAIL_PASSWORD || "RealPassword",
       },
       tls: {
@@ -52,7 +52,7 @@ export class EmailService {
   ): Promise<{ success: boolean; messageId?: string; error?: string }> {
     try {
       const mailOptions = {
-        from: process.env.MAIL_FROM_ADDRESS || "test@mbrcomputers.com",
+        from: process.env.MAIL_FROM_ADDRESS || "skultrack@stolaksoftech.com.ng",
         to: Array.isArray(options.to) ? options.to.join(", ") : options.to,
         subject: options.subject,
         html: options.html,
@@ -88,9 +88,7 @@ export class EmailService {
 
       // Use provided subject or extract from template data
       const emailSubject =
-        subject ||
-        data.subject ||
-        `Notification from ${data.appName || "Lift Platform"}`;
+        subject || data.subject || `Notification from ${data.appName || "Lift Platform"}`;
 
       return await this.sendEmail({
         to,
