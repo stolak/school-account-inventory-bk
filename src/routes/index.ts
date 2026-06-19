@@ -62,6 +62,16 @@ import payrollRouter from "./payroll";
 import activePayrollPeriodRouter from "./activePayrollPeriod";
 import administrativeExpenseComponentRouter from "./administrativeExpenseComponent";
 import administrativeExpenseRouter from "./administrativeExpense";
+import assessmentTemplateRouter from "./assessmentTemplate";
+import assessmentComponentRouter from "./assessmentComponent";
+import classAssessmentTemplateRouter from "./classAssessmentTemplate";
+import subjectRouter from "./subject";
+import classSubjectRouter from "./classSubject";
+import studentSubjectRegistrationRouter from "./studentSubjectRegistration";
+import studentAssessmentScoreRouter from "./studentAssessmentScore";
+import gradingTemplateRouter from "./gradingTemplate";
+import gradingTemplateItemRouter from "./gradingTemplateItem";
+import classGradingTemplateRouter from "./classGradingTemplate";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -129,6 +139,16 @@ router.use("/payroll", payrollRouter);
 router.use("/active-payroll-period", activePayrollPeriodRouter);
 router.use("/administrative-expense-components", administrativeExpenseComponentRouter);
 router.use("/administrative-expenses", administrativeExpenseRouter);
+router.use("/assessment-templates", assessmentTemplateRouter);
+router.use("/assessment-components", assessmentComponentRouter);
+router.use("/class-assessment-templates", classAssessmentTemplateRouter);
+router.use("/subjects", subjectRouter);
+router.use("/class-subjects", classSubjectRouter);
+router.use("/student-subject-registrations", studentSubjectRegistrationRouter);
+router.use("/student-assessment-scores", studentAssessmentScoreRouter);
+router.use("/grading-templates", gradingTemplateRouter);
+router.use("/grading-template-items", gradingTemplateItemRouter);
+router.use("/class-grading-templates", classGradingTemplateRouter);
 
 router.use("/upload", uploadRouter);
 

@@ -400,23 +400,25 @@ model SchoolClass {
   classGradingTemplates       ClassGradingTemplate[]
   classSubjects               ClassSubject[]
   studentSubjectRegistrations StudentSubjectRegistration[]
+  studentAssessmentScores     StudentAssessmentScore[]
 
   @@index([createdById])
   @@map("school_classes")
 }
 
 model SubClass {
-  id                    String                 @id @default(uuid()) @db.Char(36)
-  name                  String
-  status                Status                 @default(Active)
-  createdAt             DateTime               @default(now()) @map("created_at")
-  updatedAt             DateTime               @default(now()) @map("updated_at")
-  class                 SchoolClass?           @relation(fields: [classId], references: [id], onDelete: Cascade)
-  classId               String?                @map("class_id") @db.Char(36)
-  students              Student[]
-  inventoryTransactions InventoryTransaction[]
-  classSubjects           ClassSubject[]
+  id                          String                       @id @default(uuid()) @db.Char(36)
+  name                        String
+  status                      Status                       @default(Active)
+  createdAt                   DateTime                     @default(now()) @map("created_at")
+  updatedAt                   DateTime                     @default(now()) @map("updated_at")
+  class                       SchoolClass?                 @relation(fields: [classId], references: [id], onDelete: Cascade)
+  classId                     String?                      @map("class_id") @db.Char(36)
+  students                    Student[]
+  inventoryTransactions       InventoryTransaction[]
+  classSubjects               ClassSubject[]
   studentSubjectRegistrations StudentSubjectRegistration[]
+  studentAssessmentScores     StudentAssessmentScore[]
 
   @@unique([name, classId])
   @@index([classId])
@@ -473,12 +475,13 @@ model Student {
   class     SchoolClass? @relation(fields: [classId], references: [id], onDelete: SetNull)
   createdBy User         @relation("StudentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  subClass                SubClass?                @relation(fields: [subClassId], references: [id])
-  subClassId              String?                  @db.Char(36)
-  inventoryTransactions   InventoryTransaction[]
-  studentBillings         StudentBilling[]
-  studentJournalTransfers StudentJournalTransfer[]
+  subClass                    SubClass?                    @relation(fields: [subClassId], references: [id])
+  subClassId                  String?                      @db.Char(36)
+  inventoryTransactions       InventoryTransaction[]
+  studentBillings             StudentBilling[]
+  studentJournalTransfers     StudentJournalTransfer[]
   studentSubjectRegistrations StudentSubjectRegistration[]
+  studentAssessmentScores     StudentAssessmentScore[]
 
   @@index([classId])
   @@index([createdById])
@@ -505,13 +508,13 @@ model Term {
 }
 
 model Session {
-  id                    String                 @id @default(uuid()) @db.Char(36)
-  name                  String                 @unique
-  status                Status                 @default(Active)
-  createdAt             DateTime               @default(now()) @map("created_at")
-  activePeriods         ActivePeriod[]
-  inventoryTransactions InventoryTransaction[]
-  defaultBillingPeriods DefaultBillingPeriod[]
+  id                          String                       @id @default(uuid()) @db.Char(36)
+  name                        String                       @unique
+  status                      Status                       @default(Active)
+  createdAt                   DateTime                     @default(now()) @map("created_at")
+  activePeriods               ActivePeriod[]
+  inventoryTransactions       InventoryTransaction[]
+  defaultBillingPeriods       DefaultBillingPeriod[]
   classAssessmentTemplates    ClassAssessmentTemplate[]
   classGradingTemplates       ClassGradingTemplate[]
   classSubjects               ClassSubject[]
@@ -1404,14 +1407,14 @@ model AdministrativeExpense {
 }
 
 model AssessmentTemplate {
-  id               String               @id @default(uuid()) @db.Char(36)
-  name             String               @map("name")
-  description      String?              @map("description") @db.Text
-  versionId        String               @map("version_id") @db.Char(36)
-  parentTemplateId String?              @map("parent_template_id") @db.Char(36)
-  parentTemplate   AssessmentTemplate?  @relation("AssessmentTemplateVersions", fields: [parentTemplateId], references: [id], onDelete: SetNull)
-  childTemplates   AssessmentTemplate[] @relation("AssessmentTemplateVersions")
-  status           Status               @default(Active)
+  id               String                    @id @default(uuid()) @db.Char(36)
+  name             String                    @map("name")
+  description      String?                   @map("description") @db.Text
+  versionId        String                    @map("version_id") @db.Char(36)
+  parentTemplateId String?                   @map("parent_template_id") @db.Char(36)
+  parentTemplate   AssessmentTemplate?       @relation("AssessmentTemplateVersions", fields: [parentTemplateId], references: [id], onDelete: SetNull)
+  childTemplates   AssessmentTemplate[]      @relation("AssessmentTemplateVersions")
+  status           Status                    @default(Active)
   components       AssessmentComponent[]
   classAssignments ClassAssessmentTemplate[]
 
@@ -1422,15 +1425,15 @@ model AssessmentTemplate {
 }
 
 model AssessmentComponent {
-  id         String             @id @default(uuid()) @db.Char(36)
-  templateId String             @map("template_id") @db.Char(36)
-  template   AssessmentTemplate @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  name       String             @map("name")
-  maxScore   Decimal            @map("max_score") @db.Decimal(8, 2)
-  weight     Decimal            @map("weight") @db.Decimal(8, 2)
-  orderNo    Int                @map("order_no")
-  status     Status             @default(Active)
-  isLocked   Boolean            @default(false) @map("is_locked")
+  id         String                   @id @default(uuid()) @db.Char(36)
+  templateId String                   @map("template_id") @db.Char(36)
+  template   AssessmentTemplate       @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  name       String                   @map("name")
+  maxScore   Decimal                  @map("max_score") @db.Decimal(8, 2)
+  weight     Decimal                  @map("weight") @db.Decimal(8, 2)
+  orderNo    Int                      @map("order_no")
+  status     Status                   @default(Active)
+  isLocked   Boolean                  @default(false) @map("is_locked")
   scores     StudentAssessmentScore[]
 
   @@index([templateId])
@@ -1459,25 +1462,26 @@ model ClassAssessmentTemplate {
 }
 
 model Subject {
-  id                          String                      @id @default(uuid()) @db.Char(36)
-  code                        String                      @unique @map("code")
-  name                        String                      @map("name")
+  id                          String                       @id @default(uuid()) @db.Char(36)
+  code                        String                       @unique @map("code")
+  name                        String                       @map("name")
   classSubjects               ClassSubject[]
   studentSubjectRegistrations StudentSubjectRegistration[]
+  studentAssessmentScores     StudentAssessmentScore[]
 
   @@map("subjects")
 }
 
 model ClassSubject {
-  id         String       @id @default(uuid()) @db.Char(36)
-  classId    String       @map("class_id") @db.Char(36)
-  class      SchoolClass  @relation(fields: [classId], references: [id], onDelete: Restrict)
-  subclassId String?      @map("subclass_id") @db.Char(36)
-  subclass   SubClass?    @relation(fields: [subclassId], references: [id], onDelete: SetNull)
-  subjectId  String       @map("subject_id") @db.Char(36)
-  subject    Subject      @relation(fields: [subjectId], references: [id], onDelete: Restrict)
-  sessionId  String       @map("session_id") @db.Char(36)
-  session    Session      @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  id         String      @id @default(uuid()) @db.Char(36)
+  classId    String      @map("class_id") @db.Char(36)
+  class      SchoolClass @relation(fields: [classId], references: [id], onDelete: Restrict)
+  subclassId String?     @map("subclass_id") @db.Char(36)
+  subclass   SubClass?   @relation(fields: [subclassId], references: [id], onDelete: SetNull)
+  subjectId  String      @map("subject_id") @db.Char(36)
+  subject    Subject     @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  sessionId  String      @map("session_id") @db.Char(36)
+  session    Session     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
 
   @@unique([classId, subclassId, subjectId, sessionId])
   @@index([classId])
@@ -1488,19 +1492,19 @@ model ClassSubject {
 }
 
 model StudentSubjectRegistration {
-  id         String                  @id @default(uuid()) @db.Char(36)
-  studentId  String                  @map("student_id") @db.Char(36)
-  student    Student                 @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  classId    String                  @map("class_id") @db.Char(36)
-  class      SchoolClass             @relation(fields: [classId], references: [id], onDelete: Restrict)
-  subclassId String?                 @map("subclass_id") @db.Char(36)
-  subclass   SubClass?               @relation(fields: [subclassId], references: [id], onDelete: SetNull)
-  subjectId  String                  @map("subject_id") @db.Char(36)
-  subject    Subject                 @relation(fields: [subjectId], references: [id], onDelete: Restrict)
-  sessionId  String                  @map("session_id") @db.Char(36)
-  session    Session                 @relation(fields: [sessionId], references: [id], onDelete: Restrict)
-  termId     String                  @map("term_id") @db.Char(36)
-  term       Term                    @relation(fields: [termId], references: [id], onDelete: Restrict)
+  id         String                   @id @default(uuid()) @db.Char(36)
+  studentId  String                   @map("student_id") @db.Char(36)
+  student    Student                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classId    String                   @map("class_id") @db.Char(36)
+  class      SchoolClass              @relation(fields: [classId], references: [id], onDelete: Restrict)
+  subclassId String?                  @map("subclass_id") @db.Char(36)
+  subclass   SubClass?                @relation(fields: [subclassId], references: [id], onDelete: SetNull)
+  subjectId  String                   @map("subject_id") @db.Char(36)
+  subject    Subject                  @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  sessionId  String                   @map("session_id") @db.Char(36)
+  session    Session                  @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  termId     String                   @map("term_id") @db.Char(36)
+  term       Term                     @relation(fields: [termId], references: [id], onDelete: Restrict)
   scores     StudentAssessmentScore[]
 
   @@unique([studentId, subjectId, sessionId, termId])
@@ -1514,34 +1518,46 @@ model StudentSubjectRegistration {
 }
 
 model StudentAssessmentScore {
-  id                            String                     @id @default(uuid()) @db.Char(36)
-  studentSubjectRegistrationId  String                     @map("student_subject_registration_id") @db.Char(36)
-  studentSubjectRegistration    StudentSubjectRegistration @relation(fields: [studentSubjectRegistrationId], references: [id], onDelete: Restrict)
-  componentId                   String                     @map("component_id") @db.Char(36)
-  component                     AssessmentComponent        @relation(fields: [componentId], references: [id], onDelete: Restrict)
-  termId                        String                     @map("term_id") @db.Char(36)
-  term                          Term                       @relation(fields: [termId], references: [id], onDelete: Restrict)
-  sessionId                     String                     @map("session_id") @db.Char(36)
-  session                       Session                    @relation(fields: [sessionId], references: [id], onDelete: Restrict)
-  score                         Decimal                    @map("score") @db.Decimal(8, 2)
+  id                           String                     @id @default(uuid()) @db.Char(36)
+  studentSubjectRegistrationId String                     @map("student_subject_registration_id") @db.Char(36)
+  studentSubjectRegistration   StudentSubjectRegistration @relation(fields: [studentSubjectRegistrationId], references: [id], onDelete: Restrict)
+  classId                      String                     @map("class_id") @db.Char(36)
+  class                        SchoolClass                @relation(fields: [classId], references: [id], onDelete: Restrict)
+  subclassId                   String?                    @map("subclass_id") @db.Char(36)
+  subclass                     SubClass?                  @relation(fields: [subclassId], references: [id], onDelete: SetNull)
+  subjectId                    String                     @map("subject_id") @db.Char(36)
+  subject                      Subject                    @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  componentId                  String                     @map("component_id") @db.Char(36)
+  component                    AssessmentComponent        @relation(fields: [componentId], references: [id], onDelete: Restrict)
+  termId                       String                     @map("term_id") @db.Char(36)
+  term                         Term                       @relation(fields: [termId], references: [id], onDelete: Restrict)
+  sessionId                    String                     @map("session_id") @db.Char(36)
+  session                      Session                    @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  score                        Decimal                    @map("score") @db.Decimal(8, 2)
+  studentId                    String?                    @map("student_id") @db.Char(36)
+  student                      Student?                   @relation(fields: [studentId], references: [id], onDelete: Restrict)
 
   @@unique([studentSubjectRegistrationId, componentId])
   @@index([studentSubjectRegistrationId])
+  @@index([classId])
+  @@index([subclassId])
+  @@index([subjectId])
   @@index([componentId])
   @@index([termId])
   @@index([sessionId])
+  @@index([classId, subjectId, sessionId, termId])
   @@map("student_assessment_scores")
 }
 
 model GradingTemplate {
-  id          String               @id @default(uuid()) @db.Char(36)
-  name        String               @map("name")
-  description String?              @map("description") @db.Text
-  version     String               @map("version")
-  isLocked    Boolean              @default(false) @map("is_locked")
-  parentId    String?              @map("parent_id") @db.Char(36)
-  parent      GradingTemplate?     @relation("GradingTemplateVersions", fields: [parentId], references: [id], onDelete: SetNull)
-  children         GradingTemplate[]    @relation("GradingTemplateVersions")
+  id               String                 @id @default(uuid()) @db.Char(36)
+  name             String                 @map("name")
+  description      String?                @map("description") @db.Text
+  version          String                 @map("version")
+  isLocked         Boolean                @default(false) @map("is_locked")
+  parentId         String?                @map("parent_id") @db.Char(36)
+  parent           GradingTemplate?       @relation("GradingTemplateVersions", fields: [parentId], references: [id], onDelete: SetNull)
+  children         GradingTemplate[]      @relation("GradingTemplateVersions")
   items            GradingTemplateItem[]
   classAssignments ClassGradingTemplate[]
 

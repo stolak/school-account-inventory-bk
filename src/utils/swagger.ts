@@ -122,6 +122,43 @@ const options: swaggerJSDoc.Options = {
         name: "AdministrativeExpenses",
         description: "Administrative expense transactions linked to a component (CRUD)",
       },
+      {
+        name: "AssessmentTemplates",
+        description: "Assessment template definitions with versioning (CRUD)",
+      },
+      {
+        name: "AssessmentComponents",
+        description: "Scoring components within an assessment template (CRUD)",
+      },
+      {
+        name: "ClassAssessmentTemplates",
+        description: "Assessment template assignments per class, session, and term (CRUD)",
+      },
+      { name: "Subjects", description: "Academic subjects master data (CRUD)" },
+      {
+        name: "ClassSubjects",
+        description: "Subjects offered per class and session (CRUD)",
+      },
+      {
+        name: "StudentSubjectRegistrations",
+        description: "Student subject enrolment per session and term (CRUD)",
+      },
+      {
+        name: "StudentAssessmentScores",
+        description: "Student scores per assessment component (CRUD)",
+      },
+      {
+        name: "GradingTemplates",
+        description: "Grading scale templates with versioning (CRUD)",
+      },
+      {
+        name: "GradingTemplateItems",
+        description: "Grade bands within a grading template (CRUD)",
+      },
+      {
+        name: "ClassGradingTemplates",
+        description: "Grading template assignments per class, session, and term (CRUD)",
+      },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
       { name: "Sales", description: "Inventory sales transactions (bulk create, list, grouped by reference)" },

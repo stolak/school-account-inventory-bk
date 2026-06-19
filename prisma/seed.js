@@ -4044,6 +4044,554 @@ async function main() {
       `   ✓ Current period: ${seededSession.id} (2025/2026) + ${seededTerm.id} (Third Term)`
     );
 
+    // ─── Assessment & grading (templates, subjects, registrations, scores) ───
+    console.log("📝 Seeding assessment and grading data...");
+
+    // Reset assessment/grading tables for idempotent reseed (dev seed data only)
+    await prisma.studentAssessmentScore.deleteMany({});
+    await prisma.studentSubjectRegistration.deleteMany({});
+    await prisma.classSubject.deleteMany({});
+    await prisma.classAssessmentTemplate.deleteMany({});
+    await prisma.classGradingTemplate.deleteMany({});
+    await prisma.assessmentComponent.deleteMany({});
+    await prisma.gradingTemplateItem.deleteMany({});
+    await prisma.subject.deleteMany({});
+    await prisma.assessmentTemplate.deleteMany({});
+    await prisma.gradingTemplate.deleteMany({});
+
+    const ASMT_VER_JSS = "b2c3d4e5-f6a7-4a90-8123-456789ab0001";
+    const ASMT_VER_SS = "c3d4e5f6-a7b8-4b01-9234-567890ab0002";
+
+    const AT = {
+      JSS: "d4e5f6a7-b8c9-4c12-a345-678901ab0003",
+      SS: "e5f6a7b8-c9d0-4d23-b456-789012ab0004",
+    };
+
+    const assessmentTemplates = [
+      {
+        id: AT.JSS,
+        name: "Junior Secondary Continuous Assessment",
+        description: "CA1, CA2, mid-term test, and end-of-term exam for JSS classes",
+        versionId: ASMT_VER_JSS,
+        parentTemplateId: null,
+        status: "Active",
+      },
+      {
+        id: AT.SS,
+        name: "Senior Secondary Examination",
+        description: "Continuous assessment and final examination for SS classes",
+        versionId: ASMT_VER_SS,
+        parentTemplateId: null,
+        status: "Active",
+      },
+    ];
+
+    for (const tpl of assessmentTemplates) {
+      await prisma.assessmentTemplate.upsert({
+        where: { id: tpl.id },
+        update: {
+          name: tpl.name,
+          description: tpl.description,
+          versionId: tpl.versionId,
+          parentTemplateId: tpl.parentTemplateId,
+          status: tpl.status,
+        },
+        create: tpl,
+      });
+    }
+
+    const AC = {
+      JSS_CA1: "f6a7b8c9-d0e1-4e34-a567-890123ab0005",
+      JSS_CA2: "a7b8c9d0-e1f2-4f45-b678-901234ab0006",
+      JSS_MID: "b8c9d0e1-f2a3-4056-c789-012345ab0007",
+      JSS_EXAM: "c9d0e1f2-a3b4-4167-d890-123456ab0008",
+      SS_CA: "d0e1f2a3-b4c5-4278-e901-234567ab0009",
+      SS_EXAM: "e1f2a3b4-c5d6-4389-f012-345678ab0010",
+    };
+
+    const assessmentComponents = [
+      {
+        id: AC.JSS_CA1,
+        templateId: AT.JSS,
+        name: "First Continuous Assessment",
+        maxScore: 10,
+        weight: 10,
+        orderNo: 1,
+        status: "Active",
+        isLocked: false,
+      },
+      {
+        id: AC.JSS_CA2,
+        templateId: AT.JSS,
+        name: "Second Continuous Assessment",
+        maxScore: 10,
+        weight: 10,
+        orderNo: 2,
+        status: "Active",
+        isLocked: false,
+      },
+      {
+        id: AC.JSS_MID,
+        templateId: AT.JSS,
+        name: "Mid-Term Test",
+        maxScore: 20,
+        weight: 20,
+        orderNo: 3,
+        status: "Active",
+        isLocked: false,
+      },
+      {
+        id: AC.JSS_EXAM,
+        templateId: AT.JSS,
+        name: "End of Term Examination",
+        maxScore: 60,
+        weight: 60,
+        orderNo: 4,
+        status: "Active",
+        isLocked: true,
+      },
+      {
+        id: AC.SS_CA,
+        templateId: AT.SS,
+        name: "Continuous Assessment",
+        maxScore: 40,
+        weight: 40,
+        orderNo: 1,
+        status: "Active",
+        isLocked: false,
+      },
+      {
+        id: AC.SS_EXAM,
+        templateId: AT.SS,
+        name: "Final Examination",
+        maxScore: 60,
+        weight: 60,
+        orderNo: 2,
+        status: "Active",
+        isLocked: false,
+      },
+    ];
+
+    for (const comp of assessmentComponents) {
+      await prisma.assessmentComponent.upsert({
+        where: { id: comp.id },
+        update: {
+          templateId: comp.templateId,
+          name: comp.name,
+          maxScore: comp.maxScore,
+          weight: comp.weight,
+          orderNo: comp.orderNo,
+          status: comp.status,
+          isLocked: comp.isLocked,
+        },
+        create: comp,
+      });
+    }
+
+    const classAssessmentTemplates = [
+      {
+        id: "f2a3b4c5-d6e7-4890-a123-456789ab0011",
+        classId: classIds.jss1,
+        templateId: AT.JSS,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "a3b4c5d6-e7f8-4901-b234-567890ab0012",
+        classId: classIds.jss2,
+        templateId: AT.JSS,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "b4c5d6e7-f8a9-4012-c345-678901ab0013",
+        classId: classIds.ss1,
+        templateId: AT.SS,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+    ];
+
+    for (const row of classAssessmentTemplates) {
+      await prisma.classAssessmentTemplate.upsert({
+        where: { id: row.id },
+        update: {
+          classId: row.classId,
+          templateId: row.templateId,
+          sessionId: row.sessionId,
+          termId: row.termId,
+        },
+        create: row,
+      });
+    }
+
+    const SUB = {
+      MTH: "c5d6e7f8-a9b0-4123-d456-789012ab0014",
+      ENG: "d6e7f8a9-b0c1-4234-e567-890123ab0015",
+      BST: "e7f8a9b0-c1d2-4345-f678-901234ab0016",
+      CIV: "f8a9b0c1-d2e3-4456-a789-012345ab0017",
+      CRS: "a9b0c1d2-e3f4-4567-b890-123456ab0018",
+    };
+
+    const subjects = [
+      { id: SUB.MTH, code: "MTH", name: "Mathematics" },
+      { id: SUB.ENG, code: "ENG", name: "English Language" },
+      { id: SUB.BST, code: "BST", name: "Basic Science and Technology" },
+      { id: SUB.CIV, code: "CIV", name: "Civic Education" },
+      { id: SUB.CRS, code: "CRS", name: "Christian Religious Studies" },
+    ];
+
+    for (const sub of subjects) {
+      await prisma.subject.upsert({
+        where: { id: sub.id },
+        update: { code: sub.code, name: sub.name },
+        create: sub,
+      });
+    }
+
+    const classSubjects = [
+      {
+        id: "b0c1d2e3-f4a5-4623-c789-012345ab0019",
+        classId: classIds.jss1,
+        subclassId: null,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+      },
+      {
+        id: "c1d2e3f4-a5b6-4734-d890-123456ab0020",
+        classId: classIds.jss1,
+        subclassId: null,
+        subjectId: SUB.ENG,
+        sessionId: seededSession.id,
+      },
+      {
+        id: "d2e3f4a5-b6c7-4845-e901-234567ab0021",
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        subjectId: SUB.BST,
+        sessionId: seededSession.id,
+      },
+      {
+        id: "e3f4a5b6-c7d8-4956-f012-345678ab0022",
+        classId: classIds.jss2,
+        subclassId: null,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+      },
+      {
+        id: "f4a5b6c7-d8e9-4067-a123-456789ab0023",
+        classId: classIds.jss2,
+        subclassId: null,
+        subjectId: SUB.CIV,
+        sessionId: seededSession.id,
+      },
+    ];
+
+    for (const row of classSubjects) {
+      await prisma.classSubject.upsert({
+        where: { id: row.id },
+        update: {
+          classId: row.classId,
+          subclassId: row.subclassId,
+          subjectId: row.subjectId,
+          sessionId: row.sessionId,
+        },
+        create: row,
+      });
+    }
+
+    const STU = {
+      CHIOMA: "e6f7a8b9-c0d1-4234-e012-345678907001",
+      IBRAHIM: "e6f7a8b9-c0d1-4234-e012-345678907002",
+      GRACE: "e6f7a8b9-c0d1-4234-e012-345678907003",
+    };
+
+    const SSR = {
+      CHIOMA_MTH: "a5b6c7d8-e9f0-4178-b234-567890ab0024",
+      CHIOMA_ENG: "b6c7d8e9-f0a1-4289-c345-678901ab0025",
+      IBRAHIM_MTH: "c7d8e9f0-a1b2-4390-d456-789012ab0026",
+      GRACE_MTH: "d8e9f0a1-b2c3-4401-e567-890123ab0027",
+    };
+
+    const studentSubjectRegistrations = [
+      {
+        id: SSR.CHIOMA_MTH,
+        studentId: STU.CHIOMA,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.CHIOMA_ENG,
+        studentId: STU.CHIOMA,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        subjectId: SUB.ENG,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.IBRAHIM_MTH,
+        studentId: STU.IBRAHIM,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1B,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.GRACE_MTH,
+        studentId: STU.GRACE,
+        classId: classIds.jss2,
+        subclassId: subClassIds.jss2A,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+    ];
+
+    for (const row of studentSubjectRegistrations) {
+      await prisma.studentSubjectRegistration.upsert({
+        where: { id: row.id },
+        update: {
+          studentId: row.studentId,
+          classId: row.classId,
+          subclassId: row.subclassId,
+          subjectId: row.subjectId,
+          sessionId: row.sessionId,
+          termId: row.termId,
+        },
+        create: row,
+      });
+    }
+
+    const studentAssessmentScores = [
+      {
+        id: "e9f0a1b2-c3d4-4512-f678-901234ab0028",
+        studentSubjectRegistrationId: SSR.CHIOMA_MTH,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        subjectId: SUB.MTH,
+        componentId: AC.JSS_CA1,
+        termId: seededTerm.id,
+        sessionId: seededSession.id,
+        score: 8.5,
+      },
+      {
+        id: "f0a1b2c3-d4e5-4623-a789-012345ab0029",
+        studentSubjectRegistrationId: SSR.CHIOMA_MTH,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        subjectId: SUB.MTH,
+        componentId: AC.JSS_CA2,
+        termId: seededTerm.id,
+        sessionId: seededSession.id,
+        score: 9,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4734-b890-123456ab0030",
+        studentSubjectRegistrationId: SSR.CHIOMA_MTH,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        subjectId: SUB.MTH,
+        componentId: AC.JSS_MID,
+        termId: seededTerm.id,
+        sessionId: seededSession.id,
+        score: 17,
+      },
+      {
+        id: "b2c3d4e5-f6a7-4845-c901-234567ab0031",
+        studentSubjectRegistrationId: SSR.IBRAHIM_MTH,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1B,
+        subjectId: SUB.MTH,
+        componentId: AC.JSS_CA1,
+        termId: seededTerm.id,
+        sessionId: seededSession.id,
+        score: 7,
+      },
+      {
+        id: "c3d4e5f6-a7b8-4956-d012-345678ab0032",
+        studentSubjectRegistrationId: SSR.GRACE_MTH,
+        classId: classIds.jss2,
+        subclassId: subClassIds.jss2A,
+        subjectId: SUB.MTH,
+        componentId: AC.JSS_CA1,
+        termId: seededTerm.id,
+        sessionId: seededSession.id,
+        score: 10,
+      },
+    ];
+
+    for (const row of studentAssessmentScores) {
+      await prisma.studentAssessmentScore.upsert({
+        where: { id: row.id },
+        update: {
+          studentSubjectRegistrationId: row.studentSubjectRegistrationId,
+          classId: row.classId,
+          subclassId: row.subclassId,
+          subjectId: row.subjectId,
+          componentId: row.componentId,
+          termId: row.termId,
+          sessionId: row.sessionId,
+          score: row.score,
+        },
+        create: row,
+      });
+    }
+
+    const GT = {
+      JSS: "d4e5f6a7-b8c9-4067-e123-456789ab0033",
+    };
+
+    const gradingTemplates = [
+      {
+        id: GT.JSS,
+        name: "Junior Secondary Grading Scale",
+        description: "Standard A–F letter grades for JSS report cards",
+        version: "2025",
+        isLocked: false,
+        parentId: null,
+      },
+    ];
+
+    for (const tpl of gradingTemplates) {
+      await prisma.gradingTemplate.upsert({
+        where: { id: tpl.id },
+        update: {
+          name: tpl.name,
+          description: tpl.description,
+          version: tpl.version,
+          isLocked: tpl.isLocked,
+          parentId: tpl.parentId,
+        },
+        create: tpl,
+      });
+    }
+
+    const gradingTemplateItems = [
+      {
+        id: "e5f6a7b8-c9d0-4178-f234-567890ab0034",
+        gradingTemplateId: GT.JSS,
+        grade: "A",
+        minScore: 70,
+        maxScore: 100,
+        remark: "Excellent",
+        gradePoint: 5,
+      },
+      {
+        id: "f6a7b8c9-d0e1-4289-a345-678901ab0035",
+        gradingTemplateId: GT.JSS,
+        grade: "B",
+        minScore: 60,
+        maxScore: 69.99,
+        remark: "Very Good",
+        gradePoint: 4,
+      },
+      {
+        id: "a7b8c9d0-e1f2-4390-b456-789012ab0036",
+        gradingTemplateId: GT.JSS,
+        grade: "C",
+        minScore: 50,
+        maxScore: 59.99,
+        remark: "Good",
+        gradePoint: 3,
+      },
+      {
+        id: "b8c9d0e1-f2a3-4401-c567-890123ab0037",
+        gradingTemplateId: GT.JSS,
+        grade: "D",
+        minScore: 45,
+        maxScore: 49.99,
+        remark: "Pass",
+        gradePoint: 2,
+      },
+      {
+        id: "c9d0e1f2-a3b4-4512-d678-901234ab0038",
+        gradingTemplateId: GT.JSS,
+        grade: "E",
+        minScore: 40,
+        maxScore: 44.99,
+        remark: "Fair",
+        gradePoint: 1,
+      },
+      {
+        id: "d0e1f2a3-b4c5-4623-e789-012345ab0039",
+        gradingTemplateId: GT.JSS,
+        grade: "F",
+        minScore: 0,
+        maxScore: 39.99,
+        remark: "Fail",
+        gradePoint: 0,
+      },
+    ];
+
+    for (const item of gradingTemplateItems) {
+      await prisma.gradingTemplateItem.upsert({
+        where: { id: item.id },
+        update: {
+          gradingTemplateId: item.gradingTemplateId,
+          grade: item.grade,
+          minScore: item.minScore,
+          maxScore: item.maxScore,
+          remark: item.remark,
+          gradePoint: item.gradePoint,
+        },
+        create: item,
+      });
+    }
+
+    const classGradingTemplates = [
+      {
+        id: "e1f2a3b4-c5d6-4734-f890-123456ab0040",
+        name: "JSS 1 Third Term Grading",
+        classId: classIds.jss1,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        gradingTemplateId: GT.JSS,
+        status: "Active",
+      },
+      {
+        id: "f2a3b4c5-d6e7-4845-a901-234567ab0041",
+        name: "JSS 2 Third Term Grading",
+        classId: classIds.jss2,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        gradingTemplateId: GT.JSS,
+        status: "Active",
+      },
+    ];
+
+    for (const row of classGradingTemplates) {
+      await prisma.classGradingTemplate.upsert({
+        where: { id: row.id },
+        update: {
+          name: row.name,
+          classId: row.classId,
+          sessionId: row.sessionId,
+          termId: row.termId,
+          gradingTemplateId: row.gradingTemplateId,
+          status: row.status,
+        },
+        create: row,
+      });
+    }
+
+    console.log(
+      `   ✓ ${assessmentTemplates.length} assessment templates, ${assessmentComponents.length} components`
+    );
+    console.log(
+      `   ✓ ${classAssessmentTemplates.length} class assessment assignments, ${subjects.length} subjects, ${classSubjects.length} class subjects`
+    );
+    console.log(
+      `   ✓ ${studentSubjectRegistrations.length} student subject registrations, ${studentAssessmentScores.length} assessment scores`
+    );
+    console.log(
+      `   ✓ ${gradingTemplates.length} grading template, ${gradingTemplateItems.length} grade bands, ${classGradingTemplates.length} class grading assignments`
+    );
+
     // Class default billings (amounts per class for current session / term)
     console.log("📋 Seeding class default billings...");
     const CLASS_JSS1 = "c4d5e6f7-a8b9-4012-c012-345678905001";
