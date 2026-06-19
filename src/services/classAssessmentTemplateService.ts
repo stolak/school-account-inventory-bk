@@ -4,7 +4,15 @@ import { Prisma } from "@prisma/client";
 
 const include = {
   class: { select: { id: true, name: true, status: true } },
-  template: { select: { id: true, name: true, status: true, versionId: true } },
+  template: {
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      versionId: true,
+      components: { select: { id: true, name: true, maxScore: true, weight: true, orderNo: true } },
+    },
+  },
   session: { select: { id: true, name: true, status: true } },
   term: { select: { id: true, name: true, status: true } },
 } satisfies Prisma.ClassAssessmentTemplateInclude;
@@ -87,30 +95,24 @@ export class ClassAssessmentTemplateService {
     return this.prisma.classAssessmentTemplate.findUnique({ where: { id }, include });
   }
 
-  async update(
-    id: string,
-    input: { classId?: string; templateId?: string; sessionId?: string; termId?: string }
-  ): Promise<ClassAssessmentTemplateData> {
+  async update(id: string, input: { templateId: string }): Promise<ClassAssessmentTemplateData> {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Class assessment template not found");
 
-    const payload = {
-      classId: (input.classId ?? existing.classId).trim(),
-      templateId: (input.templateId ?? existing.templateId).trim(),
-      sessionId: (input.sessionId ?? existing.sessionId).trim(),
-      termId: (input.termId ?? existing.termId).trim(),
-    };
-    await this.assertRefs(payload);
+    const templateId = input.templateId.trim();
+    if (!templateId) throw new Error("templateId is required");
+
+    await this.assertRefs({
+      classId: existing.classId,
+      templateId,
+      sessionId: existing.sessionId,
+      termId: existing.termId,
+    });
 
     try {
       return await this.prisma.classAssessmentTemplate.update({
         where: { id },
-        data: {
-          ...(input.classId !== undefined ? { classId: payload.classId } : {}),
-          ...(input.templateId !== undefined ? { templateId: payload.templateId } : {}),
-          ...(input.sessionId !== undefined ? { sessionId: payload.sessionId } : {}),
-          ...(input.termId !== undefined ? { termId: payload.termId } : {}),
-        },
+        data: { templateId },
         include,
       });
     } catch (e) {

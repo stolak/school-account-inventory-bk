@@ -73,6 +73,7 @@ export class StudentAssessmentScoreService {
         subjectId: true,
         sessionId: true,
         termId: true,
+        studentId: true,
       },
     });
     if (!reg) throw new Error("Invalid studentSubjectRegistrationId");
@@ -114,6 +115,7 @@ export class StudentAssessmentScoreService {
         subjectId: reg.subjectId,
         termId: reg.termId,
         sessionId: reg.sessionId,
+        studentId: reg.studentId,
       },
       include,
     });

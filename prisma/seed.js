@@ -714,6 +714,7 @@ async function main() {
       { route: "/store-transfers", caption: "Store transfers" },
       // School Management
       { route: "/classes", caption: "Classes & sub-classes" },
+      { route: "/assessment-setup", caption: "Assessment setup" },
       { route: "/students", caption: "Students" },
       { route: "/staff", caption: "Staff" },
       { route: "/sessions", caption: "Sessions & terms" },

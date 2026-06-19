@@ -145,7 +145,7 @@ export const classAssessmentTemplateController = {
    *       500:
    *         description: Server error
    *   put:
-   *     summary: Update a class assessment template assignment
+   *     summary: Update the assessment template assigned to a class
    *     tags: [ClassAssessmentTemplates]
    *     security:
    *       - bearerAuth: []
@@ -162,14 +162,9 @@ export const classAssessmentTemplateController = {
    *         application/json:
    *           schema:
    *             type: object
+   *             required: [templateId]
    *             properties:
-   *               classId:
-   *                 type: string
    *               templateId:
-   *                 type: string
-   *               sessionId:
-   *                 type: string
-   *               termId:
    *                 type: string
    *     responses:
    *       200:
@@ -227,34 +222,13 @@ export const classAssessmentTemplateController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { classId, templateId, sessionId, termId } = req.body ?? {};
-      if (
-        classId === undefined &&
-        templateId === undefined &&
-        sessionId === undefined &&
-        termId === undefined
-      ) {
-        return res.status(400).json({ success: false, message: "At least one field must be provided" });
-      }
-
-      if (classId !== undefined && (typeof classId !== "string" || !classId.trim())) {
-        return res.status(400).json({ success: false, message: "classId must be a non-empty string" });
-      }
-      if (templateId !== undefined && (typeof templateId !== "string" || !templateId.trim())) {
-        return res.status(400).json({ success: false, message: "templateId must be a non-empty string" });
-      }
-      if (sessionId !== undefined && (typeof sessionId !== "string" || !sessionId.trim())) {
-        return res.status(400).json({ success: false, message: "sessionId must be a non-empty string" });
-      }
-      if (termId !== undefined && (typeof termId !== "string" || !termId.trim())) {
-        return res.status(400).json({ success: false, message: "termId must be a non-empty string" });
+      const { templateId } = req.body ?? {};
+      if (!templateId || typeof templateId !== "string" || !templateId.trim()) {
+        return res.status(400).json({ success: false, message: "templateId is required" });
       }
 
       const updated = await classAssessmentTemplateService.update(id, {
-        ...(classId !== undefined ? { classId: classId.trim() } : {}),
-        ...(templateId !== undefined ? { templateId: templateId.trim() } : {}),
-        ...(sessionId !== undefined ? { sessionId: sessionId.trim() } : {}),
-        ...(termId !== undefined ? { termId: termId.trim() } : {}),
+        templateId: templateId.trim(),
       });
 
       return res.json({
