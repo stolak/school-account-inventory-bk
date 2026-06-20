@@ -43,7 +43,7 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *       500:
  *         description: Server error
  *   get:
- *     summary: List class subject assignments
+ *     summary: List class subject assignments grouped by class, subclass, and session
  *     tags: [ClassSubjects]
  *     security:
  *       - bearerAuth: []
@@ -66,11 +66,155 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *           type: string
  *     responses:
  *       200:
- *         description: Class subjects list
+ *         description: Class subjects report grouped by class, subclass, and session
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     groups:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           classId:
+ *                             type: string
+ *                           class:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               name:
+ *                                 type: string
+ *                           subclassId:
+ *                             type: string
+ *                             nullable: true
+ *                           subclass:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               name:
+ *                                 type: string
+ *                           sessionId:
+ *                             type: string
+ *                           session:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               name:
+ *                                 type: string
+ *                           classSubjects:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: string
+ *                                 subjectId:
+ *                                   type: string
+ *                                 subject:
+ *                                   type: object
+ *                                   properties:
+ *                                     id:
+ *                                       type: string
+ *                                     code:
+ *                                       type: string
+ *                                     name:
+ *                                       type: string
+ *                                     status:
+ *                                       type: string
+ *       500:
+ *         description: Server error
+ */
+/**
+ * @openapi
+ * /api/v1/class-subjects/bulk:
+ *   post:
+ *     summary: Assign multiple subjects to a class
+ *     tags: [ClassSubjects]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [classId, sessionId, subjectIds]
+ *             properties:
+ *               classId:
+ *                 type: string
+ *               subclassId:
+ *                 type: string
+ *                 nullable: true
+ *               sessionId:
+ *                 type: string
+ *               subjectIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 minItems: 1
+ *     responses:
+ *       201:
+ *         description: Class subjects created
+ *       400:
+ *         description: Validation error
+ *       409:
+ *         description: Duplicate subject assignment
  *       500:
  *         description: Server error
  */
 export const classSubjectController = {
+  createBulk: async (req: Request, res: Response) => {
+    try {
+      const { classId, subclassId, sessionId, subjectIds } = req.body ?? {};
+
+      if (!classId || typeof classId !== "string" || !classId.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId || typeof sessionId !== "string" || !sessionId.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!Array.isArray(subjectIds) || subjectIds.length === 0) {
+        return res.status(400).json({ success: false, message: "subjectIds must be a non-empty array" });
+      }
+      if (!isStringOrNullOrUndefined(subclassId)) {
+        return res.status(400).json({ success: false, message: "subclassId must be a string or null" });
+      }
+
+      for (const subjectId of subjectIds) {
+        if (typeof subjectId !== "string" || !subjectId.trim()) {
+          return res.status(400).json({ success: false, message: "Each subjectId must be a non-empty string" });
+        }
+      }
+
+      const created = await classSubjectService.createMany({
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        subjectIds: subjectIds.map((id: string) => id.trim()),
+        ...(subclassId !== undefined ? { subclassId: subclassId?.trim() || null } : {}),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Class subjects created successfully",
+        data: created,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to create class subjects");
+    }
+  },
+
   create: async (req: Request, res: Response) => {
     try {
       const { classId, subclassId, subjectId, sessionId } = req.body ?? {};

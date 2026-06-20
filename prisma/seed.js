@@ -715,6 +715,7 @@ async function main() {
       // School Management
       { route: "/classes", caption: "Classes & sub-classes" },
       { route: "/assessment-setup", caption: "Assessment setup" },
+      { route: "/subject-setup", caption: "subject Setup" },
       { route: "/students", caption: "Students" },
       { route: "/staff", caption: "Staff" },
       { route: "/sessions", caption: "Sessions & terms" },
@@ -4245,8 +4246,8 @@ async function main() {
     for (const sub of subjects) {
       await prisma.subject.upsert({
         where: { id: sub.id },
-        update: { code: sub.code, name: sub.name },
-        create: sub,
+        update: { code: sub.code, name: sub.name, status: "Active" },
+        create: { ...sub, status: "Active" },
       });
     }
 

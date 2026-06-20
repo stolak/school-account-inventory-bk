@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { subjectService } from "../services/subjectService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
+import { parseBodyStatus, parseStatusQuery } from "../utils/assessmentHttp";
 
 function queryString(query: Request["query"], key: string): string | undefined {
   const raw = query[key];
@@ -27,6 +28,9 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                 type: string
  *               name:
  *                 type: string
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive, Archived]
  *     responses:
  *       201:
  *         description: Subject created
@@ -47,16 +51,23 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         schema:
  *           type: string
  *         description: Search by code or name
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Active, Inactive, Archived, All]
  *     responses:
  *       200:
  *         description: Subjects list
+ *       400:
+ *         description: Invalid query parameters
  *       500:
  *         description: Server error
  */
 export const subjectController = {
   create: async (req: Request, res: Response) => {
     try {
-      const { code, name } = req.body ?? {};
+      const { code, name, status } = req.body ?? {};
 
       if (!code || typeof code !== "string" || !code.trim()) {
         return res.status(400).json({ success: false, message: "code is required" });
@@ -65,9 +76,18 @@ export const subjectController = {
         return res.status(400).json({ success: false, message: "name is required" });
       }
 
+      const parsedStatus = parseBodyStatus(status);
+      if (status !== undefined && parsedStatus === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, or Archived",
+        });
+      }
+
       const created = await subjectService.create({
         code: code.trim(),
         name: name.trim(),
+        ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
       });
 
       return res.status(201).json({
@@ -82,7 +102,19 @@ export const subjectController = {
 
   list: async (req: Request, res: Response) => {
     try {
-      const result = await subjectService.list({ q: queryString(req.query, "q") });
+      const statusParam = queryString(req.query, "status");
+      const parsedStatus = statusParam !== undefined ? parseStatusQuery(statusParam) : undefined;
+      if (statusParam !== undefined && parsedStatus === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, Archived, or All",
+        });
+      }
+
+      const result = await subjectService.list({
+        q: queryString(req.query, "q"),
+        ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
+      });
 
       return res.json({
         success: true,
@@ -132,46 +164,49 @@ export const subjectController = {
    *       required: true
    *       content:
    *         application/json:
-   *           schema:
-   *             type: object
-   *             properties:
-   *               code:
-   *                 type: string
-   *               name:
-   *                 type: string
-   *     responses:
-   *       200:
-   *         description: Subject updated
-   *       400:
-   *         description: Validation error
-   *       404:
-   *         description: Not found
-   *       409:
-   *         description: Duplicate subject code
-   *       500:
-   *         description: Server error
-   *   delete:
-   *     summary: Delete a subject
-   *     tags: [Subjects]
-   *     security:
-   *       - bearerAuth: []
-   *     parameters:
-   *       - in: path
-   *         name: id
-   *         required: true
-   *         schema:
-   *           type: string
-   *           format: uuid
-   *     responses:
-   *       200:
-   *         description: Subject deleted
-   *       404:
-   *         description: Not found
-   *       409:
-   *         description: Referenced by other records
-   *       500:
-   *         description: Server error
-   */
+ *           schema:
+ *             type: object
+ *             properties:
+ *               code:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive, Archived]
+ *     responses:
+ *       200:
+ *         description: Subject updated
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Not found
+ *       409:
+ *         description: Duplicate subject code
+ *       500:
+ *         description: Server error
+ *   delete:
+ *     summary: Delete a subject
+ *     tags: [Subjects]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Subject deleted
+ *       404:
+ *         description: Not found
+ *       409:
+ *         description: Referenced by other records
+ *       500:
+ *         description: Server error
+ */
   getById: async (req: Request, res: Response) => {
     try {
       const id = requireRouteId(req, res);
@@ -197,9 +232,12 @@ export const subjectController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { code, name } = req.body ?? {};
-      if (code === undefined && name === undefined) {
-        return res.status(400).json({ success: false, message: "At least one of code or name must be provided" });
+      const { code, name, status } = req.body ?? {};
+      if (code === undefined && name === undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "At least one of code, name, or status must be provided",
+        });
       }
       if (code !== undefined && (typeof code !== "string" || !code.trim())) {
         return res.status(400).json({ success: false, message: "code must be a non-empty string" });
@@ -208,9 +246,18 @@ export const subjectController = {
         return res.status(400).json({ success: false, message: "name must be a non-empty string" });
       }
 
+      const parsedStatus = parseBodyStatus(status);
+      if (status !== undefined && parsedStatus === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, or Archived",
+        });
+      }
+
       const updated = await subjectService.update(id, {
         ...(code !== undefined ? { code: code.trim() } : {}),
         ...(name !== undefined ? { name: name.trim() } : {}),
+        ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
       });
 
       return res.json({

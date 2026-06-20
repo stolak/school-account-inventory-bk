@@ -8,7 +8,7 @@ const include = {
   },
   class: { select: { id: true, name: true } },
   subclass: { select: { id: true, name: true } },
-  subject: { select: { id: true, code: true, name: true } },
+  subject: { select: { id: true, code: true, name: true, status: true } },
   session: { select: { id: true, name: true } },
   term: { select: { id: true, name: true } },
   _count: { select: { scores: true } },

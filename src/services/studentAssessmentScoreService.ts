@@ -12,7 +12,7 @@ const include = {
   },
   class: { select: { id: true, name: true } },
   subclass: { select: { id: true, name: true } },
-  subject: { select: { id: true, code: true, name: true } },
+  subject: { select: { id: true, code: true, name: true, status: true } },
   component: { select: { id: true, name: true, maxScore: true, isLocked: true } },
   term: { select: { id: true, name: true } },
   session: { select: { id: true, name: true } },

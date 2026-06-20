@@ -1,6 +1,6 @@
 import prisma from "../utils/prisma";
-import { isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
-import { Prisma } from "@prisma/client";
+import { applyStatusFilter, isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
+import { Prisma, Status } from "@prisma/client";
 
 export type SubjectData = Prisma.SubjectGetPayload<Record<string, never>>;
 
@@ -15,17 +15,24 @@ export class SubjectService {
     if (existing) throw new Error("A subject with this code already exists");
   }
 
-  async create(input: { code: string; name: string }): Promise<SubjectData> {
+  async create(input: { code: string; name: string; status?: Status }): Promise<SubjectData> {
     const code = input.code.trim().toUpperCase();
     const name = input.name.trim();
     if (!code) throw new Error("code is required");
     if (!name) throw new Error("name is required");
     await this.assertCodeUnique(code);
-    return this.prisma.subject.create({ data: { code, name } });
+    return this.prisma.subject.create({
+      data: {
+        code,
+        name,
+        ...(input.status !== undefined ? { status: input.status } : {}),
+      },
+    });
   }
 
-  async list(params: { q?: string }) {
+  async list(params: { q?: string; status?: Status | "All" }) {
     const where: Prisma.SubjectWhereInput = {};
+    applyStatusFilter(where, params.status);
     if (params.q?.trim()) {
       const q = params.q.trim();
       where.OR = [{ code: { contains: q } }, { name: { contains: q } }];
@@ -41,7 +48,10 @@ export class SubjectService {
     return this.prisma.subject.findUnique({ where: { id } });
   }
 
-  async update(id: string, input: { code?: string; name?: string }): Promise<SubjectData> {
+  async update(
+    id: string,
+    input: { code?: string; name?: string; status?: Status }
+  ): Promise<SubjectData> {
     if (input.code !== undefined && !input.code.trim()) throw new Error("code cannot be empty");
     if (input.name !== undefined && !input.name.trim()) throw new Error("name cannot be empty");
     const existing = await this.getById(id);
@@ -54,6 +64,7 @@ export class SubjectService {
         data: {
           ...(input.code !== undefined ? { code: input.code.trim().toUpperCase() } : {}),
           ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
         },
       });
     } catch (e) {
@@ -65,6 +76,17 @@ export class SubjectService {
   async delete(id: string): Promise<SubjectData> {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Subject not found");
+    // if exist in class subject
+    const isexistInClasss = await this.prisma.classSubject.findFirst({ where: { subjectId: id } });
+    if (isexistInClasss) {
+      throw new Error("Subject is referenced by class subject");
+    }
+    // if exist in student subject registration
+    const isexistInStudentSubjectRegistration =
+      await this.prisma.studentSubjectRegistration.findFirst({ where: { subjectId: id } });
+    if (isexistInStudentSubjectRegistration) {
+      throw new Error("Subject is referenced by student subject registration");
+    }
     try {
       return await this.prisma.subject.delete({ where: { id } });
     } catch (e) {

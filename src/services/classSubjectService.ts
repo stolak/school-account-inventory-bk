@@ -5,14 +5,100 @@ import { Prisma } from "@prisma/client";
 const include = {
   class: { select: { id: true, name: true } },
   subclass: { select: { id: true, name: true } },
-  subject: { select: { id: true, code: true, name: true } },
+  subject: { select: { id: true, code: true, name: true, status: true } },
   session: { select: { id: true, name: true } },
 } satisfies Prisma.ClassSubjectInclude;
 
 export type ClassSubjectData = Prisma.ClassSubjectGetPayload<{ include: typeof include }>;
 
+export interface ClassSubjectListItem {
+  id: string;
+  subjectId: string;
+  subject: ClassSubjectData["subject"];
+}
+
+export interface ClassSubjectGroup {
+  classId: string;
+  class: ClassSubjectData["class"];
+  subclassId: string | null;
+  subclass: ClassSubjectData["subclass"];
+  sessionId: string;
+  session: ClassSubjectData["session"];
+  classSubjects: ClassSubjectListItem[];
+}
+
 export class ClassSubjectService {
   private prisma = prisma;
+
+  private async assertClassSessionRefs(input: {
+    classId: string;
+    subclassId?: string | null;
+    sessionId: string;
+  }): Promise<void> {
+    const [cls, session] = await Promise.all([
+      this.prisma.schoolClass.findUnique({ where: { id: input.classId }, select: { id: true } }),
+      this.prisma.session.findUnique({ where: { id: input.sessionId }, select: { id: true } }),
+    ]);
+    if (!cls) throw new Error("Invalid classId");
+    if (!session) throw new Error("Invalid sessionId");
+    if (input.subclassId) {
+      const sub = await this.prisma.subClass.findUnique({
+        where: { id: input.subclassId },
+        select: { id: true, classId: true },
+      });
+      if (!sub) throw new Error("Invalid subclassId");
+      if (sub.classId && sub.classId !== input.classId) {
+        throw new Error("subclassId does not belong to classId");
+      }
+    }
+  }
+
+  private async resolveSubjects(subjectIds: string[]): Promise<Map<string, { id: string; name: string }>> {
+    const uniqueIds = [...new Set(subjectIds)];
+    const subjects = await this.prisma.subject.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, name: true },
+    });
+    if (subjects.length !== uniqueIds.length) throw new Error("Invalid subjectId");
+    return new Map(subjects.map((s) => [s.id, s]));
+  }
+
+  private duplicateNamesInList(
+    subjectIds: string[],
+    nameById: Map<string, { name: string }>
+  ): string[] {
+    const seen = new Set<string>();
+    const duplicateIds = new Set<string>();
+    for (const id of subjectIds) {
+      if (seen.has(id)) duplicateIds.add(id);
+      seen.add(id);
+    }
+    return [...duplicateIds].map((id) => nameById.get(id)!.name);
+  }
+
+  private async assertSubjectsNotAlreadyAssigned(input: {
+    classId: string;
+    subclassId: string | null;
+    sessionId: string;
+    subjectIds: string[];
+    nameById: Map<string, { name: string }>;
+  }): Promise<void> {
+    const existing = await this.prisma.classSubject.findMany({
+      where: {
+        classId: input.classId,
+        sessionId: input.sessionId,
+        subclassId: input.subclassId,
+        subjectId: { in: [...new Set(input.subjectIds)] },
+      },
+      select: { subject: { select: { name: true } } },
+    });
+    if (existing.length === 0) return;
+
+    const names = existing.map((row) => row.subject.name);
+    throw new Error(
+      `Subject${names.length > 1 ? "s" : ""} already assigned to this class: ${names.join(", ")}`
+    );
+  }
 
   private async assertRefs(input: {
     classId: string;
@@ -53,7 +139,15 @@ export class ClassSubjectService {
     if (!classId || !subjectId || !sessionId) {
       throw new Error("classId, subjectId, and sessionId are required");
     }
-    await this.assertRefs({ classId, subclassId, subjectId, sessionId });
+    await this.assertClassSessionRefs({ classId, subclassId, sessionId });
+    const nameById = await this.resolveSubjects([subjectId]);
+    await this.assertSubjectsNotAlreadyAssigned({
+      classId,
+      subclassId,
+      sessionId,
+      subjectIds: [subjectId],
+      nameById,
+    });
     try {
       return await this.prisma.classSubject.create({
         data: { classId, subclassId, subjectId, sessionId },
@@ -61,10 +155,99 @@ export class ClassSubjectService {
       });
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
-        throw new Error("This subject is already assigned to the class for the session");
+        throw new Error(
+          `Subject already assigned to this class: ${nameById.get(subjectId)!.name}`
+        );
       }
       throw e;
     }
+  }
+
+  async createMany(input: {
+    classId: string;
+    subclassId?: string | null;
+    sessionId: string;
+    subjectIds: string[];
+  }): Promise<{ classSubjects: ClassSubjectData[]; count: number }> {
+    const classId = input.classId.trim();
+    const sessionId = input.sessionId.trim();
+    const subclassId = input.subclassId?.trim() || null;
+
+    if (!classId || !sessionId) throw new Error("classId and sessionId are required");
+    if (!Array.isArray(input.subjectIds) || input.subjectIds.length === 0) {
+      throw new Error("subjectIds must be a non-empty array");
+    }
+
+    const subjectIds = input.subjectIds.map((id) => {
+      if (typeof id !== "string" || !id.trim()) {
+        throw new Error("Each subjectId must be a non-empty string");
+      }
+      return id.trim();
+    });
+
+    await this.assertClassSessionRefs({ classId, subclassId, sessionId });
+    const nameById = await this.resolveSubjects(subjectIds);
+
+    const duplicateInRequest = this.duplicateNamesInList(subjectIds, nameById);
+    if (duplicateInRequest.length > 0) {
+      throw new Error(
+        `Duplicate subjects in request: ${duplicateInRequest.join(", ")}`
+      );
+    }
+
+    const uniqueSubjectIds = [...new Set(subjectIds)];
+    await this.assertSubjectsNotAlreadyAssigned({
+      classId,
+      subclassId,
+      sessionId,
+      subjectIds: uniqueSubjectIds,
+      nameById,
+    });
+
+    const rows = await this.prisma.$transaction(
+      uniqueSubjectIds.map((subjectId) =>
+        this.prisma.classSubject.create({
+          data: { classId, subclassId, subjectId, sessionId },
+          include,
+        })
+      )
+    );
+
+    return { classSubjects: rows, count: rows.length };
+  }
+
+  private groupByClassSubclassAndSession(rows: ClassSubjectData[]): ClassSubjectGroup[] {
+    const map = new Map<string, ClassSubjectGroup>();
+
+    for (const row of rows) {
+      const key = `${row.classId}:${row.subclassId ?? ""}:${row.sessionId}`;
+      let group = map.get(key);
+      if (!group) {
+        group = {
+          classId: row.classId,
+          class: row.class,
+          subclassId: row.subclassId,
+          subclass: row.subclass,
+          sessionId: row.sessionId,
+          session: row.session,
+          classSubjects: [],
+        };
+        map.set(key, group);
+      }
+      group.classSubjects.push({
+        id: row.id,
+        subjectId: row.subjectId,
+        subject: row.subject,
+      });
+    }
+
+    return [...map.values()].sort((a, b) => {
+      const bySession = b.session.name.localeCompare(a.session.name);
+      if (bySession !== 0) return bySession;
+      const byClass = a.class.name.localeCompare(b.class.name);
+      if (byClass !== 0) return byClass;
+      return (a.subclass?.name ?? "").localeCompare(b.subclass?.name ?? "");
+    });
   }
 
   async list(params: {
@@ -82,9 +265,16 @@ export class ClassSubjectService {
     const rows = await this.prisma.classSubject.findMany({
       where,
       include,
-      orderBy: [{ sessionId: "desc" }, { classId: "asc" }],
+      orderBy: [
+        { classId: "asc" },
+        { subclassId: "asc" },
+        { sessionId: "desc" },
+        { subject: { code: "asc" } },
+      ],
     });
-    return { classSubjects: rows, count: rows.length };
+
+    const groups = this.groupByClassSubclassAndSession(rows);
+    return { groups };
   }
 
   async getById(id: string): Promise<ClassSubjectData | null> {
