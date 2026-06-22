@@ -25,6 +25,27 @@ function mapRow(row: Row): StudentSubjectRegistrationData {
   return { ...rest, scoreCount: _count.scores };
 }
 
+export interface StudentSubjectRegistrationListItem {
+  id: string;
+  subjectId: string;
+  subject: Row["subject"];
+}
+
+export interface StudentSubjectRegistrationGroup {
+  id: string;
+  studentId: string;
+  student: Row["student"];
+  classId: string;
+  class: Row["class"];
+  subclassId: string | null;
+  subclass: Row["subclass"];
+  sessionId: string;
+  session: Row["session"];
+  termId: string;
+  term: Row["term"];
+  subjects: StudentSubjectRegistrationListItem[];
+}
+
 export class StudentSubjectRegistrationService {
   private prisma = prisma;
 
@@ -58,6 +79,86 @@ export class StudentSubjectRegistrationService {
         throw new Error("subclassId does not belong to classId");
       }
     }
+  }
+
+  private async assertStudentClassSessionTermRefs(input: {
+    studentId: string;
+    classId: string;
+    subclassId?: string | null;
+    sessionId: string;
+    termId: string;
+  }): Promise<void> {
+    const [student, cls, session, term] = await Promise.all([
+      this.prisma.student.findUnique({ where: { id: input.studentId }, select: { id: true } }),
+      this.prisma.schoolClass.findUnique({ where: { id: input.classId }, select: { id: true } }),
+      this.prisma.session.findUnique({ where: { id: input.sessionId }, select: { id: true } }),
+      this.prisma.term.findUnique({ where: { id: input.termId }, select: { id: true } }),
+    ]);
+    if (!student) throw new Error("Invalid studentId");
+    if (!cls) throw new Error("Invalid classId");
+    if (!session) throw new Error("Invalid sessionId");
+    if (!term) throw new Error("Invalid termId");
+    if (input.subclassId) {
+      const sub = await this.prisma.subClass.findUnique({
+        where: { id: input.subclassId },
+        select: { id: true, classId: true },
+      });
+      if (!sub) throw new Error("Invalid subclassId");
+      if (sub.classId && sub.classId !== input.classId) {
+        throw new Error("subclassId does not belong to classId");
+      }
+    }
+  }
+
+  private async resolveSubjects(
+    subjectIds: string[]
+  ): Promise<Map<string, { id: string; name: string }>> {
+    const uniqueIds = [...new Set(subjectIds)];
+    const subjects = await this.prisma.subject.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, name: true },
+    });
+    if (subjects.length !== uniqueIds.length) throw new Error("Invalid subjectId");
+    return new Map(subjects.map((s) => [s.id, s]));
+  }
+
+  private duplicateNamesInList(
+    subjectIds: string[],
+    nameById: Map<string, { name: string }>
+  ): string[] {
+    const seen = new Set<string>();
+    const duplicateIds = new Set<string>();
+    for (const id of subjectIds) {
+      if (seen.has(id)) duplicateIds.add(id);
+      seen.add(id);
+    }
+    return [...duplicateIds].map((id) => nameById.get(id)!.name);
+  }
+
+  private async assertSubjectsNotAlreadyRegistered(input: {
+    studentId: string;
+    classId: string;
+    sessionId: string;
+    termId: string;
+    subjectIds: string[];
+    nameById: Map<string, { name: string }>;
+  }): Promise<void> {
+    const existing = await this.prisma.studentSubjectRegistration.findMany({
+      where: {
+        studentId: input.studentId,
+        classId: input.classId,
+        sessionId: input.sessionId,
+        termId: input.termId,
+        subjectId: { in: [...new Set(input.subjectIds)] },
+      },
+      select: { subject: { select: { name: true } } },
+    });
+    if (existing.length === 0) return;
+
+    const names = existing.map((row) => row.subject.name);
+    throw new Error(
+      `Student is already registered for subject${names.length > 1 ? "s" : ""}: ${names.join(", ")}`
+    );
   }
 
   async create(input: {
@@ -97,6 +198,123 @@ export class StudentSubjectRegistrationService {
     }
   }
 
+  async createMany(input: {
+    studentId: string;
+    classId: string;
+    subclassId?: string | null;
+    sessionId: string;
+    termId: string;
+    subjectIds: string[];
+  }): Promise<{ studentSubjectRegistrations: StudentSubjectRegistrationData[]; count: number }> {
+    const studentId = input.studentId.trim();
+    const classId = input.classId.trim();
+    const sessionId = input.sessionId.trim();
+    const termId = input.termId.trim();
+    const subclassId = input.subclassId?.trim() || null;
+
+    if (!studentId || !classId || !sessionId || !termId) {
+      throw new Error("studentId, classId, sessionId, and termId are required");
+    }
+    if (!Array.isArray(input.subjectIds) || input.subjectIds.length === 0) {
+      throw new Error("subjectIds must be a non-empty array");
+    }
+
+    const subjectIds = input.subjectIds.map((id) => {
+      if (typeof id !== "string" || !id.trim()) {
+        throw new Error("Each subjectId must be a non-empty string");
+      }
+      return id.trim();
+    });
+
+    await this.assertStudentClassSessionTermRefs({
+      studentId,
+      classId,
+      subclassId,
+      sessionId,
+      termId,
+    });
+    const nameById = await this.resolveSubjects(subjectIds);
+
+    const duplicateInRequest = this.duplicateNamesInList(subjectIds, nameById);
+    if (duplicateInRequest.length > 0) {
+      throw new Error(`Duplicate subjects in request: ${duplicateInRequest.join(", ")}`);
+    }
+
+    const uniqueSubjectIds = [...new Set(subjectIds)];
+    await this.assertSubjectsNotAlreadyRegistered({
+      studentId,
+      classId,
+      sessionId,
+      termId,
+      subjectIds: uniqueSubjectIds,
+      nameById,
+    });
+
+    try {
+      const rows = await this.prisma.$transaction(
+        uniqueSubjectIds.map((subjectId) =>
+          this.prisma.studentSubjectRegistration.create({
+            data: { studentId, classId, subclassId, subjectId, sessionId, termId },
+            include,
+          })
+        )
+      );
+      return { studentSubjectRegistrations: rows.map(mapRow), count: rows.length };
+    } catch (e) {
+      if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
+        throw new Error("Student is already registered for this subject in the session and term");
+      }
+      throw e;
+    }
+  }
+
+  private groupByStudentClassSubclassSessionAndTerm(
+    rows: Row[]
+  ): StudentSubjectRegistrationGroup[] {
+    const map = new Map<string, StudentSubjectRegistrationGroup>();
+
+    for (const row of rows) {
+      const key = `${row.studentId}:${row.classId}:${row.subclassId ?? ""}:${row.sessionId}:${row.termId}`;
+      let group = map.get(key);
+      if (!group) {
+        group = {
+          id: row.id,
+          studentId: row.studentId,
+          student: row.student,
+          classId: row.classId,
+          class: row.class,
+          subclassId: row.subclassId,
+          subclass: row.subclass,
+          sessionId: row.sessionId,
+          session: row.session,
+          termId: row.termId,
+          term: row.term,
+          subjects: [],
+        };
+        map.set(key, group);
+      }
+      group.subjects.push({
+        id: row.id,
+        subjectId: row.subjectId,
+        subject: row.subject,
+      });
+    }
+
+    return [...map.values()].sort((a, b) => {
+      const bySession = b.session.name.localeCompare(a.session.name);
+      if (bySession !== 0) return bySession;
+      const byTerm = a.term.name.localeCompare(b.term.name);
+      if (byTerm !== 0) return byTerm;
+      const byStudent = a.student.lastName.localeCompare(b.student.lastName);
+      if (byStudent !== 0) return byStudent;
+      const byFirstName = a.student.firstName.localeCompare(b.student.firstName);
+      if (byFirstName !== 0) return byFirstName;
+      const byClass = a.class.name.localeCompare(b.class.name);
+      if (byClass !== 0) return byClass;
+      return (a.subclass?.name ?? "").localeCompare(b.subclass?.name ?? "");
+    });
+  }
+
   async list(params: {
     studentId?: string;
     classId?: string;
@@ -116,9 +334,14 @@ export class StudentSubjectRegistrationService {
     const rows = await this.prisma.studentSubjectRegistration.findMany({
       where,
       include,
-      orderBy: [{ sessionId: "desc" }, { termId: "asc" }, { studentId: "asc" }],
+      orderBy: [
+        { sessionId: "desc" },
+        { termId: "asc" },
+        { studentId: "asc" },
+        { subject: { code: "asc" } },
+      ],
     });
-    return { studentSubjectRegistrations: rows.map(mapRow), count: rows.length };
+    return { studentSubjectRegistrations: this.groupByStudentClassSubclassSessionAndTerm(rows) };
   }
 
   async getById(id: string): Promise<StudentSubjectRegistrationData | null> {
@@ -184,6 +407,13 @@ export class StudentSubjectRegistrationService {
     if (!existing) throw new Error("Student subject registration not found");
     if (existing.scoreCount > 0) {
       throw new Error("Cannot delete registration with assessment scores");
+    }
+    // if exists in student assessment score, throw error
+    const studentAssessmentScore = await this.prisma.studentAssessmentScore.findFirst({
+      where: { studentSubjectRegistrationId: id },
+    });
+    if (studentAssessmentScore) {
+      throw new Error("Cannot delete registration because it is referenced by assessment scores");
     }
     try {
       const row = await this.prisma.studentSubjectRegistration.delete({ where: { id }, include });

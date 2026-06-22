@@ -3,6 +3,7 @@ import { studentSubjectRegistrationController } from "../controllers/studentSubj
 
 const router = Router();
 
+router.post("/bulk", studentSubjectRegistrationController.createBulk);
 router.post("/", studentSubjectRegistrationController.create);
 router.get("/", studentSubjectRegistrationController.list);
 router.get("/:id", studentSubjectRegistrationController.getById);

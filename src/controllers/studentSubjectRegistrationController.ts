@@ -47,7 +47,7 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *       500:
  *         description: Server error
  *   get:
- *     summary: List student subject registrations
+ *     summary: List student subject registrations grouped by student, class, subclass, session, and term
  *     tags: [StudentSubjectRegistrations]
  *     security:
  *       - bearerAuth: []
@@ -78,11 +78,193 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *           type: string
  *     responses:
  *       200:
- *         description: Student subject registrations list
+ *         description: Student subject registrations grouped by student, class, subclass, session, and term
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     studentSubjectRegistrations:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           studentId:
+ *                             type: string
+ *                           student:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               admissionNumber:
+ *                                 type: string
+ *                               firstName:
+ *                                 type: string
+ *                               lastName:
+ *                                 type: string
+ *                               status:
+ *                                 type: string
+ *                           classId:
+ *                             type: string
+ *                           class:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               name:
+ *                                 type: string
+ *                           subclassId:
+ *                             type: string
+ *                             nullable: true
+ *                           subclass:
+ *                             type: object
+ *                             nullable: true
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               name:
+ *                                 type: string
+ *                           sessionId:
+ *                             type: string
+ *                           session:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               name:
+ *                                 type: string
+ *                           termId:
+ *                             type: string
+ *                           term:
+ *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               name:
+ *                                 type: string
+ *                           subjects:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 id:
+ *                                   type: string
+ *                                 subjectId:
+ *                                   type: string
+ *                                 subject:
+ *                                   type: object
+ *                                   properties:
+ *                                     id:
+ *                                       type: string
+ *                                     code:
+ *                                       type: string
+ *                                     name:
+ *                                       type: string
+ *                                     status:
+ *                                       type: string
+ *       500:
+ *         description: Server error
+ */
+/**
+ * @openapi
+ * /api/v1/student-subject-registrations/bulk:
+ *   post:
+ *     summary: Register a student for multiple subjects
+ *     tags: [StudentSubjectRegistrations]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [studentId, classId, sessionId, termId, subjectIds]
+ *             properties:
+ *               studentId:
+ *                 type: string
+ *               classId:
+ *                 type: string
+ *               subclassId:
+ *                 type: string
+ *                 nullable: true
+ *               sessionId:
+ *                 type: string
+ *               termId:
+ *                 type: string
+ *               subjectIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 minItems: 1
+ *     responses:
+ *       201:
+ *         description: Student subject registrations created
+ *       400:
+ *         description: Validation error
+ *       409:
+ *         description: Duplicate subject registration
  *       500:
  *         description: Server error
  */
 export const studentSubjectRegistrationController = {
+  createBulk: async (req: Request, res: Response) => {
+    try {
+      const { studentId, classId, subclassId, sessionId, termId, subjectIds } = req.body ?? {};
+
+      if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+      if (!classId || typeof classId !== "string" || !classId.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId || typeof sessionId !== "string" || !sessionId.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId || typeof termId !== "string" || !termId.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+      if (!Array.isArray(subjectIds) || subjectIds.length === 0) {
+        return res.status(400).json({ success: false, message: "subjectIds must be a non-empty array" });
+      }
+      if (!isStringOrNullOrUndefined(subclassId)) {
+        return res.status(400).json({ success: false, message: "subclassId must be a string or null" });
+      }
+
+      for (const subjectId of subjectIds) {
+        if (typeof subjectId !== "string" || !subjectId.trim()) {
+          return res.status(400).json({ success: false, message: "Each subjectId must be a non-empty string" });
+        }
+      }
+
+      const created = await studentSubjectRegistrationService.createMany({
+        studentId: studentId.trim(),
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+        subjectIds: subjectIds.map((id: string) => id.trim()),
+        ...(subclassId !== undefined ? { subclassId: subclassId?.trim() || null } : {}),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Student subject registrations created successfully",
+        data: created,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to create student subject registrations");
+    }
+  },
+
   create: async (req: Request, res: Response) => {
     try {
       const { studentId, classId, subclassId, subjectId, sessionId, termId } = req.body ?? {};
