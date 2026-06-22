@@ -3,6 +3,7 @@ import { studentAssessmentScoreController } from "../controllers/studentAssessme
 
 const router = Router();
 
+router.post("/bulk", studentAssessmentScoreController.createBulk);
 router.post("/", studentAssessmentScoreController.create);
 router.get("/", studentAssessmentScoreController.list);
 router.get("/:id", studentAssessmentScoreController.getById);

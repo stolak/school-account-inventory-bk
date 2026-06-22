@@ -83,7 +83,123 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *       500:
  *         description: Server error
  */
+/**
+ * @openapi
+ * /api/v1/student-assessment-scores/bulk:
+ *   post:
+ *     summary: Record assessment scores for multiple students for one component
+ *     tags: [StudentAssessmentScores]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [componentId, subjectScores]
+ *             properties:
+ *               componentId:
+ *                 type: string
+ *                 description: Assessment component ID (max score applies to every entry)
+ *               subjectScores:
+ *                 type: array
+ *                 minItems: 1
+ *                 items:
+ *                   type: object
+ *                   required: [studentSubjectRegistrationId, score]
+ *                   properties:
+ *                     studentSubjectRegistrationId:
+ *                       type: string
+ *                     score:
+ *                       type: number
+ *                       minimum: 0
+ *           example:
+ *             componentId: "a1b2c3d4-e5f6-4789-a012-345678901234"
+ *             subjectScores:
+ *               - studentSubjectRegistrationId: "783efb59-9eea-4ec0-bd69-0e076558419a"
+ *                 score: 7
+ *               - studentSubjectRegistrationId: "65ffa15a-065d-42e0-8dbf-033e9d47b17f"
+ *                 score: 12
+ *     responses:
+ *       201:
+ *         description: Student assessment scores created
+ *       400:
+ *         description: Validation error (including score exceeding component maxScore)
+ *       409:
+ *         description: Duplicate or existing score conflict
+ *       500:
+ *         description: Server error
+ */
 export const studentAssessmentScoreController = {
+  createBulk: async (req: Request, res: Response) => {
+    try {
+      const { componentId, subjectScores } = req.body ?? {};
+
+      if (!componentId || typeof componentId !== "string" || !componentId.trim()) {
+        return res.status(400).json({ success: false, message: "componentId is required" });
+      }
+      if (!Array.isArray(subjectScores) || subjectScores.length === 0) {
+        return res.status(400).json({ success: false, message: "subjectScores must be a non-empty array" });
+      }
+
+      for (let i = 0; i < subjectScores.length; i++) {
+        const entry = subjectScores[i];
+        if (!entry || typeof entry !== "object") {
+          return res.status(400).json({
+            success: false,
+            message: `subjectScores[${i}] must be an object`,
+          });
+        }
+        const { studentSubjectRegistrationId, score } = entry as {
+          studentSubjectRegistrationId?: unknown;
+          score?: unknown;
+        };
+        if (
+          !studentSubjectRegistrationId ||
+          typeof studentSubjectRegistrationId !== "string" ||
+          !studentSubjectRegistrationId.trim()
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: `subjectScores[${i}].studentSubjectRegistrationId is required`,
+          });
+        }
+        const parsedScore = parseBodyDecimal(score, "score");
+        if (parsedScore === "missing") {
+          return res.status(400).json({
+            success: false,
+            message: `subjectScores[${i}].score is required`,
+          });
+        }
+        if (parsedScore === "invalid") {
+          return res.status(400).json({
+            success: false,
+            message: `subjectScores[${i}].score must be a number`,
+          });
+        }
+      }
+
+      const created = await studentAssessmentScoreService.createMany({
+        componentId: componentId.trim(),
+        subjectScores: subjectScores.map(
+          (entry: { studentSubjectRegistrationId: string; score: string | number }) => ({
+            studentSubjectRegistrationId: entry.studentSubjectRegistrationId.trim(),
+            score: entry.score,
+          })
+        ),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Student assessment scores created successfully",
+        data: created,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to create student assessment scores");
+    }
+  },
+
   create: async (req: Request, res: Response) => {
     try {
       const {

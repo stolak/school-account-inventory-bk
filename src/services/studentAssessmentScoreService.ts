@@ -81,14 +81,71 @@ export class StudentAssessmentScoreService {
   }
 
   private async assertComponent(componentId: string, score: Prisma.Decimal): Promise<void> {
+    const component = await this.resolveComponent(componentId);
+    this.assertScoreWithinMax(score, component.maxScore);
+  }
+
+  private async resolveComponent(componentId: string) {
     const component = await this.prisma.assessmentComponent.findUnique({
       where: { id: componentId },
       select: { id: true, maxScore: true },
     });
     if (!component) throw new Error("Invalid componentId");
-    if (score.gt(component.maxScore)) {
-      throw new Error(`score cannot exceed component maxScore (${component.maxScore.toString()})`);
+    return component;
+  }
+
+  private assertScoreWithinMax(score: Prisma.Decimal, maxScore: Prisma.Decimal): void {
+    if (score.gt(maxScore)) {
+      throw new Error(`score cannot exceed component maxScore (${maxScore.toString()})`);
     }
+  }
+
+  private async resolveRegistrations(registrationIds: string[]) {
+    const uniqueIds = [...new Set(registrationIds)];
+    const registrations = await this.prisma.studentSubjectRegistration.findMany({
+      where: { id: { in: uniqueIds } },
+      select: {
+        id: true,
+        classId: true,
+        subclassId: true,
+        subjectId: true,
+        sessionId: true,
+        termId: true,
+        studentId: true,
+      },
+    });
+    if (registrations.length !== uniqueIds.length) {
+      throw new Error("Invalid studentSubjectRegistrationId");
+    }
+    return new Map(registrations.map((reg) => [reg.id, reg]));
+  }
+
+  private async assertScoresNotAlreadyRecorded(input: {
+    componentId: string;
+    registrationIds: string[];
+  }): Promise<void> {
+    const existing = await this.prisma.studentAssessmentScore.findMany({
+      where: {
+        componentId: input.componentId,
+        studentSubjectRegistrationId: { in: [...new Set(input.registrationIds)] },
+      },
+      select: {
+        studentSubjectRegistration: {
+          select: {
+            student: { select: { admissionNumber: true, firstName: true, lastName: true } },
+          },
+        },
+      },
+    });
+    if (existing.length === 0) return;
+
+    const labels = existing.map((row) => {
+      const student = row.studentSubjectRegistration.student;
+      return `${student.admissionNumber} (${student.firstName} ${student.lastName})`;
+    });
+    throw new Error(
+      `A score already exists for this component for student${labels.length > 1 ? "s" : ""}: ${labels.join(", ")}`
+    );
   }
 
   async create(input: {
@@ -120,6 +177,75 @@ export class StudentAssessmentScoreService {
       include,
     });
     return mapRow(row);
+  }
+
+  async createMany(input: {
+    componentId: string;
+    subjectScores: { studentSubjectRegistrationId: string; score: string | number }[];
+  }): Promise<{ studentAssessmentScores: StudentAssessmentScoreData[]; count: number }> {
+    const componentId = input.componentId.trim();
+    if (!componentId) throw new Error("componentId is required");
+    if (!Array.isArray(input.subjectScores) || input.subjectScores.length === 0) {
+      throw new Error("subjectScores must be a non-empty array");
+    }
+
+    const subjectScores = input.subjectScores.map((entry, index) => {
+      if (!entry || typeof entry !== "object") {
+        throw new Error(`subjectScores[${index}] must be an object`);
+      }
+      const registrationId = entry.studentSubjectRegistrationId;
+      if (typeof registrationId !== "string" || !registrationId.trim()) {
+        throw new Error(`subjectScores[${index}].studentSubjectRegistrationId must be a non-empty string`);
+      }
+      return {
+        studentSubjectRegistrationId: registrationId.trim(),
+        score: parseDecimalNonNegative(entry.score, `subjectScores[${index}].score`),
+      };
+    });
+
+    const registrationIds = subjectScores.map((entry) => entry.studentSubjectRegistrationId);
+    const duplicateInRequest = registrationIds.filter(
+      (id, index) => registrationIds.indexOf(id) !== index
+    );
+    if (duplicateInRequest.length > 0) {
+      throw new Error("Duplicate studentSubjectRegistrationId in request");
+    }
+
+    const component = await this.resolveComponent(componentId);
+    for (const entry of subjectScores) {
+      this.assertScoreWithinMax(entry.score, component.maxScore);
+    }
+
+    const registrationById = await this.resolveRegistrations(registrationIds);
+    await this.assertScoresNotAlreadyRecorded({ componentId, registrationIds });
+
+    try {
+      const rows = await this.prisma.$transaction(
+        subjectScores.map((entry) => {
+          const reg = registrationById.get(entry.studentSubjectRegistrationId)!;
+          return this.prisma.studentAssessmentScore.create({
+            data: {
+              studentSubjectRegistrationId: entry.studentSubjectRegistrationId,
+              componentId,
+              score: entry.score,
+              classId: reg.classId,
+              subclassId: reg.subclassId,
+              subjectId: reg.subjectId,
+              termId: reg.termId,
+              sessionId: reg.sessionId,
+              studentId: reg.studentId,
+            },
+            include,
+          });
+        })
+      );
+      return { studentAssessmentScores: rows.map(mapRow), count: rows.length };
+    } catch (e) {
+      if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
+        throw new Error("A score already exists for this registration and component");
+      }
+      throw e;
+    }
   }
 
   async list(params: {
