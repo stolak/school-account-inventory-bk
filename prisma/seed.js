@@ -4258,6 +4258,7 @@ async function main() {
         subclassId: null,
         subjectId: SUB.MTH,
         sessionId: seededSession.id,
+        termId: seededTerm.id,
       },
       {
         id: "c1d2e3f4-a5b6-4734-d890-123456ab0020",
@@ -4265,6 +4266,7 @@ async function main() {
         subclassId: null,
         subjectId: SUB.ENG,
         sessionId: seededSession.id,
+        termId: seededTerm.id,
       },
       {
         id: "d2e3f4a5-b6c7-4845-e901-234567ab0021",
@@ -4272,6 +4274,7 @@ async function main() {
         subclassId: subClassIds.jss1A,
         subjectId: SUB.BST,
         sessionId: seededSession.id,
+        termId: seededTerm.id,
       },
       {
         id: "e3f4a5b6-c7d8-4956-f012-345678ab0022",
@@ -4279,6 +4282,7 @@ async function main() {
         subclassId: null,
         subjectId: SUB.MTH,
         sessionId: seededSession.id,
+        termId: seededTerm.id,
       },
       {
         id: "f4a5b6c7-d8e9-4067-a123-456789ab0023",
@@ -4286,6 +4290,7 @@ async function main() {
         subclassId: null,
         subjectId: SUB.CIV,
         sessionId: seededSession.id,
+        termId: seededTerm.id,
       },
     ];
 
@@ -4297,6 +4302,7 @@ async function main() {
           subclassId: row.subclassId,
           subjectId: row.subjectId,
           sessionId: row.sessionId,
+          termId: row.termId,
         },
         create: row,
       });

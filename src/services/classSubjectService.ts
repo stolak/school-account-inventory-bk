@@ -7,6 +7,7 @@ const include = {
   subclass: { select: { id: true, name: true } },
   subject: { select: { id: true, code: true, name: true, status: true } },
   session: { select: { id: true, name: true } },
+  term: { select: { id: true, name: true } },
 } satisfies Prisma.ClassSubjectInclude;
 
 export type ClassSubjectData = Prisma.ClassSubjectGetPayload<{ include: typeof include }>;
@@ -24,16 +25,19 @@ export interface ClassSubjectGroup {
   subclass: ClassSubjectData["subclass"];
   sessionId: string;
   session: ClassSubjectData["session"];
+  termId: string | null;
+  term: ClassSubjectData["term"];
   classSubjects: ClassSubjectListItem[];
 }
 
 export class ClassSubjectService {
   private prisma = prisma;
 
-  private async assertClassSessionRefs(input: {
+  private async assertClassSessionTermRefs(input: {
     classId: string;
     subclassId?: string | null;
     sessionId: string;
+    termId?: string | null;
   }): Promise<void> {
     const [cls, session] = await Promise.all([
       this.prisma.schoolClass.findUnique({ where: { id: input.classId }, select: { id: true } }),
@@ -50,6 +54,13 @@ export class ClassSubjectService {
       if (sub.classId && sub.classId !== input.classId) {
         throw new Error("subclassId does not belong to classId");
       }
+    }
+    if (input.termId) {
+      const term = await this.prisma.term.findUnique({
+        where: { id: input.termId },
+        select: { id: true },
+      });
+      if (!term) throw new Error("Invalid termId");
     }
   }
 
@@ -80,15 +91,19 @@ export class ClassSubjectService {
     classId: string;
     subclassId: string | null;
     sessionId: string;
+    termId: string | null;
     subjectIds: string[];
     nameById: Map<string, { name: string }>;
+    excludeId?: string;
   }): Promise<void> {
     const existing = await this.prisma.classSubject.findMany({
       where: {
         classId: input.classId,
         sessionId: input.sessionId,
         subclassId: input.subclassId,
+        termId: input.termId,
         subjectId: { in: [...new Set(input.subjectIds)] },
+        ...(input.excludeId ? { NOT: { id: input.excludeId } } : {}),
       },
       select: { subject: { select: { name: true } } },
     });
@@ -105,25 +120,13 @@ export class ClassSubjectService {
     subclassId?: string | null;
     subjectId: string;
     sessionId: string;
+    termId?: string | null;
   }): Promise<void> {
-    const [cls, subject, session] = await Promise.all([
-      this.prisma.schoolClass.findUnique({ where: { id: input.classId }, select: { id: true } }),
+    const [subject] = await Promise.all([
       this.prisma.subject.findUnique({ where: { id: input.subjectId }, select: { id: true } }),
-      this.prisma.session.findUnique({ where: { id: input.sessionId }, select: { id: true } }),
     ]);
-    if (!cls) throw new Error("Invalid classId");
     if (!subject) throw new Error("Invalid subjectId");
-    if (!session) throw new Error("Invalid sessionId");
-    if (input.subclassId) {
-      const sub = await this.prisma.subClass.findUnique({
-        where: { id: input.subclassId },
-        select: { id: true, classId: true },
-      });
-      if (!sub) throw new Error("Invalid subclassId");
-      if (sub.classId && sub.classId !== input.classId) {
-        throw new Error("subclassId does not belong to classId");
-      }
-    }
+    await this.assertClassSessionTermRefs(input);
   }
 
   async create(input: {
@@ -131,26 +134,29 @@ export class ClassSubjectService {
     subclassId?: string | null;
     subjectId: string;
     sessionId: string;
+    termId?: string | null;
   }): Promise<ClassSubjectData> {
     const classId = input.classId.trim();
     const subjectId = input.subjectId.trim();
     const sessionId = input.sessionId.trim();
     const subclassId = input.subclassId?.trim() || null;
+    const termId = input.termId?.trim() || null;
     if (!classId || !subjectId || !sessionId) {
       throw new Error("classId, subjectId, and sessionId are required");
     }
-    await this.assertClassSessionRefs({ classId, subclassId, sessionId });
+    await this.assertClassSessionTermRefs({ classId, subclassId, sessionId, termId });
     const nameById = await this.resolveSubjects([subjectId]);
     await this.assertSubjectsNotAlreadyAssigned({
       classId,
       subclassId,
       sessionId,
+      termId,
       subjectIds: [subjectId],
       nameById,
     });
     try {
       return await this.prisma.classSubject.create({
-        data: { classId, subclassId, subjectId, sessionId },
+        data: { classId, subclassId, subjectId, sessionId, termId },
         include,
       });
     } catch (e) {
@@ -167,11 +173,13 @@ export class ClassSubjectService {
     classId: string;
     subclassId?: string | null;
     sessionId: string;
+    termId?: string | null;
     subjectIds: string[];
   }): Promise<{ classSubjects: ClassSubjectData[]; count: number }> {
     const classId = input.classId.trim();
     const sessionId = input.sessionId.trim();
     const subclassId = input.subclassId?.trim() || null;
+    const termId = input.termId?.trim() || null;
 
     if (!classId || !sessionId) throw new Error("classId and sessionId are required");
     if (!Array.isArray(input.subjectIds) || input.subjectIds.length === 0) {
@@ -185,14 +193,12 @@ export class ClassSubjectService {
       return id.trim();
     });
 
-    await this.assertClassSessionRefs({ classId, subclassId, sessionId });
+    await this.assertClassSessionTermRefs({ classId, subclassId, sessionId, termId });
     const nameById = await this.resolveSubjects(subjectIds);
 
     const duplicateInRequest = this.duplicateNamesInList(subjectIds, nameById);
     if (duplicateInRequest.length > 0) {
-      throw new Error(
-        `Duplicate subjects in request: ${duplicateInRequest.join(", ")}`
-      );
+      throw new Error(`Duplicate subjects in request: ${duplicateInRequest.join(", ")}`);
     }
 
     const uniqueSubjectIds = [...new Set(subjectIds)];
@@ -200,6 +206,7 @@ export class ClassSubjectService {
       classId,
       subclassId,
       sessionId,
+      termId,
       subjectIds: uniqueSubjectIds,
       nameById,
     });
@@ -207,7 +214,7 @@ export class ClassSubjectService {
     const rows = await this.prisma.$transaction(
       uniqueSubjectIds.map((subjectId) =>
         this.prisma.classSubject.create({
-          data: { classId, subclassId, subjectId, sessionId },
+          data: { classId, subclassId, subjectId, sessionId, termId },
           include,
         })
       )
@@ -216,11 +223,11 @@ export class ClassSubjectService {
     return { classSubjects: rows, count: rows.length };
   }
 
-  private groupByClassSubclassAndSession(rows: ClassSubjectData[]): ClassSubjectGroup[] {
+  private groupByClassSubclassSessionAndTerm(rows: ClassSubjectData[]): ClassSubjectGroup[] {
     const map = new Map<string, ClassSubjectGroup>();
 
     for (const row of rows) {
-      const key = `${row.classId}:${row.subclassId ?? ""}:${row.sessionId}`;
+      const key = `${row.classId}:${row.subclassId ?? ""}:${row.sessionId}:${row.termId ?? ""}`;
       let group = map.get(key);
       if (!group) {
         group = {
@@ -230,6 +237,8 @@ export class ClassSubjectService {
           subclass: row.subclass,
           sessionId: row.sessionId,
           session: row.session,
+          termId: row.termId,
+          term: row.term,
           classSubjects: [],
         };
         map.set(key, group);
@@ -244,6 +253,8 @@ export class ClassSubjectService {
     return [...map.values()].sort((a, b) => {
       const bySession = b.session.name.localeCompare(a.session.name);
       if (bySession !== 0) return bySession;
+      const byTerm = (a.term?.name ?? "").localeCompare(b.term?.name ?? "");
+      if (byTerm !== 0) return byTerm;
       const byClass = a.class.name.localeCompare(b.class.name);
       if (byClass !== 0) return byClass;
       return (a.subclass?.name ?? "").localeCompare(b.subclass?.name ?? "");
@@ -255,12 +266,14 @@ export class ClassSubjectService {
     subclassId?: string;
     subjectId?: string;
     sessionId?: string;
+    termId?: string;
   }) {
     const where: Prisma.ClassSubjectWhereInput = {};
     if (params.classId?.trim()) where.classId = params.classId.trim();
     if (params.subclassId?.trim()) where.subclassId = params.subclassId.trim();
     if (params.subjectId?.trim()) where.subjectId = params.subjectId.trim();
     if (params.sessionId?.trim()) where.sessionId = params.sessionId.trim();
+    if (params.termId?.trim()) where.termId = params.termId.trim();
 
     const rows = await this.prisma.classSubject.findMany({
       where,
@@ -269,11 +282,12 @@ export class ClassSubjectService {
         { classId: "asc" },
         { subclassId: "asc" },
         { sessionId: "desc" },
+        { termId: "asc" },
         { subject: { code: "asc" } },
       ],
     });
 
-    const groups = this.groupByClassSubclassAndSession(rows);
+    const groups = this.groupByClassSubclassSessionAndTerm(rows);
     return { groups };
   }
 
@@ -288,6 +302,7 @@ export class ClassSubjectService {
       subclassId?: string | null;
       subjectId?: string;
       sessionId?: string;
+      termId?: string | null;
     }
   ): Promise<ClassSubjectData> {
     const existing = await this.getById(id);
@@ -299,8 +314,28 @@ export class ClassSubjectService {
         input.subclassId !== undefined ? input.subclassId?.trim() || null : existing.subclassId,
       subjectId: (input.subjectId ?? existing.subjectId).trim(),
       sessionId: (input.sessionId ?? existing.sessionId).trim(),
+      termId: input.termId !== undefined ? input.termId?.trim() || null : existing.termId,
     };
     await this.assertRefs(payload);
+
+    const nameById = await this.resolveSubjects([payload.subjectId]);
+    if (
+      input.classId !== undefined ||
+      input.subclassId !== undefined ||
+      input.subjectId !== undefined ||
+      input.sessionId !== undefined ||
+      input.termId !== undefined
+    ) {
+      await this.assertSubjectsNotAlreadyAssigned({
+        classId: payload.classId,
+        subclassId: payload.subclassId,
+        sessionId: payload.sessionId,
+        termId: payload.termId,
+        subjectIds: [payload.subjectId],
+        nameById,
+        excludeId: id,
+      });
+    }
 
     try {
       return await this.prisma.classSubject.update({
@@ -310,13 +345,16 @@ export class ClassSubjectService {
           ...(input.subclassId !== undefined ? { subclassId: payload.subclassId } : {}),
           ...(input.subjectId !== undefined ? { subjectId: payload.subjectId } : {}),
           ...(input.sessionId !== undefined ? { sessionId: payload.sessionId } : {}),
+          ...(input.termId !== undefined ? { termId: payload.termId } : {}),
         },
         include,
       });
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") throw new Error("Class subject not found");
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
-        throw new Error("This subject is already assigned to the class for the session");
+        throw new Error(
+          `Subject already assigned to this class: ${nameById.get(payload.subjectId)!.name}`
+        );
       }
       throw e;
     }

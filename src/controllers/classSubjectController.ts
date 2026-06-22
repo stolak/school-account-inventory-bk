@@ -33,6 +33,9 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                 type: string
  *               sessionId:
  *                 type: string
+ *               termId:
+ *                 type: string
+ *                 nullable: true
  *     responses:
  *       201:
  *         description: Class subject created
@@ -43,7 +46,7 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *       500:
  *         description: Server error
  *   get:
- *     summary: List class subject assignments grouped by class, subclass, and session
+ *     summary: List class subject assignments grouped by class, subclass, session, and term
  *     tags: [ClassSubjects]
  *     security:
  *       - bearerAuth: []
@@ -64,9 +67,13 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         name: sessionId
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: termId
+ *         schema:
+ *           type: string
  *     responses:
  *       200:
- *         description: Class subjects report grouped by class, subclass, and session
+ *         description: Class subjects report grouped by class, subclass, session, and term
  *         content:
  *           application/json:
  *             schema:
@@ -108,6 +115,17 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                             type: string
  *                           session:
  *                             type: object
+ *                             properties:
+ *                               id:
+ *                                 type: string
+ *                               name:
+ *                                 type: string
+ *                           termId:
+ *                             type: string
+ *                             nullable: true
+ *                           term:
+ *                             type: object
+ *                             nullable: true
  *                             properties:
  *                               id:
  *                                 type: string
@@ -159,6 +177,9 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                 nullable: true
  *               sessionId:
  *                 type: string
+ *               termId:
+ *                 type: string
+ *                 nullable: true
  *               subjectIds:
  *                 type: array
  *                 items:
@@ -177,7 +198,7 @@ function queryString(query: Request["query"], key: string): string | undefined {
 export const classSubjectController = {
   createBulk: async (req: Request, res: Response) => {
     try {
-      const { classId, subclassId, sessionId, subjectIds } = req.body ?? {};
+      const { classId, subclassId, sessionId, termId, subjectIds } = req.body ?? {};
 
       if (!classId || typeof classId !== "string" || !classId.trim()) {
         return res.status(400).json({ success: false, message: "classId is required" });
@@ -191,6 +212,9 @@ export const classSubjectController = {
       if (!isStringOrNullOrUndefined(subclassId)) {
         return res.status(400).json({ success: false, message: "subclassId must be a string or null" });
       }
+      if (!isStringOrNullOrUndefined(termId)) {
+        return res.status(400).json({ success: false, message: "termId must be a string or null" });
+      }
 
       for (const subjectId of subjectIds) {
         if (typeof subjectId !== "string" || !subjectId.trim()) {
@@ -203,6 +227,7 @@ export const classSubjectController = {
         sessionId: sessionId.trim(),
         subjectIds: subjectIds.map((id: string) => id.trim()),
         ...(subclassId !== undefined ? { subclassId: subclassId?.trim() || null } : {}),
+        ...(termId !== undefined ? { termId: termId?.trim() || null } : {}),
       });
 
       return res.status(201).json({
@@ -217,7 +242,7 @@ export const classSubjectController = {
 
   create: async (req: Request, res: Response) => {
     try {
-      const { classId, subclassId, subjectId, sessionId } = req.body ?? {};
+      const { classId, subclassId, subjectId, sessionId, termId } = req.body ?? {};
 
       if (!classId || typeof classId !== "string" || !classId.trim()) {
         return res.status(400).json({ success: false, message: "classId is required" });
@@ -231,12 +256,16 @@ export const classSubjectController = {
       if (!isStringOrNullOrUndefined(subclassId)) {
         return res.status(400).json({ success: false, message: "subclassId must be a string or null" });
       }
+      if (!isStringOrNullOrUndefined(termId)) {
+        return res.status(400).json({ success: false, message: "termId must be a string or null" });
+      }
 
       const created = await classSubjectService.create({
         classId: classId.trim(),
         subjectId: subjectId.trim(),
         sessionId: sessionId.trim(),
         ...(subclassId !== undefined ? { subclassId: subclassId?.trim() || null } : {}),
+        ...(termId !== undefined ? { termId: termId?.trim() || null } : {}),
       });
 
       return res.status(201).json({
@@ -256,6 +285,7 @@ export const classSubjectController = {
         subclassId: queryString(req.query, "subclassId"),
         subjectId: queryString(req.query, "subjectId"),
         sessionId: queryString(req.query, "sessionId"),
+        termId: queryString(req.query, "termId"),
       });
 
       return res.json({
@@ -314,22 +344,25 @@ export const classSubjectController = {
    *               subclassId:
    *                 type: string
    *                 nullable: true
-   *               subjectId:
-   *                 type: string
-   *               sessionId:
-   *                 type: string
-   *     responses:
-   *       200:
-   *         description: Class subject updated
-   *       400:
-   *         description: Validation error
-   *       404:
-   *         description: Not found
-   *       409:
-   *         description: Conflict
-   *       500:
-   *         description: Server error
-   *   delete:
+ *               subjectId:
+ *                 type: string
+ *               sessionId:
+ *                 type: string
+ *               termId:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       200:
+ *         description: Class subject updated
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Not found
+ *       409:
+ *         description: Conflict
+ *       500:
+ *         description: Server error
+ *   delete:
    *     summary: Delete a class subject assignment
    *     tags: [ClassSubjects]
    *     security:
@@ -376,12 +409,13 @@ export const classSubjectController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { classId, subclassId, subjectId, sessionId } = req.body ?? {};
+      const { classId, subclassId, subjectId, sessionId, termId } = req.body ?? {};
       if (
         classId === undefined &&
         subclassId === undefined &&
         subjectId === undefined &&
-        sessionId === undefined
+        sessionId === undefined &&
+        termId === undefined
       ) {
         return res.status(400).json({ success: false, message: "At least one field must be provided" });
       }
@@ -398,12 +432,16 @@ export const classSubjectController = {
       if (sessionId !== undefined && (typeof sessionId !== "string" || !sessionId.trim())) {
         return res.status(400).json({ success: false, message: "sessionId must be a non-empty string" });
       }
+      if (!isStringOrNullOrUndefined(termId)) {
+        return res.status(400).json({ success: false, message: "termId must be a string or null" });
+      }
 
       const updated = await classSubjectService.update(id, {
         ...(classId !== undefined ? { classId: classId.trim() } : {}),
         ...(subclassId !== undefined ? { subclassId: subclassId?.trim() || null } : {}),
         ...(subjectId !== undefined ? { subjectId: subjectId.trim() } : {}),
         ...(sessionId !== undefined ? { sessionId: sessionId.trim() } : {}),
+        ...(termId !== undefined ? { termId: termId?.trim() || null } : {}),
       });
 
       return res.json({
