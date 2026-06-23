@@ -133,6 +133,110 @@ function queryString(query: Request["query"], key: string): string | undefined {
  */
 /**
  * @openapi
+ * /api/v1/student-assessment-scores/student-scores:
+ *   get:
+ *     summary: List student scores by component for a subject (0 when not yet recorded)
+ *     tags: [StudentAssessmentScores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: classId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: subclassId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: termId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: subjectId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Per-student component scores and totals for a subject
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     template:
+ *                       type: object
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                         name:
+ *                           type: string
+ *                     students:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           studentId:
+ *                             type: string
+ *                           studentName:
+ *                             type: string
+ *                           componentScore:
+ *                             type: array
+ *                             items:
+ *                               type: object
+ *                               properties:
+ *                                 componentId:
+ *                                   type: string
+ *                                 component:
+ *                                   type: string
+ *                                 maxScore:
+ *                                   type: number
+ *                                 score:
+ *                                   type: number
+ *                           totalScore:
+ *                             type: number
+ *             example:
+ *               success: true
+ *               message: Student subject scores retrieved successfully
+ *               data:
+ *                 template:
+ *                   id: "f1a2b3c4-d5e6-4789-a011-234567890123"
+ *                   name: "SS Assessment Template"
+ *                 students:
+ *                   - studentId: "e6f7a8b9-c0d1-4234-e012-345678907001"
+ *                     studentName: "Chioma Adebayo"
+ *                     componentScore:
+ *                       - componentId: "a1b2c3d4-e5f6-4789-a012-345678901234"
+ *                         component: "CA 1"
+ *                         maxScore: 20
+ *                         score: 19
+ *                       - componentId: "b2c3d4e5-f6a7-4890-b123-456789ab0023"
+ *                         component: "Exam"
+ *                         maxScore: 60
+ *                         score: 41
+ *                     totalScore: 60
+ *       400:
+ *         description: Validation error
+ *       500:
+ *         description: Server error
+ */
+/**
+ * @openapi
  * /api/v1/student-assessment-scores/score-sheet:
  *   get:
  *     summary: List registered students with scores for a component (0 when not yet recorded)
@@ -367,6 +471,45 @@ export const studentAssessmentScoreController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to retrieve score sheet");
+    }
+  },
+
+  studentSubjectScores: async (req: Request, res: Response) => {
+    try {
+      const classId = queryString(req.query, "classId");
+      const subclassId = queryString(req.query, "subclassId");
+      const sessionId = queryString(req.query, "sessionId");
+      const termId = queryString(req.query, "termId");
+      const subjectId = queryString(req.query, "subjectId");
+
+      if (!classId?.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId?.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId?.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+      if (!subjectId?.trim()) {
+        return res.status(400).json({ success: false, message: "subjectId is required" });
+      }
+
+      const result = await studentAssessmentScoreService.getStudentSubjectScores({
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+        subjectId: subjectId.trim(),
+        ...(subclassId?.trim() ? { subclassId: subclassId.trim() } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Student subject scores retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve student subject scores");
     }
   },
 
