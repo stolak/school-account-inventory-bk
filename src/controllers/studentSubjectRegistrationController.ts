@@ -216,6 +216,76 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *       500:
  *         description: Server error
  */
+/**
+ * @openapi
+ * /api/v1/student-subject-registrations/subjects:
+ *   get:
+ *     summary: List unique subjects registered by students for a class, session, and term
+ *     tags: [StudentSubjectRegistrations]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: classId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: subclassId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: termId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Unique registered subjects
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     subjects:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           code:
+ *                             type: string
+ *                           name:
+ *                             type: string
+ *             example:
+ *               success: true
+ *               message: Registered subjects retrieved successfully
+ *               data:
+ *                 subjects:
+ *                   - id: "e7f8a9b0-c1d2-4345-f678-901234ab0016"
+ *                     code: "BST"
+ *                     name: "Basic Science and Technology"
+ *                   - id: "f8a9b0c1-d2e3-4456-a789-012345ab0017"
+ *                     code: "CIV"
+ *                     name: "Civic Education"
+ *       400:
+ *         description: Validation error
+ *       500:
+ *         description: Server error
+ */
 export const studentSubjectRegistrationController = {
   createBulk: async (req: Request, res: Response) => {
     try {
@@ -325,6 +395,40 @@ export const studentSubjectRegistrationController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to retrieve student subject registrations");
+    }
+  },
+
+  registeredSubjects: async (req: Request, res: Response) => {
+    try {
+      const classId = queryString(req.query, "classId");
+      const subclassId = queryString(req.query, "subclassId");
+      const sessionId = queryString(req.query, "sessionId");
+      const termId = queryString(req.query, "termId");
+
+      if (!classId?.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId?.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId?.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+
+      const result = await studentSubjectRegistrationService.listRegisteredSubjects({
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+        ...(subclassId?.trim() ? { subclassId: subclassId.trim() } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Registered subjects retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve registered subjects");
     }
   },
 

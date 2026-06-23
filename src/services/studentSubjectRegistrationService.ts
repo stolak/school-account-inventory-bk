@@ -46,6 +46,12 @@ export interface StudentSubjectRegistrationGroup {
   subjects: StudentSubjectRegistrationListItem[];
 }
 
+export interface RegisteredSubjectSummary {
+  id: string;
+  code: string;
+  name: string;
+}
+
 export class StudentSubjectRegistrationService {
   private prisma = prisma;
 
@@ -342,6 +348,39 @@ export class StudentSubjectRegistrationService {
       ],
     });
     return { studentSubjectRegistrations: this.groupByStudentClassSubclassSessionAndTerm(rows) };
+  }
+
+  async listRegisteredSubjects(params: {
+    classId: string;
+    subclassId?: string;
+    sessionId: string;
+    termId: string;
+  }): Promise<{ subjects: RegisteredSubjectSummary[] }> {
+    const classId = params.classId.trim();
+    const sessionId = params.sessionId.trim();
+    const termId = params.termId.trim();
+    const subclassId = params.subclassId?.trim();
+
+    if (!classId || !sessionId || !termId) {
+      throw new Error("classId, sessionId, and termId are required");
+    }
+
+    const subjects = await this.prisma.subject.findMany({
+      where: {
+        studentSubjectRegistrations: {
+          some: {
+            classId,
+            sessionId,
+            termId,
+            ...(subclassId ? { subclassId } : {}),
+          },
+        },
+      },
+      select: { id: true, code: true, name: true },
+      orderBy: { code: "asc" },
+    });
+
+    return { subjects };
   }
 
   async getById(id: string): Promise<StudentSubjectRegistrationData | null> {
