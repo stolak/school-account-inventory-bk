@@ -39,6 +39,17 @@ export interface StudentAssessmentScoreData {
   score: string;
 }
 
+export interface ScoreSheetEntry {
+  studentName: string;
+  studentSubjectRegistrationId: string;
+  score: number;
+}
+
+export interface ScoreSheetResult {
+  componentId: string;
+  subjectScores: ScoreSheetEntry[];
+}
+
 function mapRow(row: Row): StudentAssessmentScoreData {
   return {
     id: row.id,
@@ -88,7 +99,7 @@ export class StudentAssessmentScoreService {
   private async resolveComponent(componentId: string) {
     const component = await this.prisma.assessmentComponent.findUnique({
       where: { id: componentId },
-      select: { id: true, maxScore: true },
+      select: { id: true, maxScore: true, isLocked: true },
     });
     if (!component) throw new Error("Invalid componentId");
     return component;
@@ -118,34 +129,6 @@ export class StudentAssessmentScoreService {
       throw new Error("Invalid studentSubjectRegistrationId");
     }
     return new Map(registrations.map((reg) => [reg.id, reg]));
-  }
-
-  private async assertScoresNotAlreadyRecorded(input: {
-    componentId: string;
-    registrationIds: string[];
-  }): Promise<void> {
-    const existing = await this.prisma.studentAssessmentScore.findMany({
-      where: {
-        componentId: input.componentId,
-        studentSubjectRegistrationId: { in: [...new Set(input.registrationIds)] },
-      },
-      select: {
-        studentSubjectRegistration: {
-          select: {
-            student: { select: { admissionNumber: true, firstName: true, lastName: true } },
-          },
-        },
-      },
-    });
-    if (existing.length === 0) return;
-
-    const labels = existing.map((row) => {
-      const student = row.studentSubjectRegistration.student;
-      return `${student.admissionNumber} (${student.firstName} ${student.lastName})`;
-    });
-    throw new Error(
-      `A score already exists for this component for student${labels.length > 1 ? "s" : ""}: ${labels.join(", ")}`
-    );
   }
 
   async create(input: {
@@ -195,7 +178,9 @@ export class StudentAssessmentScoreService {
       }
       const registrationId = entry.studentSubjectRegistrationId;
       if (typeof registrationId !== "string" || !registrationId.trim()) {
-        throw new Error(`subjectScores[${index}].studentSubjectRegistrationId must be a non-empty string`);
+        throw new Error(
+          `subjectScores[${index}].studentSubjectRegistrationId must be a non-empty string`
+        );
       }
       return {
         studentSubjectRegistrationId: registrationId.trim(),
@@ -204,11 +189,16 @@ export class StudentAssessmentScoreService {
     });
 
     const registrationIds = subjectScores.map((entry) => entry.studentSubjectRegistrationId);
-    const duplicateInRequest = registrationIds.filter(
-      (id, index) => registrationIds.indexOf(id) !== index
-    );
-    if (duplicateInRequest.length > 0) {
-      throw new Error("Duplicate studentSubjectRegistrationId in request");
+    const duplicateIds = [...new Set(
+      registrationIds.filter((id, index) => registrationIds.indexOf(id) !== index)
+    )];
+    if (duplicateIds.length > 0) {
+      const duplicates = await this.prisma.studentSubjectRegistration.findMany({
+        where: { id: { in: duplicateIds } },
+        select: { subject: { select: { name: true } } },
+      });
+      const names = duplicates.map((row) => row.subject.name);
+      throw new Error(`Duplicate subjects in request: ${names.join(", ")}`);
     }
 
     const component = await this.resolveComponent(componentId);
@@ -217,14 +207,38 @@ export class StudentAssessmentScoreService {
     }
 
     const registrationById = await this.resolveRegistrations(registrationIds);
-    await this.assertScoresNotAlreadyRecorded({ componentId, registrationIds });
+
+    const existingScores = await this.prisma.studentAssessmentScore.findMany({
+      where: {
+        componentId,
+        studentSubjectRegistrationId: { in: registrationIds },
+      },
+      select: { studentSubjectRegistrationId: true },
+    });
+    const existingRegistrationIds = new Set(
+      existingScores.map((row) => row.studentSubjectRegistrationId)
+    );
+    if (
+      component.isLocked &&
+      subjectScores.some((entry) =>
+        existingRegistrationIds.has(entry.studentSubjectRegistrationId)
+      )
+    ) {
+      throw new Error("Cannot update score: component is locked");
+    }
 
     try {
       const rows = await this.prisma.$transaction(
         subjectScores.map((entry) => {
           const reg = registrationById.get(entry.studentSubjectRegistrationId)!;
-          return this.prisma.studentAssessmentScore.create({
-            data: {
+          return this.prisma.studentAssessmentScore.upsert({
+            where: {
+              studentSubjectRegistrationId_componentId: {
+                studentSubjectRegistrationId: entry.studentSubjectRegistrationId,
+                componentId,
+              },
+            },
+            create: {
               studentSubjectRegistrationId: entry.studentSubjectRegistrationId,
               componentId,
               score: entry.score,
@@ -235,6 +249,7 @@ export class StudentAssessmentScoreService {
               sessionId: reg.sessionId,
               studentId: reg.studentId,
             },
+            update: { score: entry.score },
             include,
           });
         })
@@ -278,6 +293,69 @@ export class StudentAssessmentScoreService {
       orderBy: [{ sessionId: "desc" }, { termId: "asc" }, { classId: "asc" }],
     });
     return { studentAssessmentScores: rows.map(mapRow), count: rows.length };
+  }
+
+  async getScoreSheet(params: {
+    classId: string;
+    subclassId?: string;
+    sessionId: string;
+    termId: string;
+    subjectId: string;
+    componentId: string;
+  }): Promise<ScoreSheetResult> {
+    const classId = params.classId.trim();
+    const sessionId = params.sessionId.trim();
+    const termId = params.termId.trim();
+    const subjectId = params.subjectId.trim();
+    const componentId = params.componentId.trim();
+    const subclassId = params.subclassId?.trim();
+
+    if (!classId || !sessionId || !termId || !subjectId || !componentId) {
+      throw new Error("classId, sessionId, termId, subjectId, and componentId are required");
+    }
+
+    await this.resolveComponent(componentId);
+
+    const registrations = await this.prisma.studentSubjectRegistration.findMany({
+      where: {
+        classId,
+        sessionId,
+        termId,
+        subjectId,
+        ...(subclassId ? { subclassId } : {}),
+      },
+      select: {
+        id: true,
+        student: { select: { firstName: true, lastName: true } },
+      },
+      orderBy: [{ student: { lastName: "asc" } }, { student: { firstName: "asc" } }],
+    });
+    const registrationIds = registrations.map((reg) => reg.id);
+    const scores =
+      registrationIds.length > 0
+        ? await this.prisma.studentAssessmentScore.findMany({
+            where: {
+              studentSubjectRegistrationId: { in: registrationIds },
+              componentId,
+            },
+            select: { studentSubjectRegistrationId: true, score: true },
+          })
+        : [];
+
+    const scoreByRegistrationId = new Map(
+      scores.map((row) => [row.studentSubjectRegistrationId, row.score])
+    );
+
+    return {
+      componentId,
+      subjectScores: registrations.map((reg) => ({
+        studentName: `${reg.student.firstName} ${reg.student.lastName}`,
+        studentSubjectRegistrationId: reg.id,
+        score: scoreByRegistrationId.has(reg.id)
+          ? Number(scoreByRegistrationId.get(reg.id)!.toString())
+          : 0,
+      })),
+    };
   }
 
   async getById(id: string): Promise<StudentAssessmentScoreData | null> {

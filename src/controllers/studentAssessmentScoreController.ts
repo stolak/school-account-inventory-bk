@@ -87,7 +87,7 @@ function queryString(query: Request["query"], key: string): string | undefined {
  * @openapi
  * /api/v1/student-assessment-scores/bulk:
  *   post:
- *     summary: Record assessment scores for multiple students for one component
+ *     summary: Create or update assessment scores for multiple students for one component
  *     tags: [StudentAssessmentScores]
  *     security:
  *       - bearerAuth: []
@@ -123,11 +123,94 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                 score: 12
  *     responses:
  *       201:
- *         description: Student assessment scores created
+ *         description: Student assessment scores created or updated
  *       400:
  *         description: Validation error (including score exceeding component maxScore)
  *       409:
- *         description: Duplicate or existing score conflict
+ *         description: Component locked or conflict
+ *       500:
+ *         description: Server error
+ */
+/**
+ * @openapi
+ * /api/v1/student-assessment-scores/score-sheet:
+ *   get:
+ *     summary: List registered students with scores for a component (0 when not yet recorded)
+ *     tags: [StudentAssessmentScores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: classId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: subclassId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: termId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: subjectId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: componentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Score entry sheet for registered students
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     componentId:
+ *                       type: string
+ *                     subjectScores:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           studentName:
+ *                             type: string
+ *                           studentSubjectRegistrationId:
+ *                             type: string
+ *                           score:
+ *                             type: number
+ *             example:
+ *               success: true
+ *               message: Score sheet retrieved successfully
+ *               data:
+ *                 componentId: "a1b2c3d4-e5f6-4789-a012-345678901234"
+ *                 subjectScores:
+ *                   - studentName: "Chioma Adebayo"
+ *                     studentSubjectRegistrationId: "783efb59-9eea-4ec0-bd69-0e076558419a"
+ *                     score: 0
+ *                   - studentName: "John Doe"
+ *                     studentSubjectRegistrationId: "65ffa15a-065d-42e0-8dbf-033e9d47b17f"
+ *                     score: 12
+ *       400:
+ *         description: Validation error
  *       500:
  *         description: Server error
  */
@@ -192,7 +275,7 @@ export const studentAssessmentScoreController = {
 
       return res.status(201).json({
         success: true,
-        message: "Student assessment scores created successfully",
+        message: "Student assessment scores saved successfully",
         data: created,
       });
     } catch (error: unknown) {
@@ -240,6 +323,50 @@ export const studentAssessmentScoreController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to create student assessment score");
+    }
+  },
+
+  scoreSheet: async (req: Request, res: Response) => {
+    try {
+      const classId = queryString(req.query, "classId");
+      const subclassId = queryString(req.query, "subclassId");
+      const sessionId = queryString(req.query, "sessionId");
+      const termId = queryString(req.query, "termId");
+      const subjectId = queryString(req.query, "subjectId");
+      const componentId = queryString(req.query, "componentId");
+
+      if (!classId?.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId?.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId?.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+      if (!subjectId?.trim()) {
+        return res.status(400).json({ success: false, message: "subjectId is required" });
+      }
+      if (!componentId?.trim()) {
+        return res.status(400).json({ success: false, message: "componentId is required" });
+      }
+
+      const result = await studentAssessmentScoreService.getScoreSheet({
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+        subjectId: subjectId.trim(),
+        componentId: componentId.trim(),
+        ...(subclassId?.trim() ? { subclassId: subclassId.trim() } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Score sheet retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve score sheet");
     }
   },
 
