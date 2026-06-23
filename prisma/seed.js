@@ -715,6 +715,7 @@ async function main() {
       // School Management
       { route: "/classes", caption: "Classes & sub-classes" },
       { route: "/assessment-setup", caption: "Assessment setup" },
+      { route: "/assessment-score-entry", caption: "Assessment score entry" },
       { route: "/subject-setup", caption: "subject Setup" },
       { route: "/students", caption: "Students" },
       { route: "/staff", caption: "Staff" },
