@@ -15,7 +15,24 @@ const include = {
   },
   session: { select: { id: true, name: true, status: true } },
   term: { select: { id: true, name: true, status: true } },
-  gradeTemplate: { select: { id: true, name: true, version: true, isLocked: true } },
+  gradeTemplate: {
+    select: {
+      id: true,
+      name: true,
+      version: true,
+      isLocked: true,
+      items: {
+        select: {
+          id: true,
+          grade: true,
+          minScore: true,
+          maxScore: true,
+          remark: true,
+          gradePoint: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.ClassAssessmentTemplateInclude;
 
 export type ClassAssessmentTemplateData = Prisma.ClassAssessmentTemplateGetPayload<{
