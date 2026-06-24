@@ -71,6 +71,28 @@ export interface StudentSubjectScoresResult {
   students: StudentSubjectScoreSummary[];
 }
 
+export interface StudentSubjectScoreReportSummary extends StudentSubjectScoreSummary {
+  grade: string;
+  remark: string;
+  gradePoint: string;
+  position: number;
+}
+
+export interface StudentSubjectScoreReportResult extends Omit<
+  StudentSubjectScoresResult,
+  "students"
+> {
+  students: StudentSubjectScoreReportSummary[];
+}
+
+type GradeBand = {
+  grade: string;
+  minScore: Prisma.Decimal;
+  maxScore: Prisma.Decimal;
+  remark: string | null;
+  gradePoint: Prisma.Decimal;
+};
+
 function mapRow(row: Row): StudentAssessmentScoreData {
   return {
     id: row.id,
@@ -177,6 +199,75 @@ export class StudentAssessmentScoreService {
         : null,
       components: [...componentById.values()].sort((a, b) => a.orderNo - b.orderNo),
     };
+  }
+
+  private async resolveGradeItems(
+    classId: string,
+    sessionId: string,
+    termId: string
+  ): Promise<GradeBand[]> {
+    const assignment = await this.prisma.classAssessmentTemplate.findFirst({
+      where: { classId, sessionId, termId },
+      select: {
+        gradeTemplate: {
+          select: {
+            items: {
+              select: {
+                grade: true,
+                minScore: true,
+                maxScore: true,
+                remark: true,
+                gradePoint: true,
+              },
+              orderBy: { minScore: "desc" },
+            },
+          },
+        },
+      },
+    });
+    return assignment?.gradeTemplate?.items ?? [];
+  }
+
+  private resolveGradeForTotalScore(
+    totalScore: number,
+    items: GradeBand[]
+  ): { grade: string; remark: string; gradePoint: string } {
+    if (items.length === 0) {
+      return { grade: "NA", remark: "NA", gradePoint: "NA" };
+    }
+
+    const score = new Prisma.Decimal(totalScore);
+    const match = items.find(
+      (item) => !score.lessThan(item.minScore) && !score.greaterThan(item.maxScore)
+    );
+    if (!match) {
+      return { grade: "NA", remark: "NA", gradePoint: "NA" };
+    }
+
+    return {
+      grade: match.grade,
+      remark: match.remark ?? "NA",
+      gradePoint: match.gradePoint.toString(),
+    };
+  }
+
+  private assignPositions(
+    students: { studentId: string; totalScore: number }[]
+  ): Map<string, number> {
+    const sorted = [...students].sort((a, b) => {
+      if (b.totalScore !== a.totalScore) return b.totalScore - a.totalScore;
+      return a.studentId.localeCompare(b.studentId);
+    });
+
+    const positionByStudentId = new Map<string, number>();
+    for (let i = 0; i < sorted.length; i++) {
+      const position =
+        i > 0 && sorted[i].totalScore === sorted[i - 1].totalScore
+          ? positionByStudentId.get(sorted[i - 1].studentId)!
+          : i + 1;
+      positionByStudentId.set(sorted[i].studentId, position);
+    }
+    return positionByStudentId;
   }
 
   private async resolveRegistrations(registrationIds: string[]) {
@@ -425,6 +516,46 @@ export class StudentAssessmentScoreService {
   }
 
   async getStudentSubjectScores(params: {
+    classId: string;
+    subclassId?: string;
+    sessionId: string;
+    termId: string;
+    subjectId: string;
+  }): Promise<StudentSubjectScoresResult> {
+    return this.buildStudentSubjectScoresResult(params);
+  }
+
+  async getStudentSubjectScoreReport(params: {
+    classId: string;
+    subclassId?: string;
+    sessionId: string;
+    termId: string;
+    subjectId: string;
+  }): Promise<StudentSubjectScoreReportResult> {
+    const base = await this.buildStudentSubjectScoresResult(params);
+    const gradeItems = await this.resolveGradeItems(
+      params.classId.trim(),
+      params.sessionId.trim(),
+      params.termId.trim()
+    );
+    const positionByStudentId = this.assignPositions(
+      base.students.map((student) => ({
+        studentId: student.studentId,
+        totalScore: student.totalScore,
+      }))
+    );
+
+    return {
+      ...base,
+      students: base.students.map((student) => ({
+        ...student,
+        ...this.resolveGradeForTotalScore(student.totalScore, gradeItems),
+        position: positionByStudentId.get(student.studentId) ?? 0,
+      })),
+    };
+  }
+
+  private async buildStudentSubjectScoresResult(params: {
     classId: string;
     subclassId?: string;
     sessionId: string;

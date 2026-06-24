@@ -133,6 +133,107 @@ function queryString(query: Request["query"], key: string): string | undefined {
  */
 /**
  * @openapi
+ * /api/v1/student-assessment-scores/student-score-report:
+ *   get:
+ *     summary: Student subject scores with letter grade and class position
+ *     tags: [StudentAssessmentScores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: classId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: subclassId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: termId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: subjectId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Per-student scores with grade from class grading template and position by total score
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     template:
+ *                       type: object
+ *                     gradeTemplate:
+ *                       type: object
+ *                       nullable: true
+ *                     components:
+ *                       type: array
+ *                     students:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           studentId:
+ *                             type: string
+ *                           studentName:
+ *                             type: string
+ *                           componentScore:
+ *                             type: array
+ *                           totalScore:
+ *                             type: number
+ *                           grade:
+ *                             type: string
+ *                             description: Letter grade or NA when no grading template or score out of range
+ *                           remark:
+ *                             type: string
+ *                           gradePoint:
+ *                             type: string
+ *                           position:
+ *                             type: integer
+ *             example:
+ *               success: true
+ *               message: Student subject score report retrieved successfully
+ *               data:
+ *                 template:
+ *                   id: "f1a2b3c4-d5e6-4789-a011-234567890123"
+ *                   name: "SS Assessment Template"
+ *                 gradeTemplate:
+ *                   id: "g1a2b3c4-d5e6-4789-a011-345678901234"
+ *                   name: "SS Grading Scale"
+ *                   version: 1
+ *                 students:
+ *                   - studentId: "e6f7a8b9-c0d1-4234-e012-345678907001"
+ *                     studentName: "Chioma Adebayo"
+ *                     totalScore: 78
+ *                     grade: "B"
+ *                     remark: "Very Good"
+ *                     gradePoint: "4"
+ *                     position: 1
+ *       400:
+ *         description: Validation error
+ *       500:
+ *         description: Server error
+ */
+/**
+ * @openapi
  * /api/v1/student-assessment-scores/student-scores:
  *   get:
  *     summary: List student scores by component for a subject (0 when not yet recorded)
@@ -524,6 +625,45 @@ export const studentAssessmentScoreController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to retrieve student subject scores");
+    }
+  },
+
+  studentSubjectScoreReport: async (req: Request, res: Response) => {
+    try {
+      const classId = queryString(req.query, "classId");
+      const subclassId = queryString(req.query, "subclassId");
+      const sessionId = queryString(req.query, "sessionId");
+      const termId = queryString(req.query, "termId");
+      const subjectId = queryString(req.query, "subjectId");
+
+      if (!classId?.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId?.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId?.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+      if (!subjectId?.trim()) {
+        return res.status(400).json({ success: false, message: "subjectId is required" });
+      }
+
+      const result = await studentAssessmentScoreService.getStudentSubjectScoreReport({
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+        subjectId: subjectId.trim(),
+        ...(subclassId?.trim() ? { subclassId: subclassId.trim() } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Student subject score report retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve student subject score report");
     }
   },
 
