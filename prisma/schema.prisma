@@ -474,13 +474,14 @@ model Student {
   class     SchoolClass? @relation(fields: [classId], references: [id], onDelete: SetNull)
   createdBy User         @relation("StudentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
 
-  subClass                    SubClass?                    @relation(fields: [subClassId], references: [id])
-  subClassId                  String?                      @db.Char(36)
-  inventoryTransactions       InventoryTransaction[]
-  studentBillings             StudentBilling[]
-  studentJournalTransfers     StudentJournalTransfer[]
-  studentSubjectRegistrations StudentSubjectRegistration[]
-  studentAssessmentScores     StudentAssessmentScore[]
+  subClass                           SubClass?                           @relation(fields: [subClassId], references: [id])
+  subClassId                         String?                             @db.Char(36)
+  inventoryTransactions              InventoryTransaction[]
+  studentBillings                    StudentBilling[]
+  studentJournalTransfers            StudentJournalTransfer[]
+  studentSubjectRegistrations        StudentSubjectRegistration[]
+  studentAssessmentScores            StudentAssessmentScore[]
+  studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
 
   @@index([classId])
   @@index([createdById])
@@ -1589,4 +1590,69 @@ model GradingTemplateItem {
   @@index([gradingTemplateId])
   @@index([gradingTemplateId, minScore, maxScore])
   @@map("grading_template_items")
+}
+
+model BehaviouralAssessmentTemplate {
+  id                              String                           @id @default(uuid()) @db.Char(36)
+  name                            String                           @map("name")
+  description                     String?                          @map("description") @db.Text
+  version                         Int                              @default(1) @map("version")
+  isLocked                        Boolean                          @default(false) @map("is_locked")
+  parentId                        String?                          @map("parent_id") @db.Char(36)
+  parent                          BehaviouralAssessmentTemplate?   @relation("BehaviouralAssessmentTemplateVersions", fields: [parentId], references: [id], onDelete: SetNull)
+  children                        BehaviouralAssessmentTemplate[]  @relation("BehaviouralAssessmentTemplateVersions")
+  behaviouralAssessmentComponents BehaviouralAssessmentComponent[]
+  status                          Status                           @default(Active)
+
+  @@map("behavioural_assessment_templates")
+}
+
+model BehaviouralAssessmentComponent {
+  id                                 String                              @id @default(uuid()) @db.Char(36)
+  behaviourTemplateId                String                              @map("template_id") @db.Char(36)
+  behaviourTemplate                  BehaviouralAssessmentTemplate       @relation(fields: [behaviourTemplateId], references: [id], onDelete: Restrict)
+  name                               String                              @map("name")
+  maxScore                           Decimal                             @default(5) @map("max_score") @db.Decimal(8, 2)
+  orderNo                            Int                                 @map("order_no")
+  status                             Status                              @default(Active)
+  studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
+
+  @@map("behavioural_assessment_components")
+}
+
+model StudentBehaviouralAssessmentScore {
+  id                               String                         @id @default(uuid()) @db.Char(36)
+  studentId                        String                         @map("student_id") @db.Char(36)
+  student                          Student                        @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  behaviouralAssessmentComponentId String                         @map("behavioural_assessment_component_id") @db.Char(36)
+  behaviouralAssessmentComponent   BehaviouralAssessmentComponent @relation(fields: [behaviouralAssessmentComponentId], references: [id], onDelete: Restrict)
+  score                            Decimal                        @map("score") @db.Decimal(8, 2)
+
+  @@map("student_behavioural_assessment_scores")
+}
+
+model BehaviouralGradingItem {
+  id                           String                      @id @default(uuid()) @db.Char(36)
+  lowBoundary                  Decimal                     @map("low_boundary") @db.Decimal(8, 2)
+  highBoundary                 Decimal                     @map("high_boundary") @db.Decimal(8, 2)
+  grade                        String                      @map("grade")
+  remark                       String?                     @map("remark") @db.Text
+  gradePoint                   Decimal                     @map("grade_point") @db.Decimal(6, 2)
+  behaviouralGradingTemplate   BehaviouralGradingTemplate? @relation(fields: [behaviouralGradingTemplateId], references: [id])
+  behaviouralGradingTemplateId String?                     @db.Char(36)
+}
+
+model BehaviouralGradingTemplate {
+  id           String                       @id @default(uuid()) @db.Char(36)
+  name         String                       @map("name")
+  description  String?                      @map("description") @db.Text
+  version      Int                          @default(1) @map("version")
+  isLocked     Boolean                      @default(false) @map("is_locked")
+  parentId     String?                      @map("parent_id") @db.Char(36)
+  parent       BehaviouralGradingTemplate?  @relation("BehaviouralGradingTemplateVersions", fields: [parentId], references: [id], onDelete: SetNull)
+  children     BehaviouralGradingTemplate[] @relation("BehaviouralGradingTemplateVersions")
+  gradingItems BehaviouralGradingItem[]
+  status       Status                       @default(Active)
+
+  @@map("behavioural_grading_templates")
 }

@@ -71,6 +71,11 @@ import studentSubjectRegistrationRouter from "./studentSubjectRegistration";
 import studentAssessmentScoreRouter from "./studentAssessmentScore";
 import gradingTemplateRouter from "./gradingTemplate";
 import gradingTemplateItemRouter from "./gradingTemplateItem";
+import behaviouralAssessmentTemplateRouter from "./behaviouralAssessmentTemplate";
+import behaviouralAssessmentComponentRouter from "./behaviouralAssessmentComponent";
+import behaviouralGradingTemplateRouter from "./behaviouralGradingTemplate";
+import behaviouralGradingItemRouter from "./behaviouralGradingItem";
+import studentBehaviouralAssessmentScoreRouter from "./studentBehaviouralAssessmentScore";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -147,6 +152,11 @@ router.use("/student-subject-registrations", studentSubjectRegistrationRouter);
 router.use("/student-assessment-scores", studentAssessmentScoreRouter);
 router.use("/grading-templates", gradingTemplateRouter);
 router.use("/grading-template-items", gradingTemplateItemRouter);
+router.use("/behavioural-assessment-templates", behaviouralAssessmentTemplateRouter);
+router.use("/behavioural-assessment-components", behaviouralAssessmentComponentRouter);
+router.use("/behavioural-grading-templates", behaviouralGradingTemplateRouter);
+router.use("/behavioural-grading-items", behaviouralGradingItemRouter);
+router.use("/student-behavioural-assessment-scores", studentBehaviouralAssessmentScoreRouter);
 
 router.use("/upload", uploadRouter);
 

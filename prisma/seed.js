@@ -4052,14 +4052,19 @@ async function main() {
 
     // Reset assessment/grading tables for idempotent reseed (dev seed data only)
     await prisma.studentAssessmentScore.deleteMany({});
+    await prisma.studentBehaviouralAssessmentScore.deleteMany({});
     await prisma.studentSubjectRegistration.deleteMany({});
     await prisma.classSubject.deleteMany({});
     await prisma.classAssessmentTemplate.deleteMany({});
     await prisma.assessmentComponent.deleteMany({});
+    await prisma.behaviouralAssessmentComponent.deleteMany({});
     await prisma.gradingTemplateItem.deleteMany({});
+    await prisma.behaviouralGradingItem.deleteMany({});
     await prisma.subject.deleteMany({});
     await prisma.assessmentTemplate.deleteMany({});
+    await prisma.behaviouralAssessmentTemplate.deleteMany({});
     await prisma.gradingTemplate.deleteMany({});
+    await prisma.behaviouralGradingTemplate.deleteMany({});
 
     const ASMT_VER_JSS = "b2c3d4e5-f6a7-4a90-8123-456789ab0001";
     const ASMT_VER_SS = "c3d4e5f6-a7b8-4b01-9234-567890ab0002";
@@ -4459,7 +4464,7 @@ async function main() {
         id: GT.JSS,
         name: "Junior Secondary Grading Scale",
         description: "Standard A–F letter grades for JSS report cards",
-        version: "2025",
+        version: 1,
         isLocked: false,
         parentId: null,
       },
@@ -4551,6 +4556,277 @@ async function main() {
       });
     }
 
+    const BAT = {
+      JSS: "e1f2a3b4-c5d6-4001-a123-456789ab0040",
+    };
+
+    const behaviouralAssessmentTemplates = [
+      {
+        id: BAT.JSS,
+        name: "Junior Secondary Behavioural Assessment",
+        description: "Conduct and character ratings for JSS report cards (1–5 scale per trait)",
+        version: 1,
+        isLocked: false,
+        parentId: null,
+        status: "Active",
+      },
+    ];
+
+    for (const tpl of behaviouralAssessmentTemplates) {
+      await prisma.behaviouralAssessmentTemplate.upsert({
+        where: { id: tpl.id },
+        update: {
+          name: tpl.name,
+          description: tpl.description,
+          version: tpl.version,
+          isLocked: tpl.isLocked,
+          parentId: tpl.parentId,
+          status: tpl.status,
+        },
+        create: tpl,
+      });
+    }
+
+    const BAC = {
+      PUNCTUALITY: "f2a3b4c5-d6e7-4012-b234-567890ab0041",
+      NEATNESS: "a3b4c5d6-e7f8-4023-c345-678901ab0042",
+      POLITENESS: "b4c5d6e7-f8a9-4034-d456-789012ab0043",
+      PARTICIPATION: "c5d6e7f8-a9b0-4045-e567-890123ab0044",
+      HONESTY: "d6e7f8a9-b0c1-4056-f678-901234ab0045",
+    };
+
+    const behaviouralAssessmentComponents = [
+      {
+        id: BAC.PUNCTUALITY,
+        behaviourTemplateId: BAT.JSS,
+        name: "Punctuality",
+        maxScore: 5,
+        orderNo: 1,
+        status: "Active",
+      },
+      {
+        id: BAC.NEATNESS,
+        behaviourTemplateId: BAT.JSS,
+        name: "Neatness and Appearance",
+        maxScore: 5,
+        orderNo: 2,
+        status: "Active",
+      },
+      {
+        id: BAC.POLITENESS,
+        behaviourTemplateId: BAT.JSS,
+        name: "Politeness and Courtesy",
+        maxScore: 5,
+        orderNo: 3,
+        status: "Active",
+      },
+      {
+        id: BAC.PARTICIPATION,
+        behaviourTemplateId: BAT.JSS,
+        name: "Class Participation",
+        maxScore: 5,
+        orderNo: 4,
+        status: "Active",
+      },
+      {
+        id: BAC.HONESTY,
+        behaviourTemplateId: BAT.JSS,
+        name: "Honesty and Integrity",
+        maxScore: 5,
+        orderNo: 5,
+        status: "Active",
+      },
+    ];
+
+    for (const comp of behaviouralAssessmentComponents) {
+      await prisma.behaviouralAssessmentComponent.upsert({
+        where: { id: comp.id },
+        update: {
+          behaviourTemplateId: comp.behaviourTemplateId,
+          name: comp.name,
+          maxScore: comp.maxScore,
+          orderNo: comp.orderNo,
+          status: comp.status,
+        },
+        create: comp,
+      });
+    }
+
+    const BGT = {
+      JSS: "e7f8a9b0-c1d2-4067-a789-012345ab0046",
+    };
+
+    const behaviouralGradingTemplates = [
+      {
+        id: BGT.JSS,
+        name: "Junior Secondary Behavioural Grading Scale",
+        description: "Letter grades for average behavioural scores on a 1–5 scale",
+        version: 1,
+        isLocked: false,
+        parentId: null,
+        status: "Active",
+      },
+    ];
+
+    for (const tpl of behaviouralGradingTemplates) {
+      await prisma.behaviouralGradingTemplate.upsert({
+        where: { id: tpl.id },
+        update: {
+          name: tpl.name,
+          description: tpl.description,
+          version: tpl.version,
+          isLocked: tpl.isLocked,
+          parentId: tpl.parentId,
+          status: tpl.status,
+        },
+        create: tpl,
+      });
+    }
+
+    const behaviouralGradingItems = [
+      {
+        id: "f8a9b0c1-d2e3-4078-b890-123456ab0047",
+        behaviouralGradingTemplateId: BGT.JSS,
+        grade: "A",
+        lowBoundary: 4.5,
+        highBoundary: 5,
+        remark: "Excellent conduct",
+        gradePoint: 5,
+      },
+      {
+        id: "a9b0c1d2-e3f4-4089-c901-234567ab0048",
+        behaviouralGradingTemplateId: BGT.JSS,
+        grade: "B",
+        lowBoundary: 3.5,
+        highBoundary: 4.49,
+        remark: "Very good conduct",
+        gradePoint: 4,
+      },
+      {
+        id: "b0c1d2e3-f4a5-4090-d012-345678ab0049",
+        behaviouralGradingTemplateId: BGT.JSS,
+        grade: "C",
+        lowBoundary: 2.5,
+        highBoundary: 3.49,
+        remark: "Good conduct",
+        gradePoint: 3,
+      },
+      {
+        id: "c1d2e3f4-a5b6-4101-e123-456789ab0050",
+        behaviouralGradingTemplateId: BGT.JSS,
+        grade: "D",
+        lowBoundary: 1.5,
+        highBoundary: 2.49,
+        remark: "Fair conduct",
+        gradePoint: 2,
+      },
+      {
+        id: "d2e3f4a5-b6c7-4112-f234-567890ab0051",
+        behaviouralGradingTemplateId: BGT.JSS,
+        grade: "E",
+        lowBoundary: 0,
+        highBoundary: 1.49,
+        remark: "Needs improvement",
+        gradePoint: 1,
+      },
+    ];
+
+    for (const item of behaviouralGradingItems) {
+      await prisma.behaviouralGradingItem.upsert({
+        where: { id: item.id },
+        update: {
+          behaviouralGradingTemplateId: item.behaviouralGradingTemplateId,
+          grade: item.grade,
+          lowBoundary: item.lowBoundary,
+          highBoundary: item.highBoundary,
+          remark: item.remark,
+          gradePoint: item.gradePoint,
+        },
+        create: item,
+      });
+    }
+
+    const studentBehaviouralAssessmentScores = [
+      {
+        id: "e3f4a5b6-c7d8-4123-a345-678901ab0052",
+        studentId: STU.CHIOMA,
+        behaviouralAssessmentComponentId: BAC.PUNCTUALITY,
+        score: 5,
+      },
+      {
+        id: "f4a5b6c7-d8e9-4234-b456-789012ab0053",
+        studentId: STU.CHIOMA,
+        behaviouralAssessmentComponentId: BAC.NEATNESS,
+        score: 4,
+      },
+      {
+        id: "a5b6c7d8-e9f0-4345-c567-890123ab0054",
+        studentId: STU.CHIOMA,
+        behaviouralAssessmentComponentId: BAC.POLITENESS,
+        score: 5,
+      },
+      {
+        id: "b6c7d8e9-f0a1-4456-d678-901234ab0055",
+        studentId: STU.CHIOMA,
+        behaviouralAssessmentComponentId: BAC.PARTICIPATION,
+        score: 4,
+      },
+      {
+        id: "c7d8e9f0-a1b2-4567-e789-012345ab0056",
+        studentId: STU.CHIOMA,
+        behaviouralAssessmentComponentId: BAC.HONESTY,
+        score: 5,
+      },
+      {
+        id: "d8e9f0a1-b2c3-4678-f890-123456ab0057",
+        studentId: STU.IBRAHIM,
+        behaviouralAssessmentComponentId: BAC.PUNCTUALITY,
+        score: 3,
+      },
+      {
+        id: "e9f0a1b2-c3d4-4789-a901-234567ab0058",
+        studentId: STU.IBRAHIM,
+        behaviouralAssessmentComponentId: BAC.NEATNESS,
+        score: 4,
+      },
+      {
+        id: "f0a1b2c3-d4e5-4890-b012-345678ab0059",
+        studentId: STU.IBRAHIM,
+        behaviouralAssessmentComponentId: BAC.POLITENESS,
+        score: 3,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4901-c123-456789ab0060",
+        studentId: STU.GRACE,
+        behaviouralAssessmentComponentId: BAC.PUNCTUALITY,
+        score: 4,
+      },
+      {
+        id: "b2c3d4e5-f6a7-4012-d234-567890ab0061",
+        studentId: STU.GRACE,
+        behaviouralAssessmentComponentId: BAC.NEATNESS,
+        score: 5,
+      },
+      {
+        id: "c3d4e5f6-a7b8-4123-e345-678901ab0062",
+        studentId: STU.GRACE,
+        behaviouralAssessmentComponentId: BAC.POLITENESS,
+        score: 4,
+      },
+    ];
+
+    for (const row of studentBehaviouralAssessmentScores) {
+      await prisma.studentBehaviouralAssessmentScore.upsert({
+        where: { id: row.id },
+        update: {
+          studentId: row.studentId,
+          behaviouralAssessmentComponentId: row.behaviouralAssessmentComponentId,
+          score: row.score,
+        },
+        create: row,
+      });
+    }
+
     await prisma.classAssessmentTemplate.updateMany({
       where: { classId: { in: [classIds.jss1, classIds.jss2] } },
       data: { gradeTemplateId: GT.JSS },
@@ -4568,6 +4844,13 @@ async function main() {
     console.log(
       `   ✓ ${gradingTemplates.length} grading template, ${gradingTemplateItems.length} grade bands`
     );
+    console.log(
+      `   ✓ ${behaviouralAssessmentTemplates.length} behavioural assessment template, ${behaviouralAssessmentComponents.length} behavioural components`
+    );
+    console.log(
+      `   ✓ ${behaviouralGradingTemplates.length} behavioural grading template, ${behaviouralGradingItems.length} behavioural grade bands`
+    );
+    console.log(`   ✓ ${studentBehaviouralAssessmentScores.length} student behavioural assessment scores`);
 
     // Class default billings (amounts per class for current session / term)
     console.log("📋 Seeding class default billings...");

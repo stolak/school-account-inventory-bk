@@ -156,6 +156,26 @@ const options: swaggerJSDoc.Options = {
         name: "GradingTemplateItems",
         description: "Grade bands within a grading template (CRUD)",
       },
+      {
+        name: "BehaviouralAssessmentTemplates",
+        description: "Behavioural assessment template definitions with versioning (CRUD)",
+      },
+      {
+        name: "BehaviouralAssessmentComponents",
+        description: "Scoring components within a behavioural assessment template (CRUD)",
+      },
+      {
+        name: "BehaviouralGradingTemplates",
+        description: "Behavioural grading scale templates with versioning (CRUD)",
+      },
+      {
+        name: "BehaviouralGradingItems",
+        description: "Grade bands within a behavioural grading template (CRUD)",
+      },
+      {
+        name: "StudentBehaviouralAssessmentScores",
+        description: "Student scores per behavioural assessment component (CRUD and bulk upsert)",
+      },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
       { name: "Sales", description: "Inventory sales transactions (bulk create, list, grouped by reference)" },
