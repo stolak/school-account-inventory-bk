@@ -66,6 +66,7 @@ export interface StudentSubjectScoreSummary {
 
 export interface StudentSubjectScoresResult {
   template: { id: string; name: string };
+  gradeTemplate: { id: string; name: string; version: number } | null;
   components: { id: string; name: string; maxScore: number; rank: number }[];
   students: StudentSubjectScoreSummary[];
 }
@@ -135,6 +136,7 @@ export class StudentAssessmentScoreService {
     const assignments = await this.prisma.classAssessmentTemplate.findMany({
       where: { classId, sessionId, termId },
       include: {
+        gradeTemplate: { select: { id: true, name: true, version: true } },
         template: {
           include: {
             components: {
@@ -166,6 +168,13 @@ export class StudentAssessmentScoreService {
         id: assignments[0].template.id,
         name: assignments[0].template.name,
       },
+      gradeTemplate: assignments[0].gradeTemplate
+        ? {
+            id: assignments[0].gradeTemplate.id,
+            name: assignments[0].gradeTemplate.name,
+            version: assignments[0].gradeTemplate.version,
+          }
+        : null,
       components: [...componentById.values()].sort((a, b) => a.orderNo - b.orderNo),
     };
   }
@@ -432,7 +441,7 @@ export class StudentAssessmentScoreService {
       throw new Error("classId, sessionId, termId, and subjectId are required");
     }
 
-    const { template, components } = await this.resolveTemplateAndComponents(
+    const { template, gradeTemplate, components } = await this.resolveTemplateAndComponents(
       classId,
       sessionId,
       termId
@@ -482,6 +491,7 @@ export class StudentAssessmentScoreService {
 
     return {
       template,
+      gradeTemplate,
       components: components.map((component) => ({
         id: component.id,
         name: component.name,

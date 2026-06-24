@@ -132,7 +132,8 @@ const options: swaggerJSDoc.Options = {
       },
       {
         name: "ClassAssessmentTemplates",
-        description: "Assessment template assignments per class, session, and term (CRUD)",
+        description:
+          "Assessment and grading template assignments per class, session, and term (CRUD)",
       },
       { name: "Subjects", description: "Academic subjects master data (CRUD)" },
       {
@@ -154,10 +155,6 @@ const options: swaggerJSDoc.Options = {
       {
         name: "GradingTemplateItems",
         description: "Grade bands within a grading template (CRUD)",
-      },
-      {
-        name: "ClassGradingTemplates",
-        description: "Grading template assignments per class, session, and term (CRUD)",
       },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },

@@ -71,7 +71,6 @@ import studentSubjectRegistrationRouter from "./studentSubjectRegistration";
 import studentAssessmentScoreRouter from "./studentAssessmentScore";
 import gradingTemplateRouter from "./gradingTemplate";
 import gradingTemplateItemRouter from "./gradingTemplateItem";
-import classGradingTemplateRouter from "./classGradingTemplate";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -148,7 +147,6 @@ router.use("/student-subject-registrations", studentSubjectRegistrationRouter);
 router.use("/student-assessment-scores", studentAssessmentScoreRouter);
 router.use("/grading-templates", gradingTemplateRouter);
 router.use("/grading-template-items", gradingTemplateItemRouter);
-router.use("/class-grading-templates", classGradingTemplateRouter);
 
 router.use("/upload", uploadRouter);
 

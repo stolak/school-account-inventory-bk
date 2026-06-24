@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { classAssessmentTemplateService } from "../services/classAssessmentTemplateService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
+import { isStringOrNullOrUndefined } from "../utils/request";
 
 function queryString(query: Request["query"], key: string): string | undefined {
   const raw = query[key];
@@ -31,6 +32,9 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                 type: string
  *               termId:
  *                 type: string
+ *               gradeTemplateId:
+ *                 type: string
+ *                 nullable: true
  *     responses:
  *       201:
  *         description: Class assessment template created
@@ -62,6 +66,10 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         name: termId
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: gradeTemplateId
+ *         schema:
+ *           type: string
  *     responses:
  *       200:
  *         description: Class assessment templates list
@@ -71,7 +79,7 @@ function queryString(query: Request["query"], key: string): string | undefined {
 export const classAssessmentTemplateController = {
   create: async (req: Request, res: Response) => {
     try {
-      const { classId, templateId, sessionId, termId } = req.body ?? {};
+      const { classId, templateId, sessionId, termId, gradeTemplateId } = req.body ?? {};
 
       if (!classId || typeof classId !== "string" || !classId.trim()) {
         return res.status(400).json({ success: false, message: "classId is required" });
@@ -85,12 +93,16 @@ export const classAssessmentTemplateController = {
       if (!termId || typeof termId !== "string" || !termId.trim()) {
         return res.status(400).json({ success: false, message: "termId is required" });
       }
+      if (!isStringOrNullOrUndefined(gradeTemplateId)) {
+        return res.status(400).json({ success: false, message: "gradeTemplateId must be a string or null" });
+      }
 
       const created = await classAssessmentTemplateService.create({
         classId: classId.trim(),
         templateId: templateId.trim(),
         sessionId: sessionId.trim(),
         termId: termId.trim(),
+        ...(gradeTemplateId !== undefined ? { gradeTemplateId: gradeTemplateId?.trim() || null } : {}),
       });
 
       return res.status(201).json({
@@ -110,6 +122,7 @@ export const classAssessmentTemplateController = {
         templateId: queryString(req.query, "templateId"),
         sessionId: queryString(req.query, "sessionId"),
         termId: queryString(req.query, "termId"),
+        gradeTemplateId: queryString(req.query, "gradeTemplateId"),
       });
 
       return res.json({
@@ -145,7 +158,7 @@ export const classAssessmentTemplateController = {
    *       500:
    *         description: Server error
    *   put:
-   *     summary: Update the assessment template assigned to a class
+   *     summary: Update a class assessment template assignment
    *     tags: [ClassAssessmentTemplates]
    *     security:
    *       - bearerAuth: []
@@ -162,10 +175,12 @@ export const classAssessmentTemplateController = {
    *         application/json:
    *           schema:
    *             type: object
-   *             required: [templateId]
    *             properties:
    *               templateId:
    *                 type: string
+   *               gradeTemplateId:
+   *                 type: string
+   *                 nullable: true
    *     responses:
    *       200:
    *         description: Class assessment template updated
@@ -222,13 +237,23 @@ export const classAssessmentTemplateController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { templateId } = req.body ?? {};
-      if (!templateId || typeof templateId !== "string" || !templateId.trim()) {
-        return res.status(400).json({ success: false, message: "templateId is required" });
+      const { templateId, gradeTemplateId } = req.body ?? {};
+      if (templateId === undefined && gradeTemplateId === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "At least one of templateId or gradeTemplateId must be provided",
+        });
+      }
+      if (templateId !== undefined && (typeof templateId !== "string" || !templateId.trim())) {
+        return res.status(400).json({ success: false, message: "templateId must be a non-empty string" });
+      }
+      if (!isStringOrNullOrUndefined(gradeTemplateId)) {
+        return res.status(400).json({ success: false, message: "gradeTemplateId must be a string or null" });
       }
 
       const updated = await classAssessmentTemplateService.update(id, {
-        templateId: templateId.trim(),
+        ...(templateId !== undefined ? { templateId: templateId.trim() } : {}),
+        ...(gradeTemplateId !== undefined ? { gradeTemplateId: gradeTemplateId?.trim() || null } : {}),
       });
 
       return res.json({

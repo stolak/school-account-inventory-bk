@@ -4055,7 +4055,6 @@ async function main() {
     await prisma.studentSubjectRegistration.deleteMany({});
     await prisma.classSubject.deleteMany({});
     await prisma.classAssessmentTemplate.deleteMany({});
-    await prisma.classGradingTemplate.deleteMany({});
     await prisma.assessmentComponent.deleteMany({});
     await prisma.gradingTemplateItem.deleteMany({});
     await prisma.subject.deleteMany({});
@@ -4552,41 +4551,10 @@ async function main() {
       });
     }
 
-    const classGradingTemplates = [
-      {
-        id: "e1f2a3b4-c5d6-4734-f890-123456ab0040",
-        name: "JSS 1 Third Term Grading",
-        classId: classIds.jss1,
-        sessionId: seededSession.id,
-        termId: seededTerm.id,
-        gradingTemplateId: GT.JSS,
-        status: "Active",
-      },
-      {
-        id: "f2a3b4c5-d6e7-4845-a901-234567ab0041",
-        name: "JSS 2 Third Term Grading",
-        classId: classIds.jss2,
-        sessionId: seededSession.id,
-        termId: seededTerm.id,
-        gradingTemplateId: GT.JSS,
-        status: "Active",
-      },
-    ];
-
-    for (const row of classGradingTemplates) {
-      await prisma.classGradingTemplate.upsert({
-        where: { id: row.id },
-        update: {
-          name: row.name,
-          classId: row.classId,
-          sessionId: row.sessionId,
-          termId: row.termId,
-          gradingTemplateId: row.gradingTemplateId,
-          status: row.status,
-        },
-        create: row,
-      });
-    }
+    await prisma.classAssessmentTemplate.updateMany({
+      where: { classId: { in: [classIds.jss1, classIds.jss2] } },
+      data: { gradeTemplateId: GT.JSS },
+    });
 
     console.log(
       `   ✓ ${assessmentTemplates.length} assessment templates, ${assessmentComponents.length} components`
@@ -4598,7 +4566,7 @@ async function main() {
       `   ✓ ${studentSubjectRegistrations.length} student subject registrations, ${studentAssessmentScores.length} assessment scores`
     );
     console.log(
-      `   ✓ ${gradingTemplates.length} grading template, ${gradingTemplateItems.length} grade bands, ${classGradingTemplates.length} class grading assignments`
+      `   ✓ ${gradingTemplates.length} grading template, ${gradingTemplateItems.length} grade bands`
     );
 
     // Class default billings (amounts per class for current session / term)

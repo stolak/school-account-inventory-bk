@@ -186,6 +186,16 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                           type: string
  *                         name:
  *                           type: string
+ *                     gradeTemplate:
+ *                       type: object
+ *                       nullable: true
+ *                       properties:
+ *                         id:
+ *                           type: string
+ *                         name:
+ *                           type: string
+ *                         version:
+ *                           type: string
  *                     students:
  *                       type: array
  *                       items:
@@ -217,6 +227,10 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                 template:
  *                   id: "f1a2b3c4-d5e6-4789-a011-234567890123"
  *                   name: "SS Assessment Template"
+ *                 gradeTemplate:
+ *                   id: "g1a2b3c4-d5e6-4789-a011-345678901234"
+ *                   name: "SS Grading Scale"
+ *                   version: "1.0"
  *                 students:
  *                   - studentId: "e6f7a8b9-c0d1-4234-e012-345678907001"
  *                     studentName: "Chioma Adebayo"

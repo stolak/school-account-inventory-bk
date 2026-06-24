@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { gradingTemplateService } from "../services/gradingTemplateService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
 import { parseBodyBoolean, parseOptionalBoolean } from "../utils/assessmentHttp";
-import { isStringOrNullOrUndefined } from "../utils/request";
+import { isStringOrNullOrUndefined, parseIntOrUndefined } from "../utils/request";
 
 function queryString(query: Request["query"], key: string): string | undefined {
   const raw = query[key];
@@ -84,14 +84,16 @@ export const gradingTemplateController = {
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ success: false, message: "name is required" });
       }
-      if (!version || typeof version !== "string" || !version.trim()) {
-        return res.status(400).json({ success: false, message: "version is required" });
-      }
+
       if (!isStringOrNullOrUndefined(description)) {
-        return res.status(400).json({ success: false, message: "description must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "description must be a string or null" });
       }
       if (!isStringOrNullOrUndefined(parentId)) {
-        return res.status(400).json({ success: false, message: "parentId must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "parentId must be a string or null" });
       }
 
       const parsedIsLocked = parseBodyBoolean(isLocked);
@@ -101,7 +103,7 @@ export const gradingTemplateController = {
 
       const created = await gradingTemplateService.create({
         name: name.trim(),
-        version: version.trim(),
+        version: parseIntOrUndefined(version) ?? 1,
         ...(description !== undefined ? { description } : {}),
         ...(parsedIsLocked !== "missing" ? { isLocked: parsedIsLocked } : {}),
         ...(parentId !== undefined ? { parentId: parentId?.trim() || null } : {}),
@@ -127,7 +129,7 @@ export const gradingTemplateController = {
 
       const result = await gradingTemplateService.list({
         q: queryString(req.query, "q"),
-        version: queryString(req.query, "version"),
+        version: parseIntOrUndefined(queryString(req.query, "version")),
         parentId: queryString(req.query, "parentId"),
         ...(isLockedParsed !== undefined && isLockedParsed !== "invalid"
           ? { isLocked: isLockedParsed }
@@ -263,20 +265,28 @@ export const gradingTemplateController = {
         isLocked === undefined &&
         parentId === undefined
       ) {
-        return res.status(400).json({ success: false, message: "At least one field must be provided" });
+        return res
+          .status(400)
+          .json({ success: false, message: "At least one field must be provided" });
       }
 
       if (name !== undefined && (typeof name !== "string" || !name.trim())) {
         return res.status(400).json({ success: false, message: "name must be a non-empty string" });
       }
       if (description !== undefined && !isStringOrNullOrUndefined(description)) {
-        return res.status(400).json({ success: false, message: "description must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "description must be a string or null" });
       }
       if (version !== undefined && (typeof version !== "string" || !version.trim())) {
-        return res.status(400).json({ success: false, message: "version must be a non-empty string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "version must be a non-empty string" });
       }
       if (parentId !== undefined && !isStringOrNullOrUndefined(parentId)) {
-        return res.status(400).json({ success: false, message: "parentId must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "parentId must be a string or null" });
       }
 
       const parsedIsLocked = parseBodyBoolean(isLocked);
@@ -287,7 +297,7 @@ export const gradingTemplateController = {
       const updated = await gradingTemplateService.update(id, {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(description !== undefined ? { description } : {}),
-        ...(version !== undefined ? { version: version.trim() } : {}),
+        ...(version !== undefined ? { version: Number(version) } : {}),
         ...(parsedIsLocked !== "missing" && parsedIsLocked !== "invalid"
           ? { isLocked: parsedIsLocked }
           : {}),

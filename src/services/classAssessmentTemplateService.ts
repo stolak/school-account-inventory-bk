@@ -15,6 +15,7 @@ const include = {
   },
   session: { select: { id: true, name: true, status: true } },
   term: { select: { id: true, name: true, status: true } },
+  gradeTemplate: { select: { id: true, name: true, version: true, isLocked: true } },
 } satisfies Prisma.ClassAssessmentTemplateInclude;
 
 export type ClassAssessmentTemplateData = Prisma.ClassAssessmentTemplateGetPayload<{
@@ -29,6 +30,7 @@ export class ClassAssessmentTemplateService {
     templateId: string;
     sessionId: string;
     termId: string;
+    gradeTemplateId?: string | null;
   }): Promise<void> {
     const [cls, template, session, term] = await Promise.all([
       this.prisma.schoolClass.findUnique({ where: { id: input.classId }, select: { id: true } }),
@@ -43,6 +45,13 @@ export class ClassAssessmentTemplateService {
     if (!template) throw new Error("Invalid templateId");
     if (!session) throw new Error("Invalid sessionId");
     if (!term) throw new Error("Invalid termId");
+    if (input.gradeTemplateId) {
+      const gradeTemplate = await this.prisma.gradingTemplate.findUnique({
+        where: { id: input.gradeTemplateId },
+        select: { id: true },
+      });
+      if (!gradeTemplate) throw new Error("Invalid gradeTemplateId");
+    }
   }
 
   async create(input: {
@@ -50,12 +59,14 @@ export class ClassAssessmentTemplateService {
     templateId: string;
     sessionId: string;
     termId: string;
+    gradeTemplateId?: string | null;
   }): Promise<ClassAssessmentTemplateData> {
     const payload = {
       classId: input.classId.trim(),
       templateId: input.templateId.trim(),
       sessionId: input.sessionId.trim(),
       termId: input.termId.trim(),
+      gradeTemplateId: input.gradeTemplateId?.trim() || null,
     };
     if (!payload.classId || !payload.templateId || !payload.sessionId || !payload.termId) {
       throw new Error("classId, templateId, sessionId, and termId are required");
@@ -76,12 +87,14 @@ export class ClassAssessmentTemplateService {
     templateId?: string;
     sessionId?: string;
     termId?: string;
+    gradeTemplateId?: string;
   }) {
     const where: Prisma.ClassAssessmentTemplateWhereInput = {};
     if (params.classId?.trim()) where.classId = params.classId.trim();
     if (params.templateId?.trim()) where.templateId = params.templateId.trim();
     if (params.sessionId?.trim()) where.sessionId = params.sessionId.trim();
     if (params.termId?.trim()) where.termId = params.termId.trim();
+    if (params.gradeTemplateId?.trim()) where.gradeTemplateId = params.gradeTemplateId.trim();
 
     const rows = await this.prisma.classAssessmentTemplate.findMany({
       where,
@@ -95,24 +108,43 @@ export class ClassAssessmentTemplateService {
     return this.prisma.classAssessmentTemplate.findUnique({ where: { id }, include });
   }
 
-  async update(id: string, input: { templateId: string }): Promise<ClassAssessmentTemplateData> {
+  async update(
+    id: string,
+    input: { templateId?: string; gradeTemplateId?: string | null }
+  ): Promise<ClassAssessmentTemplateData> {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Class assessment template not found");
 
-    const templateId = input.templateId.trim();
-    if (!templateId) throw new Error("templateId is required");
+    if (input.templateId === undefined && input.gradeTemplateId === undefined) {
+      throw new Error("At least one of templateId or gradeTemplateId must be provided");
+    }
+
+    const templateId =
+      input.templateId !== undefined ? input.templateId.trim() : existing.templateId;
+    const gradeTemplateId =
+      input.gradeTemplateId !== undefined
+        ? input.gradeTemplateId?.trim() || null
+        : existing.gradeTemplateId;
+
+    if (input.templateId !== undefined && !templateId) {
+      throw new Error("templateId must be a non-empty string");
+    }
 
     await this.assertRefs({
       classId: existing.classId,
       templateId,
       sessionId: existing.sessionId,
       termId: existing.termId,
+      gradeTemplateId,
     });
 
     try {
       return await this.prisma.classAssessmentTemplate.update({
         where: { id },
-        data: { templateId },
+        data: {
+          ...(input.templateId !== undefined ? { templateId } : {}),
+          ...(input.gradeTemplateId !== undefined ? { gradeTemplateId } : {}),
+        },
         include,
       });
     } catch (e) {
