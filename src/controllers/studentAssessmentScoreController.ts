@@ -133,6 +133,45 @@ function queryString(query: Request["query"], key: string): string | undefined {
  */
 /**
  * @openapi
+ * /api/v1/student-assessment-scores/student-report:
+ *   get:
+ *     summary: Full assessment report for one student across all registered subjects
+ *     tags: [StudentAssessmentScores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: classId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: termId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Student report with per-subject scores, grades, positions, and overall totals
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Student or registrations not found
+ *       500:
+ *         description: Server error
+ */
+/**
+ * @openapi
  * /api/v1/student-assessment-scores/student-score-report:
  *   get:
  *     summary: Student subject scores with letter grade and class position
@@ -664,6 +703,43 @@ export const studentAssessmentScoreController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to retrieve student subject score report");
+    }
+  },
+
+  studentAssessmentReport: async (req: Request, res: Response) => {
+    try {
+      const studentId = queryString(req.query, "studentId");
+      const classId = queryString(req.query, "classId");
+      const sessionId = queryString(req.query, "sessionId");
+      const termId = queryString(req.query, "termId");
+
+      if (!studentId?.trim()) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+      if (!classId?.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId?.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId?.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+
+      const result = await studentAssessmentScoreService.getStudentAssessmentReport({
+        studentId: studentId.trim(),
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+      });
+
+      return res.json({
+        success: true,
+        message: "Student assessment report retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve student assessment report");
     }
   },
 

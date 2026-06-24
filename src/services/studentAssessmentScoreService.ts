@@ -85,6 +85,31 @@ export interface StudentSubjectScoreReportResult extends Omit<
   students: StudentSubjectScoreReportSummary[];
 }
 
+export interface StudentAssessmentReportSubject {
+  subjectId: string;
+  subjectName: string;
+  componentScore: StudentComponentScoreEntry[];
+  totalScore: number;
+  grade: string;
+  remark: string;
+  position: number;
+  studentAverage: number;
+  studentHighest: number;
+  studentLowest: number;
+}
+
+export interface StudentAssessmentReportResult {
+  admissionNumber: string;
+  studentName: string;
+  consideredClass: string;
+  consideredSubclass?: string;
+  session: string;
+  term: string;
+  subjects: StudentAssessmentReportSubject[];
+  overallScore: number;
+  averageScore: number;
+}
+
 type GradeBand = {
   grade: string;
   minScore: Prisma.Decimal;
@@ -92,6 +117,17 @@ type GradeBand = {
   remark: string | null;
   gradePoint: Prisma.Decimal;
 };
+
+type AssessmentComponentRow = {
+  id: string;
+  name: string;
+  maxScore: Prisma.Decimal;
+  orderNo: number;
+};
+
+function roundScore(value: number): number {
+  return Math.round(value * 100) / 100;
+}
 
 function mapRow(row: Row): StudentAssessmentScoreData {
   return {
@@ -268,6 +304,42 @@ export class StudentAssessmentScoreService {
       positionByStudentId.set(sorted[i].studentId, position);
     }
     return positionByStudentId;
+  }
+
+  private buildComponentScores(
+    registrationId: string,
+    components: AssessmentComponentRow[],
+    scoreByRegistrationAndComponent: Map<string, Map<string, Prisma.Decimal>>
+  ): StudentComponentScoreEntry[] {
+    const scoresForRegistration = scoreByRegistrationAndComponent.get(registrationId);
+    return components.map((component) => ({
+      componentId: component.id,
+      component: component.name,
+      maxScore: Number(component.maxScore.toString()),
+      score: scoresForRegistration?.has(component.id)
+        ? Number(scoresForRegistration.get(component.id)!.toString())
+        : 0,
+    }));
+  }
+
+  private totalFromComponentScores(componentScore: StudentComponentScoreEntry[]): number {
+    return componentScore.reduce((sum, entry) => sum + entry.score, 0);
+  }
+
+  private classStatsForTotals(totals: number[]): {
+    studentAverage: number;
+    studentHighest: number;
+    studentLowest: number;
+  } {
+    if (totals.length === 0) {
+      return { studentAverage: 0, studentHighest: 0, studentLowest: 0 };
+    }
+    const sum = totals.reduce((acc, value) => acc + value, 0);
+    return {
+      studentAverage: roundScore(sum / totals.length),
+      studentHighest: Math.max(...totals),
+      studentLowest: Math.min(...totals),
+    };
   }
 
   private async resolveRegistrations(registrationIds: string[]) {
@@ -648,6 +720,141 @@ export class StudentAssessmentScoreService {
           totalScore,
         };
       }),
+    };
+  }
+
+  async getStudentAssessmentReport(params: {
+    studentId: string;
+    classId: string;
+    sessionId: string;
+    termId: string;
+  }): Promise<StudentAssessmentReportResult> {
+    const studentId = params.studentId.trim();
+    const classId = params.classId.trim();
+    const sessionId = params.sessionId.trim();
+    const termId = params.termId.trim();
+
+    if (!studentId || !classId || !sessionId || !termId) {
+      throw new Error("studentId, classId, sessionId, and termId are required");
+    }
+
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { id: true, admissionNumber: true, firstName: true, lastName: true },
+    });
+    if (!student) throw new Error("Invalid studentId");
+
+    const studentRegistrations = await this.prisma.studentSubjectRegistration.findMany({
+      where: { studentId, classId, sessionId, termId },
+      include: {
+        class: { select: { name: true } },
+        subclass: { select: { name: true } },
+        session: { select: { name: true } },
+        term: { select: { name: true } },
+        subject: { select: { id: true, name: true } },
+      },
+      orderBy: { subject: { name: "asc" } },
+    });
+    if (studentRegistrations.length === 0) {
+      throw new Error("Student has no subject registrations for the class, session, and term");
+    }
+
+    const { components } = await this.resolveTemplateAndComponents(classId, sessionId, termId);
+    const gradeItems = await this.resolveGradeItems(classId, sessionId, termId);
+    const componentIds = components.map((component) => component.id);
+
+    const classRegistrations = await this.prisma.studentSubjectRegistration.findMany({
+      where: { classId, sessionId, termId },
+      select: { id: true, studentId: true, subjectId: true },
+    });
+
+    const classRegistrationIds = classRegistrations.map((reg) => reg.id);
+    const scores =
+      classRegistrationIds.length > 0 && componentIds.length > 0
+        ? await this.prisma.studentAssessmentScore.findMany({
+            where: {
+              studentSubjectRegistrationId: { in: classRegistrationIds },
+              componentId: { in: componentIds },
+            },
+            select: {
+              studentSubjectRegistrationId: true,
+              componentId: true,
+              score: true,
+            },
+          })
+        : [];
+
+    const scoreByRegistrationAndComponent = new Map<string, Map<string, Prisma.Decimal>>();
+    for (const row of scores) {
+      let byComponent = scoreByRegistrationAndComponent.get(row.studentSubjectRegistrationId);
+      if (!byComponent) {
+        byComponent = new Map();
+        scoreByRegistrationAndComponent.set(row.studentSubjectRegistrationId, byComponent);
+      }
+      byComponent.set(row.componentId, row.score);
+    }
+
+    const registrationsBySubject = new Map<string, typeof classRegistrations>();
+    for (const reg of classRegistrations) {
+      const list = registrationsBySubject.get(reg.subjectId) ?? [];
+      list.push(reg);
+      registrationsBySubject.set(reg.subjectId, list);
+    }
+
+    const firstRegistration = studentRegistrations[0];
+    const subjects: StudentAssessmentReportSubject[] = studentRegistrations.map((registration) => {
+      const componentScore = this.buildComponentScores(
+        registration.id,
+        components,
+        scoreByRegistrationAndComponent
+      );
+      const totalScore = this.totalFromComponentScores(componentScore);
+      const { grade, remark } = this.resolveGradeForTotalScore(totalScore, gradeItems);
+
+      const subjectClassRegs = registrationsBySubject.get(registration.subjectId) ?? [];
+      const totalsByStudent = subjectClassRegs.map((reg) => {
+        const peerComponentScore = this.buildComponentScores(
+          reg.id,
+          components,
+          scoreByRegistrationAndComponent
+        );
+        return {
+          studentId: reg.studentId,
+          totalScore: this.totalFromComponentScores(peerComponentScore),
+        };
+      });
+      const position =
+        this.assignPositions(totalsByStudent).get(studentId) ?? 0;
+      const classStats = this.classStatsForTotals(totalsByStudent.map((entry) => entry.totalScore));
+
+      return {
+        subjectId: registration.subject.id,
+        subjectName: registration.subject.name,
+        componentScore,
+        totalScore,
+        grade,
+        remark,
+        position,
+        ...classStats,
+      };
+    });
+
+    const overallScore = subjects.reduce((sum, subject) => sum + subject.totalScore, 0);
+    const averageScore =
+      subjects.length > 0 ? roundScore(overallScore / subjects.length) : 0;
+
+    return {
+      admissionNumber: student.admissionNumber,
+      studentName: `${student.firstName} ${student.lastName}`,
+      consideredClass: firstRegistration.class.name,
+      ...(firstRegistration.subclass?.name
+        ? { consideredSubclass: firstRegistration.subclass.name }
+        : {}),
+      session: firstRegistration.session.name,
+      term: firstRegistration.term.name,
+      subjects,
+      overallScore,
+      averageScore,
     };
   }
 

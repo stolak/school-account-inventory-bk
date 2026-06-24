@@ -5,6 +5,7 @@ const router = Router();
 
 router.post("/bulk", studentAssessmentScoreController.createBulk);
 router.post("/", studentAssessmentScoreController.create);
+router.get("/student-report", studentAssessmentScoreController.studentAssessmentReport);
 router.get("/student-score-report", studentAssessmentScoreController.studentSubjectScoreReport);
 router.get("/student-scores", studentAssessmentScoreController.studentSubjectScores);
 router.get("/score-sheet", studentAssessmentScoreController.scoreSheet);
