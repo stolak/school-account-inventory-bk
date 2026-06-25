@@ -22,9 +22,15 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [behaviouralAssessmentComponentId, studentScores]
+ *             required: [behaviouralAssessmentComponentId, classId, sessionId, termId, studentScores]
  *             properties:
  *               behaviouralAssessmentComponentId:
+ *                 type: string
+ *               classId:
+ *                 type: string
+ *               sessionId:
+ *                 type: string
+ *               termId:
  *                 type: string
  *               studentScores:
  *                 type: array
@@ -36,6 +42,9 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                       type: string
  *                     score:
  *                       type: number
+ *                     subclassId:
+ *                       type: string
+ *                       description: Optional; defaults to the student's assigned sub-class
  *     responses:
  *       201:
  *         description: Student behavioural assessment scores saved
@@ -55,7 +64,14 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [studentId, behaviouralAssessmentComponentId, score]
+ *             required:
+ *               - studentId
+ *               - behaviouralAssessmentComponentId
+ *               - score
+ *               - classId
+ *               - subclassId
+ *               - sessionId
+ *               - termId
  *             properties:
  *               studentId:
  *                 type: string
@@ -63,6 +79,14 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                 type: string
  *               score:
  *                 type: number
+ *               classId:
+ *                 type: string
+ *               subclassId:
+ *                 type: string
+ *               sessionId:
+ *                 type: string
+ *               termId:
+ *                 type: string
  *     responses:
  *       201:
  *         description: Student behavioural assessment score created
@@ -90,6 +114,22 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         name: behaviourTemplateId
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: classId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: subclassId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sessionId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: termId
+ *         schema:
+ *           type: string
  *     responses:
  *       200:
  *         description: Student behavioural assessment scores list
@@ -99,7 +139,8 @@ function queryString(query: Request["query"], key: string): string | undefined {
 export const studentBehaviouralAssessmentScoreController = {
   createBulk: async (req: Request, res: Response) => {
     try {
-      const { behaviouralAssessmentComponentId, studentScores } = req.body ?? {};
+      const { behaviouralAssessmentComponentId, classId, sessionId, termId, studentScores } =
+        req.body ?? {};
 
       if (
         !behaviouralAssessmentComponentId ||
@@ -107,6 +148,15 @@ export const studentBehaviouralAssessmentScoreController = {
         !behaviouralAssessmentComponentId.trim()
       ) {
         return res.status(400).json({ success: false, message: "behaviouralAssessmentComponentId is required" });
+      }
+      if (!classId || typeof classId !== "string" || !classId.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId || typeof sessionId !== "string" || !sessionId.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId || typeof termId !== "string" || !termId.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
       }
       if (!Array.isArray(studentScores) || studentScores.length === 0) {
         return res.status(400).json({ success: false, message: "studentScores must be a non-empty array" });
@@ -117,9 +167,19 @@ export const studentBehaviouralAssessmentScoreController = {
         if (!entry || typeof entry !== "object") {
           return res.status(400).json({ success: false, message: `studentScores[${i}] must be an object` });
         }
-        const { studentId, score } = entry as { studentId?: unknown; score?: unknown };
+        const { studentId, score, subclassId } = entry as {
+          studentId?: unknown;
+          score?: unknown;
+          subclassId?: unknown;
+        };
         if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
           return res.status(400).json({ success: false, message: `studentScores[${i}].studentId is required` });
+        }
+        if (subclassId !== undefined && (typeof subclassId !== "string" || !subclassId.trim())) {
+          return res.status(400).json({
+            success: false,
+            message: `studentScores[${i}].subclassId must be a non-empty string`,
+          });
         }
         const parsedScore = parseBodyDecimal(score, "score");
         if (parsedScore === "missing") {
@@ -132,10 +192,16 @@ export const studentBehaviouralAssessmentScoreController = {
 
       const result = await studentBehaviouralAssessmentScoreService.createMany({
         behaviouralAssessmentComponentId: behaviouralAssessmentComponentId.trim(),
-        studentScores: studentScores.map((entry: { studentId: string; score: string | number }) => ({
-          studentId: entry.studentId.trim(),
-          score: entry.score,
-        })),
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+        studentScores: studentScores.map(
+          (entry: { studentId: string; score: string | number; subclassId?: string }) => ({
+            studentId: entry.studentId.trim(),
+            score: entry.score,
+            ...(entry.subclassId !== undefined ? { subclassId: entry.subclassId.trim() } : {}),
+          })
+        ),
       });
 
       return res.status(201).json({
@@ -150,7 +216,15 @@ export const studentBehaviouralAssessmentScoreController = {
 
   create: async (req: Request, res: Response) => {
     try {
-      const { studentId, behaviouralAssessmentComponentId, score } = req.body ?? {};
+      const {
+        studentId,
+        behaviouralAssessmentComponentId,
+        score,
+        classId,
+        subclassId,
+        sessionId,
+        termId,
+      } = req.body ?? {};
 
       if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
         return res.status(400).json({ success: false, message: "studentId is required" });
@@ -161,6 +235,18 @@ export const studentBehaviouralAssessmentScoreController = {
         !behaviouralAssessmentComponentId.trim()
       ) {
         return res.status(400).json({ success: false, message: "behaviouralAssessmentComponentId is required" });
+      }
+      if (!classId || typeof classId !== "string" || !classId.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!subclassId || typeof subclassId !== "string" || !subclassId.trim()) {
+        return res.status(400).json({ success: false, message: "subclassId is required" });
+      }
+      if (!sessionId || typeof sessionId !== "string" || !sessionId.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId || typeof termId !== "string" || !termId.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
       }
 
       const parsedScore = parseBodyDecimal(score, "score");
@@ -175,6 +261,10 @@ export const studentBehaviouralAssessmentScoreController = {
         studentId: studentId.trim(),
         behaviouralAssessmentComponentId: behaviouralAssessmentComponentId.trim(),
         score: parsedScore,
+        classId: classId.trim(),
+        subclassId: subclassId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
       });
 
       return res.status(201).json({
@@ -193,6 +283,10 @@ export const studentBehaviouralAssessmentScoreController = {
         studentId: queryString(req.query, "studentId"),
         behaviouralAssessmentComponentId: queryString(req.query, "behaviouralAssessmentComponentId"),
         behaviourTemplateId: queryString(req.query, "behaviourTemplateId"),
+        classId: queryString(req.query, "classId"),
+        subclassId: queryString(req.query, "subclassId"),
+        sessionId: queryString(req.query, "sessionId"),
+        termId: queryString(req.query, "termId"),
       });
 
       return res.json({
@@ -250,6 +344,14 @@ export const studentBehaviouralAssessmentScoreController = {
    *                 type: number
    *               behaviouralAssessmentComponentId:
    *                 type: string
+   *               classId:
+   *                 type: string
+   *               subclassId:
+   *                 type: string
+   *               sessionId:
+   *                 type: string
+   *               termId:
+   *                 type: string
    *     responses:
    *       200:
    *         description: Student behavioural assessment score updated
@@ -304,8 +406,22 @@ export const studentBehaviouralAssessmentScoreController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { score, behaviouralAssessmentComponentId } = req.body ?? {};
-      if (score === undefined && behaviouralAssessmentComponentId === undefined) {
+      const {
+        score,
+        behaviouralAssessmentComponentId,
+        classId,
+        subclassId,
+        sessionId,
+        termId,
+      } = req.body ?? {};
+      if (
+        score === undefined &&
+        behaviouralAssessmentComponentId === undefined &&
+        classId === undefined &&
+        subclassId === undefined &&
+        sessionId === undefined &&
+        termId === undefined
+      ) {
         return res.status(400).json({ success: false, message: "At least one field must be provided" });
       }
 
@@ -316,6 +432,18 @@ export const studentBehaviouralAssessmentScoreController = {
         return res
           .status(400)
           .json({ success: false, message: "behaviouralAssessmentComponentId must be a non-empty string" });
+      }
+      if (classId !== undefined && (typeof classId !== "string" || !classId.trim())) {
+        return res.status(400).json({ success: false, message: "classId must be a non-empty string" });
+      }
+      if (subclassId !== undefined && (typeof subclassId !== "string" || !subclassId.trim())) {
+        return res.status(400).json({ success: false, message: "subclassId must be a non-empty string" });
+      }
+      if (sessionId !== undefined && (typeof sessionId !== "string" || !sessionId.trim())) {
+        return res.status(400).json({ success: false, message: "sessionId must be a non-empty string" });
+      }
+      if (termId !== undefined && (typeof termId !== "string" || !termId.trim())) {
+        return res.status(400).json({ success: false, message: "termId must be a non-empty string" });
       }
 
       const parsedScore = parseBodyDecimal(score, "score");
@@ -328,6 +456,10 @@ export const studentBehaviouralAssessmentScoreController = {
         ...(behaviouralAssessmentComponentId !== undefined
           ? { behaviouralAssessmentComponentId: behaviouralAssessmentComponentId.trim() }
           : {}),
+        ...(classId !== undefined ? { classId: classId.trim() } : {}),
+        ...(subclassId !== undefined ? { subclassId: subclassId.trim() } : {}),
+        ...(sessionId !== undefined ? { sessionId: sessionId.trim() } : {}),
+        ...(termId !== undefined ? { termId: termId.trim() } : {}),
       });
 
       return res.json({

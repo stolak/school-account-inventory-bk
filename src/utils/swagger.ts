@@ -133,7 +133,7 @@ const options: swaggerJSDoc.Options = {
       {
         name: "ClassAssessmentTemplates",
         description:
-          "Assessment and grading template assignments per class, session, and term (CRUD)",
+          "Assessment, grading, and behavioural template assignments per class, session, and term (CRUD)",
       },
       { name: "Subjects", description: "Academic subjects master data (CRUD)" },
       {
@@ -174,7 +174,8 @@ const options: swaggerJSDoc.Options = {
       },
       {
         name: "StudentBehaviouralAssessmentScores",
-        description: "Student scores per behavioural assessment component (CRUD and bulk upsert)",
+        description:
+          "Student behavioural scores per component, class, session, and term (CRUD and bulk upsert)",
       },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },

@@ -35,6 +35,12 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *               gradeTemplateId:
  *                 type: string
  *                 nullable: true
+ *               behaviouralTemplateId:
+ *                 type: string
+ *                 nullable: true
+ *               behaviouralGradingTemplateId:
+ *                 type: string
+ *                 nullable: true
  *     responses:
  *       201:
  *         description: Class assessment template created
@@ -70,6 +76,14 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         name: gradeTemplateId
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: behaviouralTemplateId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: behaviouralGradingTemplateId
+ *         schema:
+ *           type: string
  *     responses:
  *       200:
  *         description: Class assessment templates list
@@ -79,7 +93,8 @@ function queryString(query: Request["query"], key: string): string | undefined {
 export const classAssessmentTemplateController = {
   create: async (req: Request, res: Response) => {
     try {
-      const { classId, templateId, sessionId, termId, gradeTemplateId } = req.body ?? {};
+      const { classId, templateId, sessionId, termId, gradeTemplateId, behaviouralTemplateId, behaviouralGradingTemplateId } =
+        req.body ?? {};
 
       if (!classId || typeof classId !== "string" || !classId.trim()) {
         return res.status(400).json({ success: false, message: "classId is required" });
@@ -96,6 +111,16 @@ export const classAssessmentTemplateController = {
       if (!isStringOrNullOrUndefined(gradeTemplateId)) {
         return res.status(400).json({ success: false, message: "gradeTemplateId must be a string or null" });
       }
+      if (!isStringOrNullOrUndefined(behaviouralTemplateId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "behaviouralTemplateId must be a string or null" });
+      }
+      if (!isStringOrNullOrUndefined(behaviouralGradingTemplateId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "behaviouralGradingTemplateId must be a string or null" });
+      }
 
       const created = await classAssessmentTemplateService.create({
         classId: classId.trim(),
@@ -103,6 +128,12 @@ export const classAssessmentTemplateController = {
         sessionId: sessionId.trim(),
         termId: termId.trim(),
         ...(gradeTemplateId !== undefined ? { gradeTemplateId: gradeTemplateId?.trim() || null } : {}),
+        ...(behaviouralTemplateId !== undefined
+          ? { behaviouralTemplateId: behaviouralTemplateId?.trim() || null }
+          : {}),
+        ...(behaviouralGradingTemplateId !== undefined
+          ? { behaviouralGradingTemplateId: behaviouralGradingTemplateId?.trim() || null }
+          : {}),
       });
 
       return res.status(201).json({
@@ -123,6 +154,8 @@ export const classAssessmentTemplateController = {
         sessionId: queryString(req.query, "sessionId"),
         termId: queryString(req.query, "termId"),
         gradeTemplateId: queryString(req.query, "gradeTemplateId"),
+        behaviouralTemplateId: queryString(req.query, "behaviouralTemplateId"),
+        behaviouralGradingTemplateId: queryString(req.query, "behaviouralGradingTemplateId"),
       });
 
       return res.json({
@@ -178,12 +211,18 @@ export const classAssessmentTemplateController = {
    *             properties:
    *               templateId:
    *                 type: string
-   *               gradeTemplateId:
-   *                 type: string
-   *                 nullable: true
-   *     responses:
-   *       200:
-   *         description: Class assessment template updated
+ *               gradeTemplateId:
+ *                 type: string
+ *                 nullable: true
+ *               behaviouralTemplateId:
+ *                 type: string
+ *                 nullable: true
+ *               behaviouralGradingTemplateId:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       200:
+ *         description: Class assessment template updated
    *       400:
    *         description: Validation error
    *       404:
@@ -237,11 +276,18 @@ export const classAssessmentTemplateController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { templateId, gradeTemplateId } = req.body ?? {};
-      if (templateId === undefined && gradeTemplateId === undefined) {
+      const { templateId, gradeTemplateId, behaviouralTemplateId, behaviouralGradingTemplateId } =
+        req.body ?? {};
+      if (
+        templateId === undefined &&
+        gradeTemplateId === undefined &&
+        behaviouralTemplateId === undefined &&
+        behaviouralGradingTemplateId === undefined
+      ) {
         return res.status(400).json({
           success: false,
-          message: "At least one of templateId or gradeTemplateId must be provided",
+          message:
+            "At least one of templateId, gradeTemplateId, behaviouralTemplateId, or behaviouralGradingTemplateId must be provided",
         });
       }
       if (templateId !== undefined && (typeof templateId !== "string" || !templateId.trim())) {
@@ -250,10 +296,26 @@ export const classAssessmentTemplateController = {
       if (!isStringOrNullOrUndefined(gradeTemplateId)) {
         return res.status(400).json({ success: false, message: "gradeTemplateId must be a string or null" });
       }
+      if (!isStringOrNullOrUndefined(behaviouralTemplateId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "behaviouralTemplateId must be a string or null" });
+      }
+      if (!isStringOrNullOrUndefined(behaviouralGradingTemplateId)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "behaviouralGradingTemplateId must be a string or null" });
+      }
 
       const updated = await classAssessmentTemplateService.update(id, {
         ...(templateId !== undefined ? { templateId: templateId.trim() } : {}),
         ...(gradeTemplateId !== undefined ? { gradeTemplateId: gradeTemplateId?.trim() || null } : {}),
+        ...(behaviouralTemplateId !== undefined
+          ? { behaviouralTemplateId: behaviouralTemplateId?.trim() || null }
+          : {}),
+        ...(behaviouralGradingTemplateId !== undefined
+          ? { behaviouralGradingTemplateId: behaviouralGradingTemplateId?.trim() || null }
+          : {}),
       });
 
       return res.json({
