@@ -52,6 +52,45 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         description: Validation error
  *       500:
  *         description: Server error
+ * /api/v1/student-behavioural-assessment-scores/bulk/student:
+ *   post:
+ *     summary: Bulk upsert behavioural assessment scores for one student
+ *     tags: [StudentBehaviouralAssessmentScores]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [studentId, classId, sessionId, termId, behaviouralScores]
+ *             properties:
+ *               studentId:
+ *                 type: string
+ *               classId:
+ *                 type: string
+ *               sessionId:
+ *                 type: string
+ *               termId:
+ *                 type: string
+ *               behaviouralScores:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   required: [behaviouralAssessmentComponentId, score]
+ *                   properties:
+ *                     behaviouralAssessmentComponentId:
+ *                       type: string
+ *                     score:
+ *                       type: number
+ *     responses:
+ *       201:
+ *         description: Student behavioural assessment scores saved
+ *       400:
+ *         description: Validation error (including duplicate component IDs)
+ *       500:
+ *         description: Server error
  * /api/v1/student-behavioural-assessment-scores:
  *   post:
  *     summary: Create a student behavioural assessment score
@@ -137,6 +176,90 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         description: Server error
  */
 export const studentBehaviouralAssessmentScoreController = {
+  upsertBulkForStudent: async (req: Request, res: Response) => {
+    try {
+      const { studentId, classId, sessionId, termId, behaviouralScores } = req.body ?? {};
+
+      if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+      if (!classId || typeof classId !== "string" || !classId.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId || typeof sessionId !== "string" || !sessionId.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId || typeof termId !== "string" || !termId.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+      if (!Array.isArray(behaviouralScores) || behaviouralScores.length === 0) {
+        return res.status(400).json({ success: false, message: "behaviouralScores must be a non-empty array" });
+      }
+
+      for (let i = 0; i < behaviouralScores.length; i++) {
+        const entry = behaviouralScores[i];
+        if (!entry || typeof entry !== "object") {
+          return res.status(400).json({ success: false, message: `behaviouralScores[${i}] must be an object` });
+        }
+        const { behaviouralAssessmentComponentId, score } = entry as {
+          behaviouralAssessmentComponentId?: unknown;
+          score?: unknown;
+        };
+        if (
+          !behaviouralAssessmentComponentId ||
+          typeof behaviouralAssessmentComponentId !== "string" ||
+          !behaviouralAssessmentComponentId.trim()
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: `behaviouralScores[${i}].behaviouralAssessmentComponentId is required`,
+          });
+        }
+        const parsedScore = parseBodyDecimal(score, "score");
+        if (parsedScore === "missing") {
+          return res.status(400).json({ success: false, message: `behaviouralScores[${i}].score is required` });
+        }
+        if (parsedScore === "invalid") {
+          return res.status(400).json({ success: false, message: `behaviouralScores[${i}].score must be a number` });
+        }
+      }
+
+      const componentIds = behaviouralScores.map(
+        (entry: { behaviouralAssessmentComponentId: string }) => entry.behaviouralAssessmentComponentId.trim()
+      );
+      const duplicateComponentIds = [
+        ...new Set(componentIds.filter((id: string, index: number) => componentIds.indexOf(id) !== index)),
+      ];
+      if (duplicateComponentIds.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Duplicate behaviouralAssessmentComponentId in request",
+        });
+      }
+
+      const result = await studentBehaviouralAssessmentScoreService.upsertBulkForStudent({
+        studentId: studentId.trim(),
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+        behaviouralScores: behaviouralScores.map(
+          (entry: { behaviouralAssessmentComponentId: string; score: string | number }) => ({
+            behaviouralAssessmentComponentId: entry.behaviouralAssessmentComponentId.trim(),
+            score: entry.score,
+          })
+        ),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Student behavioural assessment scores saved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to save student behavioural assessment scores");
+    }
+  },
+
   createBulk: async (req: Request, res: Response) => {
     try {
       const { behaviouralAssessmentComponentId, classId, sessionId, termId, studentScores } =

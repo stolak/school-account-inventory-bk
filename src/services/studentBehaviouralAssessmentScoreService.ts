@@ -354,6 +354,138 @@ export class StudentBehaviouralAssessmentScoreService {
     return { studentBehaviouralAssessmentScores: rows.map(mapRow), count: rows.length };
   }
 
+  async upsertBulkForStudent(input: {
+    studentId: string;
+    classId: string;
+    sessionId: string;
+    termId: string;
+    behaviouralScores: { behaviouralAssessmentComponentId: string; score: string | number }[];
+  }): Promise<{ studentBehaviouralAssessmentScores: StudentBehaviouralAssessmentScoreData[]; count: number }> {
+    const studentId = input.studentId.trim();
+    const classId = input.classId.trim();
+    const sessionId = input.sessionId.trim();
+    const termId = input.termId.trim();
+    if (!studentId) throw new Error("studentId is required");
+    if (!classId || !sessionId || !termId) {
+      throw new Error("classId, sessionId, and termId are required");
+    }
+    if (!Array.isArray(input.behaviouralScores) || input.behaviouralScores.length === 0) {
+      throw new Error("behaviouralScores must be a non-empty array");
+    }
+
+    const behaviouralScores = input.behaviouralScores.map((entry, index) => {
+      if (!entry || typeof entry !== "object") {
+        throw new Error(`behaviouralScores[${index}] must be an object`);
+      }
+      const behaviouralAssessmentComponentId = entry.behaviouralAssessmentComponentId;
+      if (
+        typeof behaviouralAssessmentComponentId !== "string" ||
+        !behaviouralAssessmentComponentId.trim()
+      ) {
+        throw new Error(
+          `behaviouralScores[${index}].behaviouralAssessmentComponentId must be a non-empty string`
+        );
+      }
+      return {
+        behaviouralAssessmentComponentId: behaviouralAssessmentComponentId.trim(),
+        score: parseDecimalNonNegative(entry.score, `behaviouralScores[${index}].score`),
+      };
+    });
+
+    const componentIds = behaviouralScores.map((entry) => entry.behaviouralAssessmentComponentId);
+    const duplicateComponentIds = [
+      ...new Set(componentIds.filter((id, index) => componentIds.indexOf(id) !== index)),
+    ];
+    if (duplicateComponentIds.length > 0) {
+      throw new Error("Duplicate behaviouralAssessmentComponentId in request");
+    }
+
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { id: true, classId: true, subClassId: true },
+    });
+    if (!student) throw new Error("Invalid studentId");
+    if (student.classId !== classId) {
+      throw new Error("studentId does not belong to the specified classId");
+    }
+    if (!student.subClassId) {
+      throw new Error("student has no sub-class assigned; cannot record behavioural scores");
+    }
+
+    await this.assertContext({
+      classId,
+      subclassId: student.subClassId,
+      sessionId,
+      termId,
+    });
+
+    const components = await this.prisma.behaviouralAssessmentComponent.findMany({
+      where: { id: { in: componentIds } },
+      select: {
+        id: true,
+        name: true,
+        maxScore: true,
+        behaviourTemplate: { select: { isLocked: true } },
+      },
+    });
+    if (components.length !== componentIds.length) {
+      throw new Error("Invalid behaviouralAssessmentComponentId");
+    }
+
+    const componentById = new Map(components.map((component) => [component.id, component]));
+    for (const entry of behaviouralScores) {
+      const component = componentById.get(entry.behaviouralAssessmentComponentId)!;
+      if (component.behaviourTemplate.isLocked) {
+        throw new Error("Cannot record score: behavioural assessment template is locked");
+      }
+      if (entry.score.gt(component.maxScore)) {
+        throw new Error(
+          `score for ${component.name} cannot exceed component maxScore (${component.maxScore.toString()})`
+        );
+      }
+    }
+
+    const existing = await this.prisma.studentBehaviouralAssessmentScore.findMany({
+      where: {
+        studentId,
+        classId,
+        sessionId,
+        termId,
+        behaviouralAssessmentComponentId: { in: componentIds },
+      },
+      select: { id: true, behaviouralAssessmentComponentId: true },
+    });
+    const existingByComponent = new Map(
+      existing.map((row) => [row.behaviouralAssessmentComponentId, row.id])
+    );
+
+    const rows = await this.prisma.$transaction(
+      behaviouralScores.map((entry) => {
+        const existingId = existingByComponent.get(entry.behaviouralAssessmentComponentId);
+        if (existingId) {
+          return this.prisma.studentBehaviouralAssessmentScore.update({
+            where: { id: existingId },
+            data: { score: entry.score },
+            include,
+          });
+        }
+        return this.prisma.studentBehaviouralAssessmentScore.create({
+          data: {
+            studentId,
+            behaviouralAssessmentComponentId: entry.behaviouralAssessmentComponentId,
+            classId,
+            subclassId: student.subClassId!,
+            sessionId,
+            termId,
+            score: entry.score,
+          },
+          include,
+        });
+      })
+    );
+    return { studentBehaviouralAssessmentScores: rows.map(mapRow), count: rows.length };
+  }
+
   async list(params: {
     studentId?: string;
     behaviouralAssessmentComponentId?: string;
