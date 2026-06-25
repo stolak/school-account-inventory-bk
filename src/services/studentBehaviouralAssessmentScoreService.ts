@@ -41,6 +41,29 @@ export interface StudentBehaviouralAssessmentScoreData {
   score: string;
 }
 
+export interface StudentBehaviouralScoreComponentEntry {
+  score: string;
+  behaviouralAssessmentComponent: {
+    id: string;
+    name: string;
+    maxScore: string;
+    orderNo: number;
+  };
+}
+
+export interface StudentBehaviouralScoresResult {
+  studentId: string;
+  student: Row["student"];
+  score: StudentBehaviouralScoreComponentEntry[];
+  classId: string;
+  class: { id: string; name: string };
+  sessionId: string;
+  session: { id: string; name: string };
+  termId: string;
+  term: { id: string; name: string };
+  behaviouralTemplate: { id: string; name: string };
+}
+
 function mapRow(row: Row): StudentBehaviouralAssessmentScoreData {
   return {
     id: row.id,
@@ -484,6 +507,138 @@ export class StudentBehaviouralAssessmentScoreService {
       })
     );
     return { studentBehaviouralAssessmentScores: rows.map(mapRow), count: rows.length };
+  }
+
+  private async resolveBehaviouralComponents(classId: string, sessionId: string, termId: string) {
+    const assignment = await this.prisma.classAssessmentTemplate.findFirst({
+      where: {
+        classId,
+        sessionId,
+        termId,
+        behaviouralTemplateId: { not: null },
+      },
+      select: {
+        behaviouralTemplate: {
+          select: {
+            id: true,
+            name: true,
+            behaviouralAssessmentComponents: {
+              where: { status: "Active" },
+              select: { id: true, name: true, maxScore: true, orderNo: true },
+              orderBy: { orderNo: "asc" },
+            },
+          },
+        },
+      },
+    });
+    if (!assignment?.behaviouralTemplate) {
+      throw new Error(
+        "No behavioural assessment template assigned to this class for the session and term"
+      );
+    }
+    return {
+      template: {
+        id: assignment.behaviouralTemplate.id,
+        name: assignment.behaviouralTemplate.name,
+      },
+      components: assignment.behaviouralTemplate.behaviouralAssessmentComponents,
+    };
+  }
+
+  async getStudentBehaviouralScores(params: {
+    studentId: string;
+    classId: string;
+    sessionId: string;
+    termId: string;
+  }): Promise<StudentBehaviouralScoresResult> {
+    const studentId = params.studentId.trim();
+    const classId = params.classId.trim();
+    const sessionId = params.sessionId.trim();
+    const termId = params.termId.trim();
+    if (!studentId || !classId || !sessionId || !termId) {
+      throw new Error("studentId, classId, sessionId, and termId are required");
+    }
+
+    const [student, cls, session, term, { template, components }] = await Promise.all([
+      this.prisma.student.findUnique({
+        where: { id: studentId },
+        select: {
+          id: true,
+          admissionNumber: true,
+          firstName: true,
+          lastName: true,
+          status: true,
+          classId: true,
+        },
+      }),
+      this.prisma.schoolClass.findUnique({
+        where: { id: classId },
+        select: { id: true, name: true },
+      }),
+      this.prisma.session.findUnique({
+        where: { id: sessionId },
+        select: { id: true, name: true },
+      }),
+      this.prisma.term.findUnique({
+        where: { id: termId },
+        select: { id: true, name: true },
+      }),
+      this.resolveBehaviouralComponents(classId, sessionId, termId),
+    ]);
+
+    if (!student) throw new Error("Invalid studentId");
+    if (student.classId !== classId) {
+      throw new Error("studentId does not belong to the specified classId");
+    }
+    if (!cls) throw new Error("Invalid classId");
+    if (!session) throw new Error("Invalid sessionId");
+    if (!term) throw new Error("Invalid termId");
+
+    const componentIds = components.map((component) => component.id);
+    const existingScores =
+      componentIds.length > 0
+        ? await this.prisma.studentBehaviouralAssessmentScore.findMany({
+            where: {
+              studentId,
+              classId,
+              sessionId,
+              termId,
+              behaviouralAssessmentComponentId: { in: componentIds },
+            },
+            select: { behaviouralAssessmentComponentId: true, score: true },
+          })
+        : [];
+
+    const scoreByComponentId = new Map(
+      existingScores.map((row) => [row.behaviouralAssessmentComponentId, row.score.toString()])
+    );
+
+    return {
+      studentId: student.id,
+      student: {
+        id: student.id,
+        admissionNumber: student.admissionNumber,
+        firstName: student.firstName,
+        lastName: student.lastName,
+        status: student.status,
+      },
+      score: components.map((component) => ({
+        score: scoreByComponentId.get(component.id) ?? "0",
+        behaviouralAssessmentComponent: {
+          id: component.id,
+          name: component.name,
+          maxScore: component.maxScore.toString(),
+          orderNo: component.orderNo,
+        },
+      })),
+      classId: cls.id,
+      class: { id: cls.id, name: cls.name },
+      sessionId: session.id,
+      session: { id: session.id, name: session.name },
+      termId: term.id,
+      term: { id: term.id, name: term.name },
+      behaviouralTemplate: template,
+    };
   }
 
   async list(params: {

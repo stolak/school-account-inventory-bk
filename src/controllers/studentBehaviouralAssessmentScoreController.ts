@@ -91,6 +91,45 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         description: Validation error (including duplicate component IDs)
  *       500:
  *         description: Server error
+ * /api/v1/student-behavioural-assessment-scores/student-scores:
+ *   get:
+ *     summary: Get behavioural scores for one student across all template components
+ *     description: >
+ *       Resolves components from the class behavioural template assignment.
+ *       Returns score 0 for components with no recorded score yet.
+ *     tags: [StudentBehaviouralAssessmentScores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: classId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: termId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Student behavioural scores with component details; missing scores return 0
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Student or template assignment not found
+ *       500:
+ *         description: Server error
  * /api/v1/student-behavioural-assessment-scores:
  *   post:
  *     summary: Create a student behavioural assessment score
@@ -397,6 +436,43 @@ export const studentBehaviouralAssessmentScoreController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to create student behavioural assessment score");
+    }
+  },
+
+  studentScores: async (req: Request, res: Response) => {
+    try {
+      const studentId = queryString(req.query, "studentId");
+      const classId = queryString(req.query, "classId");
+      const sessionId = queryString(req.query, "sessionId");
+      const termId = queryString(req.query, "termId");
+
+      if (!studentId) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+      if (!classId) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+
+      const result = await studentBehaviouralAssessmentScoreService.getStudentBehaviouralScores({
+        studentId,
+        classId,
+        sessionId,
+        termId,
+      });
+
+      return res.json({
+        success: true,
+        message: "Student behavioural assessment scores retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve student behavioural assessment scores");
     }
   },
 
