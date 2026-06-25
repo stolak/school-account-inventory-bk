@@ -95,8 +95,9 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *   get:
  *     summary: Get behavioural scores for one student across all template components
  *     description: >
- *       Resolves components from the class behavioural template assignment.
- *       Returns score 0 for components with no recorded score yet.
+ *       Resolves components from the class behavioural template assignment and grades each score
+ *       using the class behavioural grading template. Returns score 0 for components with no
+ *       recorded score yet (grade NA when no grading template or score is out of range).
  *     tags: [StudentBehaviouralAssessmentScores]
  *     security:
  *       - bearerAuth: []

@@ -43,6 +43,11 @@ export interface StudentBehaviouralAssessmentScoreData {
 
 export interface StudentBehaviouralScoreComponentEntry {
   score: string;
+  scoreGrade: {
+    grade: string;
+    remark: string;
+    gradePoint: string;
+  };
   behaviouralAssessmentComponent: {
     id: string;
     name: string;
@@ -62,7 +67,16 @@ export interface StudentBehaviouralScoresResult {
   termId: string;
   term: { id: string; name: string };
   behaviouralTemplate: { id: string; name: string };
+  behaviouralGradingTemplate: { id: string; name: string } | null;
 }
+
+type BehaviouralGradeBand = {
+  grade: string;
+  lowBoundary: Prisma.Decimal;
+  highBoundary: Prisma.Decimal;
+  remark: string | null;
+  gradePoint: Prisma.Decimal;
+};
 
 function mapRow(row: Row): StudentBehaviouralAssessmentScoreData {
   return {
@@ -92,6 +106,29 @@ type ScoreContext = {
 
 export class StudentBehaviouralAssessmentScoreService {
   private prisma = prisma;
+
+  private resolveScoreGrade(
+    scoreValue: string,
+    items: BehaviouralGradeBand[]
+  ): { grade: string; remark: string; gradePoint: string } {
+    if (items.length === 0) {
+      return { grade: "NA", remark: "NA", gradePoint: "NA" };
+    }
+
+    const score = new Prisma.Decimal(scoreValue);
+    const match = items.find(
+      (item) => !score.lessThan(item.lowBoundary) && !score.greaterThan(item.highBoundary)
+    );
+    if (!match) {
+      return { grade: "NA", remark: "NA", gradePoint: "NA" };
+    }
+
+    return {
+      grade: match.grade,
+      remark: match.remark ?? "NA",
+      gradePoint: match.gradePoint.toString(),
+    };
+  }
 
   private async assertContext(input: ScoreContext): Promise<void> {
     const [cls, subclass, session, term] = await Promise.all([
@@ -509,7 +546,7 @@ export class StudentBehaviouralAssessmentScoreService {
     return { studentBehaviouralAssessmentScores: rows.map(mapRow), count: rows.length };
   }
 
-  private async resolveBehaviouralComponents(classId: string, sessionId: string, termId: string) {
+  private async resolveBehaviouralAssignment(classId: string, sessionId: string, termId: string) {
     const assignment = await this.prisma.classAssessmentTemplate.findFirst({
       where: {
         classId,
@@ -529,6 +566,22 @@ export class StudentBehaviouralAssessmentScoreService {
             },
           },
         },
+        behaviouralGradingTemplate: {
+          select: {
+            id: true,
+            name: true,
+            gradingItems: {
+              select: {
+                grade: true,
+                lowBoundary: true,
+                highBoundary: true,
+                remark: true,
+                gradePoint: true,
+              },
+              orderBy: { lowBoundary: "desc" },
+            },
+          },
+        },
       },
     });
     if (!assignment?.behaviouralTemplate) {
@@ -542,6 +595,13 @@ export class StudentBehaviouralAssessmentScoreService {
         name: assignment.behaviouralTemplate.name,
       },
       components: assignment.behaviouralTemplate.behaviouralAssessmentComponents,
+      gradeTemplate: assignment.behaviouralGradingTemplate
+        ? {
+            id: assignment.behaviouralGradingTemplate.id,
+            name: assignment.behaviouralGradingTemplate.name,
+          }
+        : null,
+      gradingItems: assignment.behaviouralGradingTemplate?.gradingItems ?? [],
     };
   }
 
@@ -559,7 +619,7 @@ export class StudentBehaviouralAssessmentScoreService {
       throw new Error("studentId, classId, sessionId, and termId are required");
     }
 
-    const [student, cls, session, term, { template, components }] = await Promise.all([
+    const [student, cls, session, term, assignment] = await Promise.all([
       this.prisma.student.findUnique({
         where: { id: studentId },
         select: {
@@ -583,8 +643,10 @@ export class StudentBehaviouralAssessmentScoreService {
         where: { id: termId },
         select: { id: true, name: true },
       }),
-      this.resolveBehaviouralComponents(classId, sessionId, termId),
+      this.resolveBehaviouralAssignment(classId, sessionId, termId),
     ]);
+
+    const { template, components, gradeTemplate, gradingItems } = assignment;
 
     if (!student) throw new Error("Invalid studentId");
     if (student.classId !== classId) {
@@ -622,15 +684,19 @@ export class StudentBehaviouralAssessmentScoreService {
         lastName: student.lastName,
         status: student.status,
       },
-      score: components.map((component) => ({
-        score: scoreByComponentId.get(component.id) ?? "0",
-        behaviouralAssessmentComponent: {
-          id: component.id,
-          name: component.name,
-          maxScore: component.maxScore.toString(),
-          orderNo: component.orderNo,
-        },
-      })),
+      score: components.map((component) => {
+        const scoreValue = scoreByComponentId.get(component.id) ?? "0";
+        return {
+          score: scoreValue,
+          scoreGrade: this.resolveScoreGrade(scoreValue, gradingItems),
+          behaviouralAssessmentComponent: {
+            id: component.id,
+            name: component.name,
+            maxScore: component.maxScore.toString(),
+            orderNo: component.orderNo,
+          },
+        };
+      }),
       classId: cls.id,
       class: { id: cls.id, name: cls.name },
       sessionId: session.id,
@@ -638,6 +704,7 @@ export class StudentBehaviouralAssessmentScoreService {
       termId: term.id,
       term: { id: term.id, name: term.name },
       behaviouralTemplate: template,
+      behaviouralGradingTemplate: gradeTemplate,
     };
   }
 
