@@ -11,7 +11,8 @@ export function httpStatusFromAssessmentMessage(message: string): number {
     m.includes("cannot add") ||
     m.includes("locked") ||
     m.includes("referenced") ||
-    m.includes("existing")
+    m.includes("existing") ||
+    m.includes("overlap")
   ) {
     return 409;
   }

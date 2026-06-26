@@ -4053,6 +4053,8 @@ async function main() {
     // Reset assessment/grading tables for idempotent reseed (dev seed data only)
     await prisma.studentAssessmentScore.deleteMany({});
     await prisma.studentBehaviouralAssessmentScore.deleteMany({});
+    await prisma.assessmentRemarks.deleteMany({});
+    await prisma.defaultClassRemarkSetup.deleteMany({});
     await prisma.studentSubjectRegistration.deleteMany({});
     await prisma.classSubject.deleteMany({});
     await prisma.classAssessmentTemplate.deleteMany({});
@@ -4863,6 +4865,125 @@ async function main() {
       `   ✓ ${behaviouralGradingTemplates.length} behavioural grading template, ${behaviouralGradingItems.length} behavioural grade bands`
     );
     console.log(`   ✓ ${studentBehaviouralAssessmentScores.length} student behavioural assessment scores`);
+
+    const defaultClassRemarkSetups = [
+      {
+        id: "f3a4b5c6-d7e8-4901-a234-567890ab0063",
+        classId: classIds.jss1,
+        teacherRemark: "An excellent term. Maintain your outstanding work ethic and leadership.",
+        parentRemark: "We are proud of your consistent high performance.",
+        principalRemark: "Exemplary student. Keep setting the standard for others.",
+        headTeacherRemark: null,
+        classTeacherRemark: "Top performer in class. A role model to peers.",
+        otherRemark: null,
+        lowerBoundary: 75,
+        upperBoundary: 100,
+      },
+      {
+        id: "a4b5c6d7-e8f9-4012-b345-678901ab0064",
+        classId: classIds.jss1,
+        teacherRemark: "Very good performance. With more focus you can reach the top band.",
+        parentRemark: "Good progress this term. Encourage steady revision habits.",
+        principalRemark: null,
+        headTeacherRemark: null,
+        classTeacherRemark: "Reliable and attentive in class.",
+        otherRemark: null,
+        lowerBoundary: 65,
+        upperBoundary: 74.99,
+      },
+      {
+        id: "b5c6d7e8-f9a0-4123-c456-789012ab0065",
+        classId: classIds.jss1,
+        teacherRemark: "Good effort overall. Improve consistency in assignments and tests.",
+        parentRemark: "Please support daily study at home.",
+        principalRemark: null,
+        headTeacherRemark: null,
+        classTeacherRemark: null,
+        otherRemark: null,
+        lowerBoundary: 50,
+        upperBoundary: 64.99,
+      },
+      {
+        id: "c6d7e8f9-a0b1-4234-d567-890123ab0066",
+        classId: classIds.jss1,
+        teacherRemark: "Fair performance. More effort is required in core subjects.",
+        parentRemark: "Monitor homework completion and class attendance.",
+        principalRemark: null,
+        headTeacherRemark: null,
+        classTeacherRemark: null,
+        otherRemark: null,
+        lowerBoundary: 40,
+        upperBoundary: 49.99,
+      },
+      {
+        id: "d7e8f9a0-b1c2-4345-e678-901234ab0067",
+        classId: classIds.jss1,
+        teacherRemark: "Needs significant improvement. Extra coaching and practice are advised.",
+        parentRemark: "Urgent attention needed. Please meet with the class teacher.",
+        principalRemark: "Parent conference recommended.",
+        headTeacherRemark: null,
+        classTeacherRemark: null,
+        otherRemark: null,
+        lowerBoundary: 0,
+        upperBoundary: 39.99,
+      },
+      {
+        id: "e8f9a0b1-c2d3-4456-f789-012345ab0068",
+        classId: classIds.jss2,
+        teacherRemark: "Excellent overall average. Continue your disciplined approach to learning.",
+        parentRemark: null,
+        principalRemark: "Commendable performance across subjects.",
+        headTeacherRemark: null,
+        classTeacherRemark: "Shows maturity and initiative.",
+        otherRemark: null,
+        lowerBoundary: 70,
+        upperBoundary: 100,
+      },
+      {
+        id: "f9a0b1c2-d3e4-4567-a890-123456ab0069",
+        classId: classIds.jss2,
+        teacherRemark: "Good average score. Strengthen weak subjects to move higher.",
+        parentRemark: "Encourage regular revision, especially in mathematics and English.",
+        principalRemark: null,
+        headTeacherRemark: null,
+        classTeacherRemark: null,
+        otherRemark: null,
+        lowerBoundary: 50,
+        upperBoundary: 69.99,
+      },
+      {
+        id: "a0b1c2d3-e4f5-4678-b901-234567ab0070",
+        classId: classIds.jss2,
+        teacherRemark: "Below expected average. Immediate improvement plan required.",
+        parentRemark: "Please schedule a meeting with the school.",
+        principalRemark: null,
+        headTeacherRemark: null,
+        classTeacherRemark: null,
+        otherRemark: null,
+        lowerBoundary: 0,
+        upperBoundary: 49.99,
+      },
+    ];
+
+    for (const row of defaultClassRemarkSetups) {
+      await prisma.defaultClassRemarkSetup.upsert({
+        where: { id: row.id },
+        update: {
+          classId: row.classId,
+          teacherRemark: row.teacherRemark,
+          parentRemark: row.parentRemark,
+          principalRemark: row.principalRemark,
+          headTeacherRemark: row.headTeacherRemark,
+          classTeacherRemark: row.classTeacherRemark,
+          otherRemark: row.otherRemark,
+          lowerBoundary: row.lowerBoundary,
+          upperBoundary: row.upperBoundary,
+        },
+        create: row,
+      });
+    }
+
+    console.log(`   ✓ ${defaultClassRemarkSetups.length} default class remark setups`);
 
     // Class default billings (amounts per class for current session / term)
     console.log("📋 Seeding class default billings...");

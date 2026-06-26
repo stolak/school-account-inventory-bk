@@ -177,6 +177,15 @@ const options: swaggerJSDoc.Options = {
         description:
           "Student behavioural scores per component, class, session, and term (CRUD and bulk upsert)",
       },
+      {
+        name: "AssessmentRemarks",
+        description: "Per-student assessment remarks by class, session, and term (CRUD)",
+      },
+      {
+        name: "DefaultClassRemarkSetups",
+        description:
+          "Default remark templates per class by overall average score range (CRUD; non-overlapping boundaries)",
+      },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
       { name: "Sales", description: "Inventory sales transactions (bulk create, list, grouped by reference)" },

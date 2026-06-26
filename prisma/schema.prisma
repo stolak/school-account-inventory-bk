@@ -401,6 +401,8 @@ model SchoolClass {
   studentSubjectRegistrations        StudentSubjectRegistration[]
   studentAssessmentScores            StudentAssessmentScore[]
   studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
+  assessmentRemarks                  AssessmentRemarks[]
+  defaultClassRemarkSetups           DefaultClassRemarkSetup[]
 
   @@index([createdById])
   @@map("school_classes")
@@ -484,6 +486,7 @@ model Student {
   studentSubjectRegistrations        StudentSubjectRegistration[]
   studentAssessmentScores            StudentAssessmentScore[]
   studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
+  assessmentRemarks                  AssessmentRemarks[]
 
   @@index([classId])
   @@index([createdById])
@@ -505,6 +508,7 @@ model Term {
   studentAssessmentScores            StudentAssessmentScore[]
   classSubjects                      ClassSubject[]
   studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
+  assessmentRemarks                  AssessmentRemarks[]
 
   @@unique([name])
   @@map("terms")
@@ -523,6 +527,7 @@ model Session {
   studentSubjectRegistrations        StudentSubjectRegistration[]
   studentAssessmentScores            StudentAssessmentScore[]
   studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
+  assessmentRemarks                  AssessmentRemarks[]
 
   @@map("sessions")
 }
@@ -1461,6 +1466,7 @@ model ClassAssessmentTemplate {
   behaviouralTemplate          BehaviouralAssessmentTemplate? @relation(fields: [behaviouralTemplateId], references: [id], onDelete: SetNull)
   behaviouralGradingTemplateId String?                        @map("behavioural_grading_template_id") @db.Char(36)
   behaviouralGradingTemplate   BehaviouralGradingTemplate?    @relation(fields: [behaviouralGradingTemplateId], references: [id], onDelete: SetNull)
+  createdAt                    DateTime                       @default(now()) @map("created_at")
 
   @@unique([classId, templateId, sessionId, termId])
   @@index([classId])
@@ -1674,3 +1680,75 @@ model BehaviouralGradingTemplate {
 
   @@map("behavioural_grading_templates")
 }
+
+model AssessmentRemarks {
+  id                 String      @id @default(uuid()) @db.Char(36)
+  studentId          String      @map("student_id") @db.Char(36)
+  student            Student     @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  teacherRemark      String?     @map("teacher_remark") @db.Text
+  parentRemark       String?     @map("parent_remark") @db.Text
+  principalRemark    String?     @map("principal_remark") @db.Text
+  headTeacherRemark  String?     @map("head_teacher_remark") @db.Text
+  classTeacherRemark String?     @map("class_teacher_remark") @db.Text
+  otherRemark        String?     @map("other_remark") @db.Text
+  classId            String      @map("class_id") @db.Char(36)
+  class              SchoolClass @relation(fields: [classId], references: [id], onDelete: Restrict)
+  term               Term?       @relation(fields: [termId], references: [id])
+  termId             String?     @db.Char(36)
+  session            Session?    @relation(fields: [sessionId], references: [id])
+  sessionId          String?     @db.Char(36)
+
+  @@unique([studentId, classId, sessionId])
+  @@map("assessment_remarks")
+}
+
+model DefaultClassRemarkSetup {
+  id                 String      @id @default(uuid()) @db.Char(36)
+  classId            String      @map("class_id") @db.Char(36)
+  class              SchoolClass @relation(fields: [classId], references: [id], onDelete: Restrict)
+  teacherRemark      String      @map("teacher_remark") @db.Text
+  parentRemark       String?     @map("parent_remark") @db.Text
+  principalRemark    String?     @map("principal_remark") @db.Text
+  headTeacherRemark  String?     @map("head_teacher_remark") @db.Text
+  classTeacherRemark String?     @map("class_teacher_remark") @db.Text
+  otherRemark        String?     @map("other_remark") @db.Text
+  lowerBoundary      Decimal     @map("lower_boundary") @db.Decimal(8, 2) // this is measured by student overall avage score in all subject offered
+  upperBoundary      Decimal     @map("upper_boundary") @db.Decimal(8, 2) // this is measured by student overall avage score in all subject offered
+
+  @@unique([classId, lowerBoundary, upperBoundary])
+  @@map("default_class_remark_setups")
+}
+
+// TODO: complete assignment models before enabling
+// model Assignments {
+//   id
+//   topic
+//   question
+//   classId
+//   subjectId
+//   sessionId
+//   assignmentConponent?
+//   termId
+//   createdBy
+// }
+// model AssignmentAttachment {
+//   id
+//   assignmentId
+//   url
+// }
+// model StudentAssignment {
+//   id
+//   assignmentId
+//   answer
+//   studentId
+//   classId
+//   subclassId?
+//   sessionId
+//   termId
+//   score?
+// }
+// model StudentAssignmentAttachment {
+//   id
+//   studentAssignmentId
+//   url
+// }

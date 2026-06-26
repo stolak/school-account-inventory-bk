@@ -186,6 +186,58 @@ export class ClassAssessmentTemplateService {
     return this.prisma.classAssessmentTemplate.findUnique({ where: { id }, include });
   }
 
+  async getLatestByClassId(classId: string): Promise<ClassAssessmentTemplateData | null> {
+    try {
+      const latest = await this.prisma.classAssessmentTemplate.findFirst({
+        where: { classId },
+        orderBy: [{ createdAt: "desc" }],
+      });
+      if (!latest) return null;
+      return latest as ClassAssessmentTemplateData;
+    } catch (e) {
+      if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") {
+        throw new Error("Class assessment template not found");
+      }
+      throw e;
+    }
+  }
+  async getOrCreateClassTemplate(params: {
+    classId: string;
+    sessionId: string;
+    termId: string;
+  }): Promise<ClassAssessmentTemplateData> {
+    if (!params.classId || !params.sessionId || !params.termId) {
+      throw new Error("classId, sessionId, and termId are required");
+    }
+    const [cls, session, term] = await Promise.all([
+      this.prisma.schoolClass.findUnique({ where: { id: params.classId }, select: { id: true } }),
+      this.prisma.session.findUnique({ where: { id: params.sessionId }, select: { id: true } }),
+      this.prisma.term.findUnique({ where: { id: params.termId }, select: { id: true } }),
+    ]);
+    if (!cls) throw new Error("Invalid classId");
+    if (!session) throw new Error("Invalid sessionId");
+    if (!term) throw new Error("Invalid termId");
+    const existing = await this.list({
+      classId: params.classId,
+      sessionId: params.sessionId,
+      termId: params.termId,
+    });
+    if (existing.classAssessmentTemplates.length > 0)
+      return existing.classAssessmentTemplates[0] as ClassAssessmentTemplateData;
+
+    const latest = await this.getLatestByClassId(params.classId);
+    if (!latest) throw new Error("Assessment template not found for this class");
+    return this.create({
+      classId: params.classId,
+      templateId: latest.templateId,
+      gradeTemplateId: latest.gradeTemplateId,
+      behaviouralTemplateId: latest.behaviouralTemplateId,
+      behaviouralGradingTemplateId: latest.behaviouralGradingTemplateId,
+      sessionId: params.sessionId,
+      termId: params.termId,
+    });
+  }
+
   async update(
     id: string,
     input: {

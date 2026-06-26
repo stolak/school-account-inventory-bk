@@ -170,6 +170,88 @@ export const classAssessmentTemplateController = {
 
   /**
    * @openapi
+   * /api/v1/class-assessment-templates/resolve:
+   *   get:
+   *     summary: Get or create a class assessment template for a session and term
+   *     description: >
+   *       Returns the existing assignment for the class, session, and term when present.
+   *       Otherwise creates one using the most recent assignment for that class.
+   *     tags: [ClassAssessmentTemplates]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: classId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: sessionId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: termId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Existing class assessment template returned
+   *       201:
+   *         description: Class assessment template created from latest class assignment
+   *       400:
+   *         description: Validation error
+   *       404:
+   *         description: No prior class assessment template found to copy from
+   *       409:
+   *         description: Conflict
+   *       500:
+   *         description: Server error
+   */
+  resolve: async (req: Request, res: Response) => {
+    try {
+      const classId = queryString(req.query, "classId");
+      const sessionId = queryString(req.query, "sessionId");
+      const termId = queryString(req.query, "termId");
+
+      if (!classId) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+
+      const existing = await classAssessmentTemplateService.list({
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+      });
+      const created = existing.classAssessmentTemplates.length === 0;
+
+      const data = await classAssessmentTemplateService.getOrCreateClassTemplate({
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+      });
+
+      return res.status(created ? 201 : 200).json({
+        success: true,
+        message: created
+          ? "Class assessment template created successfully"
+          : "Class assessment template retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to resolve class assessment template");
+    }
+  },
+
+  /**
+   * @openapi
    * /api/v1/class-assessment-templates/{id}:
    *   get:
    *     summary: Get a class assessment template by ID
