@@ -186,6 +186,15 @@ const options: swaggerJSDoc.Options = {
         description:
           "Default remark templates per class by overall average score range (CRUD; non-overlapping boundaries)",
       },
+      {
+        name: "Assignments",
+        description: "Teacher assignments per class, subject, session, and term with attachments (CRUD)",
+      },
+      {
+        name: "StudentAssignments",
+        description:
+          "Student assignment submissions with attachments, scoring, and grading (CRUD and upsert)",
+      },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
       { name: "Sales", description: "Inventory sales transactions (bulk create, list, grouped by reference)" },

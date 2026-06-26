@@ -78,6 +78,8 @@ import behaviouralGradingItemRouter from "./behaviouralGradingItem";
 import studentBehaviouralAssessmentScoreRouter from "./studentBehaviouralAssessmentScore";
 import assessmentRemarksRouter from "./assessmentRemarks";
 import defaultClassRemarkSetupRouter from "./defaultClassRemarkSetup";
+import assignmentRouter from "./assignment";
+import studentAssignmentRouter from "./studentAssignment";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -161,6 +163,8 @@ router.use("/behavioural-grading-items", behaviouralGradingItemRouter);
 router.use("/student-behavioural-assessment-scores", studentBehaviouralAssessmentScoreRouter);
 router.use("/assessment-remarks", assessmentRemarksRouter);
 router.use("/default-class-remark-setups", defaultClassRemarkSetupRouter);
+router.use("/assignments", assignmentRouter);
+router.use("/student-assignments", studentAssignmentRouter);
 
 router.use("/upload", uploadRouter);
 

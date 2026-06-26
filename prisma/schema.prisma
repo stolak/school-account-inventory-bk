@@ -131,6 +131,8 @@ model User {
   payrollProcessesPosted        PayrollProcess[]               @relation("PayrollProcessesPosted")
   administrativeExpensesCreated AdministrativeExpense[]        @relation("AdministrativeExpenseCreatedBy")
   administrativeExpensesUpdated AdministrativeExpense[]        @relation("AdministrativeExpenseUpdatedBy")
+  createdAssignments            Assignment[]                   @relation("AssignmentCreatedBy")
+  studentAssignments            StudentAssignment[]
 
   @@map("users")
 }
@@ -403,6 +405,8 @@ model SchoolClass {
   studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
   assessmentRemarks                  AssessmentRemarks[]
   defaultClassRemarkSetups           DefaultClassRemarkSetup[]
+  assignments                        Assignment[]
+  studentAssignments                 StudentAssignment[]
 
   @@index([createdById])
   @@map("school_classes")
@@ -422,6 +426,7 @@ model SubClass {
   studentSubjectRegistrations        StudentSubjectRegistration[]
   studentAssessmentScores            StudentAssessmentScore[]
   studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
+  studentAssignments                 StudentAssignment[]
 
   @@unique([name, classId])
   @@index([classId])
@@ -487,6 +492,7 @@ model Student {
   studentAssessmentScores            StudentAssessmentScore[]
   studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
   assessmentRemarks                  AssessmentRemarks[]
+  studentAssignments                 StudentAssignment[]
 
   @@index([classId])
   @@index([createdById])
@@ -509,6 +515,8 @@ model Term {
   classSubjects                      ClassSubject[]
   studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
   assessmentRemarks                  AssessmentRemarks[]
+  assignments                        Assignment[]
+  studentAssignments                 StudentAssignment[]
 
   @@unique([name])
   @@map("terms")
@@ -528,6 +536,8 @@ model Session {
   studentAssessmentScores            StudentAssessmentScore[]
   studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
   assessmentRemarks                  AssessmentRemarks[]
+  assignments                        Assignment[]
+  studentAssignments                 StudentAssignment[]
 
   @@map("sessions")
 }
@@ -1433,16 +1443,17 @@ model AssessmentTemplate {
 }
 
 model AssessmentComponent {
-  id         String                   @id @default(uuid()) @db.Char(36)
-  templateId String                   @map("template_id") @db.Char(36)
-  template   AssessmentTemplate       @relation(fields: [templateId], references: [id], onDelete: Restrict)
-  name       String                   @map("name")
-  maxScore   Decimal                  @map("max_score") @db.Decimal(8, 2)
-  weight     Decimal                  @map("weight") @db.Decimal(8, 2)
-  orderNo    Int                      @map("order_no")
-  status     Status                   @default(Active)
-  isLocked   Boolean                  @default(false) @map("is_locked")
-  scores     StudentAssessmentScore[]
+  id          String                   @id @default(uuid()) @db.Char(36)
+  templateId  String                   @map("template_id") @db.Char(36)
+  template    AssessmentTemplate       @relation(fields: [templateId], references: [id], onDelete: Restrict)
+  name        String                   @map("name")
+  maxScore    Decimal                  @map("max_score") @db.Decimal(8, 2)
+  weight      Decimal                  @map("weight") @db.Decimal(8, 2)
+  orderNo     Int                      @map("order_no")
+  status      Status                   @default(Active)
+  isLocked    Boolean                  @default(false) @map("is_locked")
+  scores      StudentAssessmentScore[]
+  assignments Assignment[]
 
   @@index([templateId])
   @@index([status])
@@ -1486,6 +1497,7 @@ model Subject {
   classSubjects               ClassSubject[]
   studentSubjectRegistrations StudentSubjectRegistration[]
   studentAssessmentScores     StudentAssessmentScore[]
+  assignments                 Assignment[]
 
   @@index([status])
   @@map("subjects")
@@ -1719,36 +1731,100 @@ model DefaultClassRemarkSetup {
   @@map("default_class_remark_setups")
 }
 
-// TODO: complete assignment models before enabling
-// model Assignments {
-//   id
-//   topic
-//   question
-//   classId
-//   subjectId
-//   sessionId
-//   assignmentConponent?
-//   termId
-//   createdBy
-// }
-// model AssignmentAttachment {
-//   id
-//   assignmentId
-//   url
-// }
-// model StudentAssignment {
-//   id
-//   assignmentId
-//   answer
-//   studentId
-//   classId
-//   subclassId?
-//   sessionId
-//   termId
-//   score?
-// }
-// model StudentAssignmentAttachment {
-//   id
-//   studentAssignmentId
-//   url
-// }
+enum AssignmentStatus {
+  Pending
+  Submitted
+  Graded
+}
+
+model Assignment {
+  id                    String               @id @default(uuid()) @db.Char(36)
+  topic                 String               @map("topic")
+  question              String               @map("question") @db.Text
+  classId               String               @map("class_id") @db.Char(36)
+  class                 SchoolClass          @relation(fields: [classId], references: [id], onDelete: Restrict)
+  subjectId             String               @map("subject_id") @db.Char(36)
+  subject               Subject              @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  sessionId             String               @map("session_id") @db.Char(36)
+  session               Session              @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  termId                String               @map("term_id") @db.Char(36)
+  term                  Term                 @relation(fields: [termId], references: [id], onDelete: Restrict)
+  assignmentComponentId String?              @map("assignment_component_id") @db.Char(36)
+  assignmentComponent   AssessmentComponent? @relation(fields: [assignmentComponentId], references: [id], onDelete: SetNull)
+  deadline              DateTime?            @map("deadline")
+  status                AssignmentStatus     @default(Pending)
+  createdById           String               @map("created_by") @db.Char(36)
+  createdBy             User                 @relation("AssignmentCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+
+  attachments        AssignmentAttachment[]
+  studentAssignments StudentAssignment[]
+
+  @@index([classId])
+  @@index([subjectId])
+  @@index([sessionId])
+  @@index([termId])
+  @@index([assignmentComponentId])
+  @@index([createdById])
+  @@index([classId, subjectId, sessionId, termId])
+  @@map("assignments")
+}
+
+model AssignmentAttachment {
+  id           String     @id @default(uuid()) @db.Char(36)
+  assignmentId String     @map("assignment_id") @db.Char(36)
+  assignment   Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  url          String     @map("url") @db.Text
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  @@index([assignmentId])
+  @@map("assignment_attachments")
+}
+
+model StudentAssignment {
+  id           String           @id @default(uuid()) @db.Char(36)
+  assignmentId String           @map("assignment_id") @db.Char(36)
+  assignment   Assignment       @relation(fields: [assignmentId], references: [id], onDelete: Restrict)
+  answer       String?          @map("answer") @db.Text
+  studentId    String           @map("student_id") @db.Char(36)
+  student      Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  classId      String           @map("class_id") @db.Char(36)
+  class        SchoolClass      @relation(fields: [classId], references: [id], onDelete: Restrict)
+  subclassId   String?          @map("subclass_id") @db.Char(36)
+  subclass     SubClass?        @relation(fields: [subclassId], references: [id], onDelete: SetNull)
+  sessionId    String           @map("session_id") @db.Char(36)
+  session      Session          @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  termId       String           @map("term_id") @db.Char(36)
+  term         Term             @relation(fields: [termId], references: [id], onDelete: Restrict)
+  score        Decimal?         @map("score") @db.Decimal(8, 2)
+  status       AssignmentStatus @default(Pending)
+  submittedAt  DateTime?        @map("submitted_at")
+  gradedAt     DateTime?        @map("graded_at")
+  gradedBy     String?          @map("graded_by") @db.Char(36)
+  gradedByUser User?            @relation(fields: [gradedBy], references: [id], onDelete: SetNull)
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
+
+  attachments StudentAssignmentAttachment[]
+
+  @@unique([studentId, assignmentId, sessionId, termId])
+  @@index([studentId])
+  @@index([assignmentId])
+  @@index([classId])
+  @@index([subclassId])
+  @@index([sessionId])
+  @@index([termId])
+  @@map("student_assignments")
+}
+
+model StudentAssignmentAttachment {
+  id                  String            @id @default(uuid()) @db.Char(36)
+  studentAssignmentId String            @map("student_assignment_id") @db.Char(36)
+  studentAssignment   StudentAssignment @relation(fields: [studentAssignmentId], references: [id], onDelete: Cascade)
+  url                 String            @map("url") @db.Text
+  createdAt           DateTime          @default(now()) @map("created_at")
+
+  @@index([studentAssignmentId])
+  @@map("student_assignment_attachments")
+}

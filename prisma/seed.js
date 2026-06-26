@@ -715,6 +715,7 @@ async function main() {
       // School Management
       { route: "/classes", caption: "Classes & sub-classes" },
       { route: "/assessment-setup", caption: "Assessment setup" },
+      { route: "/assignment-setup", caption: "Assignments setup" },
       { route: "/assessment-score-entry", caption: "Assessment score entry" },
       { route: "/subject-setup", caption: "subject Setup" },
       { route: "/students", caption: "Students" },
@@ -4864,7 +4865,9 @@ async function main() {
     console.log(
       `   ✓ ${behaviouralGradingTemplates.length} behavioural grading template, ${behaviouralGradingItems.length} behavioural grade bands`
     );
-    console.log(`   ✓ ${studentBehaviouralAssessmentScores.length} student behavioural assessment scores`);
+    console.log(
+      `   ✓ ${studentBehaviouralAssessmentScores.length} student behavioural assessment scores`
+    );
 
     const defaultClassRemarkSetups = [
       {
