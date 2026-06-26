@@ -1,5 +1,6 @@
 import prisma from "../utils/prisma";
-import { Gender, Prisma, StudentStatus } from "@prisma/client";
+import bcrypt from "bcryptjs";
+import { Gender, Prisma, StudentStatus, UserType } from "@prisma/client";
 import { defaulSubheadSettingsService } from "./defaulSubheadSettingsService";
 import { accountChartService } from "./accountChartService";
 
@@ -19,6 +20,7 @@ export interface StudentData {
   guardianContact: string | null;
   address: string | null;
   status: StudentStatus;
+  userId: string | null;
   createdById: string;
   createdAt: Date;
   updatedAt: Date;
@@ -47,6 +49,67 @@ function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
 export class StudentService {
   private prisma = prisma;
   private static readonly STUDENT_SUBHEAD_SETTINGS_ID = "STUDENT_SUBHEAD";
+  private static readonly DEFAULT_USER_PASSWORD = "12345";
+
+  private splitName(fullName: string): { firstName: string | null; lastName: string | null } {
+    const parts = fullName.trim().split(/\s+/).filter(Boolean);
+    if (!parts.length) return { firstName: null, lastName: null };
+    if (parts.length === 1) return { firstName: parts[0], lastName: null };
+    return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+  }
+
+  private normalizeEmail(value: string | null | undefined): string | null {
+    if (value === undefined || value === null) return null;
+    const trimmed = value.trim().toLowerCase();
+    return trimmed || null;
+  }
+
+  private async assertStudentEmailAvailable(
+    email: string,
+    tx: Prisma.TransactionClient
+  ): Promise<void> {
+    const [existingUser, existingStudent] = await Promise.all([
+      tx.user.findUnique({ where: { email }, select: { id: true } }),
+      tx.student.findFirst({ where: { studentEmail: email }, select: { id: true } }),
+    ]);
+    if (existingUser || existingStudent) {
+      throw new Error("Student email already exists");
+    }
+  }
+
+  private async ensureGuardianUser(
+    input: {
+      guardianEmail: string;
+      guardianName?: string | null;
+      guardianContact?: string | null;
+      createdById: string;
+    },
+    tx: Prisma.TransactionClient
+  ): Promise<void> {
+    const existing = await tx.user.findUnique({
+      where: { email: input.guardianEmail },
+      select: { id: true },
+    });
+    if (existing) return;
+
+    const { firstName, lastName } = input.guardianName
+      ? this.splitName(input.guardianName)
+      : { firstName: null, lastName: null };
+    const hashedPassword = await bcrypt.hash(StudentService.DEFAULT_USER_PASSWORD, 10);
+
+    await tx.user.create({
+      data: {
+        email: input.guardianEmail,
+        password: hashedPassword,
+        firstName,
+        lastName,
+        phoneNumber: input.guardianContact?.trim() || null,
+        userType: UserType.Parent,
+        isActive: true,
+        createdById: input.createdById,
+      },
+    });
+  }
 
   private async assertClassExists(classId: string) {
     const cls = await this.prisma.schoolClass.findUnique({
@@ -123,35 +186,79 @@ export class StudentService {
     if (input.classId) await this.assertClassExists(input.classId);
     if (input.subClassId) await this.assertSubClassExists(input.subClassId);
 
+    const studentEmail = this.normalizeEmail(input.studentEmail);
+    const guardianEmail = this.normalizeEmail(input.guardianEmail);
+
     try {
-      const created = await this.prisma.student.create({
-        data: {
-          admissionNumber: input.admissionNumber,
-          firstName: input.firstName,
-          middleName: input.middleName ?? null,
-          lastName: input.lastName,
-          studentEmail: input.studentEmail ?? null,
-          gender: input.gender,
-          dateOfBirth: input.dateOfBirth,
-          classId: input.classId ?? null,
-          subClassId: input.subClassId ?? null,
-          guardianName: input.guardianName ?? null,
-          guardianEmail: input.guardianEmail ?? null,
-          guardianContact: input.guardianContact ?? null,
-          address: input.address ?? null,
-          createdById: input.createdById,
-          ...(input.status !== undefined ? { status: input.status } : {}),
-        },
-        include: {
-          class: { select: { id: true, name: true } },
-          subClass: { select: { id: true, name: true, classId: true } },
-          createdBy: { select: { firstName: true, lastName: true } },
-        },
+      const created = await this.prisma.$transaction(async (tx) => {
+        if (studentEmail) {
+          await this.assertStudentEmailAvailable(studentEmail, tx);
+        }
+
+        if (guardianEmail && guardianEmail !== studentEmail) {
+          await this.ensureGuardianUser(
+            {
+              guardianEmail,
+              guardianName: input.guardianName,
+              guardianContact: input.guardianContact,
+              createdById: input.createdById,
+            },
+            tx
+          );
+        }
+
+        let userId: string | null = null;
+        if (studentEmail) {
+          const hashedPassword = await bcrypt.hash(StudentService.DEFAULT_USER_PASSWORD, 10);
+          const user = await tx.user.create({
+            data: {
+              email: studentEmail,
+              password: hashedPassword,
+              firstName: input.firstName,
+              lastName: input.lastName,
+              userType: UserType.Student,
+              isActive: true,
+              createdById: input.createdById,
+            },
+            select: { id: true },
+          });
+          userId = user.id;
+        }
+
+        return tx.student.create({
+          data: {
+            admissionNumber: input.admissionNumber,
+            firstName: input.firstName,
+            middleName: input.middleName ?? null,
+            lastName: input.lastName,
+            studentEmail,
+            gender: input.gender,
+            dateOfBirth: input.dateOfBirth,
+            classId: input.classId ?? null,
+            subClassId: input.subClassId ?? null,
+            guardianName: input.guardianName ?? null,
+            guardianEmail,
+            guardianContact: input.guardianContact ?? null,
+            address: input.address ?? null,
+            createdById: input.createdById,
+            userId,
+            ...(input.status !== undefined ? { status: input.status } : {}),
+          },
+          include: {
+            class: { select: { id: true, name: true } },
+            subClass: { select: { id: true, name: true, classId: true } },
+            createdBy: { select: { firstName: true, lastName: true } },
+          },
+        });
       });
 
       return created;
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
+        const target = (e as { meta?: { target?: string[] } }).meta?.target;
+        if (target?.includes("student_email") || target?.includes("email")) {
+          throw new Error("Student email already exists");
+        }
         throw new Error("Admission number already exists");
       }
       throw e;

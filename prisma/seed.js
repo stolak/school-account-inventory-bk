@@ -246,6 +246,124 @@ async function upsertStaffWithUser(hashedPassword, input) {
   });
 }
 
+/** Mirror StudentService.ensureGuardianUser — Parent account; reuses existing user when email is taken. */
+async function ensureGuardianUser(hashedPassword, input) {
+  const guardianEmail = input.guardianEmail?.trim().toLowerCase();
+  if (!guardianEmail) return null;
+
+  const { firstName, lastName } = input.guardianName
+    ? splitStaffName(input.guardianName)
+    : { firstName: null, lastName: null };
+
+  const user = await prisma.user.upsert({
+    where: { email: guardianEmail },
+    update: {},
+    create: {
+      ...(input.userId ? { id: input.userId } : {}),
+      email: guardianEmail,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      phoneNumber: input.guardianContact?.trim() || null,
+      userType: "Parent",
+      isActive: true,
+      isVerified: true,
+      isEmailVerified: true,
+      isPhoneVerified: false,
+      isDeleted: false,
+      status: "active",
+      createdById: input.createdById,
+    },
+  });
+
+  return user.id;
+}
+
+/** Mirror StudentService.createStudent — Student user (when email present), guardian Parent user, and student row. */
+async function upsertStudentWithUsers(hashedPassword, st) {
+  const studentEmail = st.studentEmail?.trim().toLowerCase() || null;
+  const guardianEmail = st.guardianEmail?.trim().toLowerCase() || null;
+
+  if (guardianEmail && guardianEmail !== studentEmail) {
+    await ensureGuardianUser(hashedPassword, {
+      guardianEmail,
+      guardianName: st.guardianName,
+      guardianContact: st.guardianContact,
+      createdById: st.createdById,
+      userId: st.guardianUserId,
+    });
+  }
+
+  let userId = null;
+  if (studentEmail) {
+    const user = await prisma.user.upsert({
+      where: { email: studentEmail },
+      update: {
+        firstName: st.firstName,
+        lastName: st.lastName,
+        userType: "Student",
+        isActive: true,
+      },
+      create: {
+        ...(st.userId ? { id: st.userId } : {}),
+        email: studentEmail,
+        password: hashedPassword,
+        firstName: st.firstName,
+        lastName: st.lastName,
+        userType: "Student",
+        isActive: true,
+        isVerified: true,
+        isEmailVerified: true,
+        isPhoneVerified: false,
+        isDeleted: false,
+        status: "active",
+        createdById: st.createdById,
+      },
+    });
+    userId = user.id;
+  }
+
+  return prisma.student.upsert({
+    where: { admissionNumber: st.admissionNumber },
+    update: {
+      firstName: st.firstName,
+      middleName: st.middleName,
+      lastName: st.lastName,
+      studentEmail,
+      gender: st.gender,
+      dateOfBirth: st.dateOfBirth,
+      classId: st.classId,
+      subClassId: st.subClassId,
+      guardianName: st.guardianName,
+      guardianEmail,
+      guardianContact: st.guardianContact,
+      address: st.address,
+      status: st.status,
+      createdById: st.createdById,
+      userId,
+    },
+    create: {
+      id: st.id,
+      admissionNumber: st.admissionNumber,
+      firstName: st.firstName,
+      middleName: st.middleName,
+      lastName: st.lastName,
+      studentEmail,
+      gender: st.gender,
+      dateOfBirth: st.dateOfBirth,
+      classId: st.classId,
+      subClassId: st.subClassId,
+      guardianName: st.guardianName,
+      guardianEmail,
+      guardianContact: st.guardianContact,
+      address: st.address,
+      status: st.status,
+      createdById: st.createdById,
+      userId,
+    },
+  });
+}
+
 /** Seed Bank rows from banks.json (bankCode, bankName; optional id from file). */
 async function seedBanks() {
   const banksPath = path.join(__dirname, "..", "banks.json");
@@ -3760,6 +3878,8 @@ async function main() {
     const students = [
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907001",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222201",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222301",
         admissionNumber: "ADM2025001",
         firstName: "Chioma",
         middleName: "Ada",
@@ -3778,6 +3898,8 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907002",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222202",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222302",
         admissionNumber: "ADM2025002",
         firstName: "Ibrahim",
         middleName: null,
@@ -3796,6 +3918,7 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907003",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222303",
         admissionNumber: "ADM2025003",
         firstName: "Grace",
         middleName: "Chinelo",
@@ -3814,6 +3937,8 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907004",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222204",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222304",
         admissionNumber: "ADM2025004",
         firstName: "David",
         middleName: "Oluwaseun",
@@ -3832,6 +3957,8 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907005",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222205",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222305",
         admissionNumber: "ADM2025005",
         firstName: "Amina",
         middleName: null,
@@ -3850,6 +3977,8 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907006",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222206",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222306",
         admissionNumber: "ADM2025006",
         firstName: "Emmanuel",
         middleName: "Chukwu",
@@ -3868,6 +3997,7 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907007",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222307",
         admissionNumber: "ADM2025007",
         firstName: "Fatima",
         middleName: "Zainab",
@@ -3886,6 +4016,8 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907008",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222208",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222308",
         admissionNumber: "ADM2025008",
         firstName: "Samuel",
         middleName: null,
@@ -3905,34 +4037,32 @@ async function main() {
     ];
 
     let studentLedgerCount = 0;
+    let studentUserCount = 0;
+    let guardianUserCount = 0;
+    const guardianEmailsSeeded = new Set();
+
     for (const st of students) {
-      const student = await prisma.student.upsert({
-        where: { admissionNumber: st.admissionNumber },
-        update: {
-          firstName: st.firstName,
-          middleName: st.middleName,
-          lastName: st.lastName,
-          studentEmail: st.studentEmail,
-          gender: st.gender,
-          dateOfBirth: st.dateOfBirth,
-          classId: st.classId,
-          subClassId: st.subClassId,
-          guardianName: st.guardianName,
-          guardianEmail: st.guardianEmail,
-          guardianContact: st.guardianContact,
-          address: st.address,
-          status: st.status,
-          createdById: st.createdById,
-        },
-        create: st,
-      });
+      const guardianEmail = st.guardianEmail?.trim().toLowerCase();
+      const studentEmail = st.studentEmail?.trim().toLowerCase();
+      const guardianWasNew =
+        guardianEmail && guardianEmail !== studentEmail && !guardianEmailsSeeded.has(guardianEmail);
+
+      await upsertStudentWithUsers(hashedPassword, st);
+
+      if (studentEmail) studentUserCount += 1;
+      if (guardianWasNew) {
+        guardianEmailsSeeded.add(guardianEmail);
+        guardianUserCount += 1;
+      }
       // No need of creating ledger accounts for students
       // const ledgerId = await ensureStudentLedgerAccount(student);
       // if (ledgerId) {
       //   studentLedgerCount += 1;
       // }
     }
-    console.log(`   ✓ ${students.length} students, ${studentLedgerCount} student ledger accounts`);
+    console.log(
+      `   ✓ ${students.length} students (${studentUserCount} student users, ${guardianUserCount} guardian users), ${studentLedgerCount} student ledger accounts`
+    );
 
     // Academic sessions and terms
     console.log("📅 Seeding sessions and terms...");
