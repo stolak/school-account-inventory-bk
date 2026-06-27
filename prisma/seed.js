@@ -7,6 +7,18 @@ const prisma = new PrismaClient();
 
 const SUPPLIER_SUBHEAD_SETTINGS_ID = "SUPPLIER_SUBHEAD";
 
+const STUDENT_ROLE_ID = "a2000001-0002-4002-8002-000000000008";
+const PARENT_ROLE_ID = "a2000001-0002-4002-8002-000000000009";
+
+async function assignUserAppRole(userId, roleId) {
+  if (!userId || !roleId) return;
+  await prisma.userRole.upsert({
+    where: { userId },
+    update: { roleId },
+    create: { userId, roleId },
+  });
+}
+
 /** Mirror SupplierService.createSupplier — ledger under SUPPLIER_SUBHEAD (Accounts Payable). */
 async function ensureSupplierLedgerAccount(supplier) {
   const defaultSubhead = await prisma.defaulSubheadSettings.findUnique({
@@ -276,6 +288,8 @@ async function ensureGuardianUser(hashedPassword, input) {
     },
   });
 
+  await assignUserAppRole(user.id, PARENT_ROLE_ID);
+
   return user.id;
 }
 
@@ -321,6 +335,7 @@ async function upsertStudentWithUsers(hashedPassword, st) {
       },
     });
     userId = user.id;
+    await assignUserAppRole(userId, STUDENT_ROLE_ID);
   }
 
   return prisma.student.upsert({
@@ -778,6 +793,24 @@ async function main() {
         status: "active",
         privilegeNames: allReadPrivilegeNames,
       },
+      {
+        id: STUDENT_ROLE_ID,
+        name: "Student",
+        status: "active",
+        privilegeNames: [
+          "active_period.read",
+          "sessions.read",
+          "terms.read",
+          "school_classes.read",
+          "sub_classes.read",
+        ],
+      },
+      {
+        id: PARENT_ROLE_ID,
+        name: "Parent",
+        status: "active",
+        privilegeNames: ["active_period.read", "students.read", "sessions.read", "terms.read"],
+      },
     ];
 
     const superAdminRoleId = appRoles[0].id;
@@ -907,6 +940,22 @@ async function main() {
       }
     }
     console.log(`   ✓ menus linked to Super Admin and System Administrator roles`);
+
+    const myAssignmentsMenu = await prisma.menu.findUnique({
+      where: { route: "/my-assignments" },
+      select: { id: true },
+    });
+    if (myAssignmentsMenu) {
+      const existing = await prisma.roleMenu.findFirst({
+        where: { roleId: STUDENT_ROLE_ID, menuId: myAssignmentsMenu.id },
+      });
+      if (!existing) {
+        await prisma.roleMenu.create({
+          data: { roleId: STUDENT_ROLE_ID, menuId: myAssignmentsMenu.id },
+        });
+      }
+    }
+    console.log("   ✓ My Assignments menu linked to Student role");
 
     // Chart of accounts — AccountGroup & AccountHead (fixed IDs for idempotent re-seeding)
     console.log("📒 Seeding account groups and account heads...");
@@ -4064,6 +4113,25 @@ async function main() {
     }
     console.log(
       `   ✓ ${students.length} students (${studentUserCount} student users, ${guardianUserCount} guardian users), ${studentLedgerCount} student ledger accounts`
+    );
+
+    const portalStudentUsers = await prisma.user.findMany({
+      where: { userType: "Student" },
+      select: { id: true },
+    });
+    for (const { id } of portalStudentUsers) {
+      await assignUserAppRole(id, STUDENT_ROLE_ID);
+    }
+
+    const portalParentUsers = await prisma.user.findMany({
+      where: { userType: "Parent" },
+      select: { id: true },
+    });
+    for (const { id } of portalParentUsers) {
+      await assignUserAppRole(id, PARENT_ROLE_ID);
+    }
+    console.log(
+      `   ✓ ${portalStudentUsers.length} student users and ${portalParentUsers.length} parent users linked to portal roles`
     );
 
     // Academic sessions and terms
