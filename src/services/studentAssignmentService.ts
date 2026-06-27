@@ -1,6 +1,11 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode, parseDecimalNonNegative } from "../utils/assessmentHttp";
 import { AssignmentStatus, Prisma } from "@prisma/client";
+import {
+  assignmentInclude,
+  mapAssignmentRow,
+  type AssignmentData,
+} from "./assignmentService";
 
 const include = {
   assignment: {
@@ -287,6 +292,67 @@ export class StudentAssignmentService {
       orderBy: [{ submittedAt: "desc" }, { createdAt: "desc" }],
     });
     return { studentAssignments: rows.map(mapRow), count: rows.length };
+  }
+
+  async listUntreated(params: {
+    studentId: string;
+    classId: string;
+    sessionId: string;
+    termId: string;
+  }): Promise<AssignmentData[]> {
+    const studentId = params.studentId.trim();
+    const classId = params.classId.trim();
+    const sessionId = params.sessionId.trim();
+    const termId = params.termId.trim();
+
+    if (!studentId || !classId || !sessionId || !termId) {
+      throw new Error("studentId, classId, sessionId, and termId are required");
+    }
+
+    const [student, cls, session, term] = await Promise.all([
+      this.prisma.student.findUnique({
+        where: { id: studentId },
+        select: { id: true, classId: true },
+      }),
+      this.prisma.schoolClass.findUnique({ where: { id: classId }, select: { id: true } }),
+      this.prisma.session.findUnique({ where: { id: sessionId }, select: { id: true } }),
+      this.prisma.term.findUnique({ where: { id: termId }, select: { id: true } }),
+    ]);
+
+    if (!student) throw new Error("Invalid studentId");
+    if (!cls) throw new Error("Invalid classId");
+    if (!session) throw new Error("Invalid sessionId");
+    if (!term) throw new Error("Invalid termId");
+    if (student.classId !== classId) {
+      throw new Error("studentId does not belong to the specified classId");
+    }
+
+    const registrations = await this.prisma.studentSubjectRegistration.findMany({
+      where: { studentId, classId, sessionId, termId },
+      select: { subjectId: true },
+    });
+    const subjectIds = [...new Set(registrations.map((row) => row.subjectId))];
+    if (!subjectIds.length) return [];
+
+    const existingStudentAssignments = await this.prisma.studentAssignment.findMany({
+      where: { studentId, sessionId, termId },
+      select: { assignmentId: true },
+    });
+    const treatedAssignmentIds = existingStudentAssignments.map((row) => row.assignmentId);
+
+    const rows = await this.prisma.assignment.findMany({
+      where: {
+        classId,
+        sessionId,
+        termId,
+        subjectId: { in: subjectIds },
+        ...(treatedAssignmentIds.length ? { id: { notIn: treatedAssignmentIds } } : {}),
+      },
+      include: assignmentInclude,
+      orderBy: [{ deadline: "asc" }, { createdAt: "desc" }],
+    });
+
+    return rows.map(mapAssignmentRow);
   }
 
   async getById(id: string): Promise<StudentAssignmentData | null> {

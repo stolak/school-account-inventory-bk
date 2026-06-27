@@ -4,6 +4,7 @@ import { studentAssignmentController } from "../controllers/studentAssignmentCon
 const router = Router();
 
 router.post("/", studentAssignmentController.create);
+router.get("/untreated", studentAssignmentController.listUntreated);
 router.get("/", studentAssignmentController.list);
 router.post("/:id/attachments", studentAssignmentController.addAttachment);
 router.delete("/:id/attachments/:attachmentId", studentAssignmentController.removeAttachment);

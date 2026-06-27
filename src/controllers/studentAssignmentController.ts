@@ -208,6 +208,84 @@ export const studentAssignmentController = {
 
   /**
    * @openapi
+   * /api/v1/student-assignments/untreated:
+   *   get:
+   *     summary: List class assignments not yet started by a student for registered subjects
+   *     description: |
+   *       Returns assignments for the student's class, session, and term whose subject
+   *       the student is registered for, excluding assignments that already have a
+   *       student assignment record.
+   *     tags: [StudentAssignments]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: studentId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: classId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: sessionId
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: termId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Untreated assignments list
+   *       400:
+   *         description: Validation error
+   *       500:
+   *         description: Server error
+   */
+  listUntreated: async (req: Request, res: Response) => {
+    try {
+      const studentId = queryString(req.query, "studentId");
+      const classId = queryString(req.query, "classId");
+      const sessionId = queryString(req.query, "sessionId");
+      const termId = queryString(req.query, "termId");
+
+      if (!studentId?.trim()) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+      if (!classId?.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId?.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId?.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+
+      const data = await studentAssignmentService.listUntreated({
+        studentId: studentId.trim(),
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+      });
+
+      return res.json({
+        success: true,
+        message: "Untreated student assignments retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve untreated student assignments");
+    }
+  },
+
+  /**
+   * @openapi
    * /api/v1/student-assignments/{id}:
    *   get:
    *     summary: Get student assignment by ID

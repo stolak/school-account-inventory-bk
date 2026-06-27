@@ -2,7 +2,7 @@ import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
 import { AssignmentStatus, Prisma } from "@prisma/client";
 
-const include = {
+export const assignmentInclude = {
   class: { select: { id: true, name: true, status: true } },
   subject: { select: { id: true, code: true, name: true, status: true } },
   session: { select: { id: true, name: true, status: true } },
@@ -17,7 +17,7 @@ const include = {
   },
 } satisfies Prisma.AssignmentInclude;
 
-type Row = Prisma.AssignmentGetPayload<{ include: typeof include }>;
+type Row = Prisma.AssignmentGetPayload<{ include: typeof assignmentInclude }>;
 
 export interface AssignmentAttachmentData {
   id: string;
@@ -38,7 +38,9 @@ export interface AssignmentData {
   termId: string;
   term: Row["term"];
   assignmentComponentId: string | null;
-  assignmentComponent: Row["assignmentComponent"];
+  assignmentComponent:
+    | (Omit<NonNullable<Row["assignmentComponent"]>, "maxScore"> & { maxScore: string })
+    | null;
   deadline: Date | null;
   status: AssignmentStatus;
   createdById: string;
@@ -52,7 +54,7 @@ function mapAttachment(row: Row["attachments"][number]): AssignmentAttachmentDat
   return { id: row.id, url: row.url, createdAt: row.createdAt };
 }
 
-function mapRow(row: Row): AssignmentData {
+export function mapAssignmentRow(row: Row): AssignmentData {
   return {
     id: row.id,
     topic: row.topic,
@@ -66,7 +68,12 @@ function mapRow(row: Row): AssignmentData {
     termId: row.termId,
     term: row.term,
     assignmentComponentId: row.assignmentComponentId,
-    assignmentComponent: row.assignmentComponent,
+    assignmentComponent: row.assignmentComponent
+      ? {
+          ...row.assignmentComponent,
+          maxScore: row.assignmentComponent.maxScore.toString(),
+        }
+      : null,
     deadline: row.deadline,
     status: row.status,
     createdById: row.createdById,
@@ -175,9 +182,9 @@ export class AssignmentService {
           ? { attachments: { create: attachments.map((url) => ({ url })) } }
           : {}),
       },
-      include,
+      include: assignmentInclude,
     });
-    return mapRow(row);
+    return mapAssignmentRow(row);
   }
 
   async list(params: {
@@ -198,15 +205,15 @@ export class AssignmentService {
 
     const rows = await this.prisma.assignment.findMany({
       where,
-      include,
+      include: assignmentInclude,
       orderBy: [{ createdAt: "desc" }],
     });
-    return { assignments: rows.map(mapRow), count: rows.length };
+    return { assignments: rows.map(mapAssignmentRow), count: rows.length };
   }
 
   async getById(id: string): Promise<AssignmentData | null> {
-    const row = await this.prisma.assignment.findUnique({ where: { id }, include });
-    return row ? mapRow(row) : null;
+    const row = await this.prisma.assignment.findUnique({ where: { id }, include: assignmentInclude });
+    return row ? mapAssignmentRow(row) : null;
   }
 
   async update(
@@ -265,9 +272,9 @@ export class AssignmentService {
           ...(input.deadline !== undefined ? { deadline: input.deadline } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
         },
-        include,
+        include: assignmentInclude,
       });
-      return mapRow(row);
+      return mapAssignmentRow(row);
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") {
         throw new Error("Assignment not found");
@@ -286,8 +293,8 @@ export class AssignmentService {
     }
 
     try {
-      const row = await this.prisma.assignment.delete({ where: { id }, include });
-      return mapRow(row);
+      const row = await this.prisma.assignment.delete({ where: { id }, include: assignmentInclude });
+      return mapAssignmentRow(row);
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") {
         throw new Error("Assignment not found");
@@ -309,9 +316,9 @@ export class AssignmentService {
 
     const row = await this.prisma.assignment.findUniqueOrThrow({
       where: { id: assignmentId },
-      include,
+      include: assignmentInclude,
     });
-    return mapRow(row);
+    return mapAssignmentRow(row);
   }
 
   async removeAttachment(assignmentId: string, attachmentId: string): Promise<AssignmentData> {
@@ -328,9 +335,9 @@ export class AssignmentService {
 
     const row = await this.prisma.assignment.findUniqueOrThrow({
       where: { id: assignmentId },
-      include,
+      include: assignmentInclude,
     });
-    return mapRow(row);
+    return mapAssignmentRow(row);
   }
 }
 
