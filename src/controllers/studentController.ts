@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import { studentService } from "../services/studentService";
 import { Gender, StudentStatus } from "@prisma/client";
 import { parseIntOrUndefined, routeParam } from "../utils/request";
+import { getAuthenticatedUserId } from "../middlewares/auth";
+import { resolveParentGuardianEmail } from "../utils/studentContext";
 
 function parseIsoDate(v: unknown): Date | null {
   if (v === undefined || v === null) return null;
@@ -365,6 +367,79 @@ export const studentController = {
         message: "Failed to retrieve students",
         error: error?.message,
       });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/students/me/guardian:
+   *   get:
+   *     summary: List students linked to the authenticated parent guardian email
+   *     description: |
+   *       Uses the logged-in parent user's email to find students whose guardianEmail matches.
+   *     tags: [Students]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: status
+   *         schema:
+   *           type: string
+   *           enum: [Active, Inactive, Graduated, Transferred, Suspended, Archived, All]
+   *         description: Defaults to Active when omitted
+   *     responses:
+   *       200:
+   *         description: Students linked to the parent guardian email
+   *       401:
+   *         description: Unauthorized
+   *       403:
+   *         description: User is not a parent
+   *       500:
+   *         description: Server error
+   */
+  listGuardianStudents: async (req: Request, res: Response) => {
+    try {
+      const userId = getAuthenticatedUserId(req);
+      if (!userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw === undefined
+          ? undefined
+          : statusRaw === "All"
+            ? "All"
+            : parseStudentStatus(statusRaw);
+
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "status must be Active, Inactive, Graduated, Transferred, Suspended, Archived, or All",
+        });
+      }
+
+      const guardianEmail = await resolveParentGuardianEmail(userId);
+      const result = await studentService.listByGuardianEmail(guardianEmail, { status });
+
+      return res.json({
+        success: true,
+        message: "Guardian students retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to retrieve guardian students";
+      const m = message.toLowerCase();
+      const code = m.includes("unauthorized")
+        ? 401
+        : m.includes("only available to parent")
+          ? 403
+          : m.includes("invalid") || m.includes("required")
+            ? 400
+            : 500;
+      return res.status(code).json({ success: false, message });
     }
   },
 

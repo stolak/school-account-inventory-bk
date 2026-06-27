@@ -7,6 +7,7 @@ const router = Router();
 router.use(authenticateJWT);
 
 router.post("/", studentController.createStudent);
+router.get("/me/guardian", studentController.listGuardianStudents);
 router.get("/", studentController.listStudents);
 router.patch("/class/bulk", studentController.bulkUpdateStudentClassAndSubClassAndStatus);
 router.get("/:id", studentController.getStudentById);

@@ -76,3 +76,25 @@ export async function resolveStudentAcademicContext(
     termId,
   };
 }
+
+/**
+ * Resolves the guardian email for the authenticated parent user (login email).
+ */
+export async function resolveParentGuardianEmail(userId: string): Promise<string> {
+  const id = userId.trim();
+  if (!id) throw new Error("Unauthorized");
+
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: { id: true, userType: true, email: true },
+  });
+  if (!user) throw new Error("Unauthorized");
+  if (user.userType !== UserType.Parent) {
+    throw new Error("This action is only available to parent users");
+  }
+
+  const guardianEmail = user.email.trim().toLowerCase();
+  if (!guardianEmail) throw new Error("Parent user email is required");
+
+  return guardianEmail;
+}

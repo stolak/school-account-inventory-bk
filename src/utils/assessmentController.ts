@@ -27,7 +27,7 @@ export function httpStatusFromAssessmentMessage(message: string): number {
   ) {
     return 400;
   }
-  if (m.includes("only available to student") || m.includes("forbidden")) {
+  if (m.includes("only available to student") || m.includes("only available to parent") || m.includes("forbidden")) {
     return 403;
   }
   if (m.includes("unauthorized")) {

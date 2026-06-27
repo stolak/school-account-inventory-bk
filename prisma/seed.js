@@ -841,6 +841,8 @@ async function main() {
       { route: "/sessions", caption: "Sessions & terms" },
       { route: "/student-collections", caption: "Student Collections" },
       { route: "/staff-collections", caption: "Staff Collections" },
+      { route: "/my-assignments", caption: "My Assignments" },
+
       // Analytics
       {
         route: "/reports/store-inventory-balance-matrix",

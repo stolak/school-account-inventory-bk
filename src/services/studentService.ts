@@ -343,6 +343,30 @@ export class StudentService {
     return { students, pagination: { page, limit, total, totalPages } };
   }
 
+  async listByGuardianEmail(
+    guardianEmail: string,
+    params: { status?: StudentStatus | "All" } = {}
+  ): Promise<{ students: StudentData[]; count: number }> {
+    const email = guardianEmail.trim().toLowerCase();
+    if (!email) throw new Error("guardianEmail is required");
+
+    const where: Prisma.StudentWhereInput = { guardianEmail: email };
+
+    if (params.status === undefined) {
+      where.status = StudentStatus.Active;
+    } else if (params.status !== "All") {
+      where.status = params.status;
+    }
+
+    const rows = await this.prisma.student.findMany({
+      where,
+      include: this.studentInclude,
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    });
+
+    return { students: rows, count: rows.length };
+  }
+
   async getStudentById(id: string): Promise<StudentData | null> {
     return await this.prisma.student.findUnique({
       where: { id },

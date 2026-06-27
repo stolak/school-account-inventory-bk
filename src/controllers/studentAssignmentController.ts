@@ -206,6 +206,99 @@ export const studentAssignmentController = {
 
   /**
    * @openapi
+   * /api/v1/student-assignments/me:
+   *   get:
+   *     summary: List student assignments for the authenticated student
+   *     description: |
+   *       Resolves studentId from the logged-in student user. Uses the student's class
+   *       when classId is omitted, and the active period session/term when those are omitted.
+   *     tags: [StudentAssignments]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: assignmentId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: classId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: subclassId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: sessionId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: termId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: status
+   *         schema:
+   *           type: string
+   *           enum: [Pending, Submitted, Graded]
+   *     responses:
+   *       200:
+   *         description: Student assignments list for the authenticated student
+   *       400:
+   *         description: Validation error or no active period
+   *       401:
+   *         description: Unauthorized
+   *       403:
+   *         description: User is not a student
+   *       404:
+   *         description: No linked student profile
+   *       500:
+   *         description: Server error
+   */
+  listMy: async (req: Request, res: Response) => {
+    try {
+      const userId = getAuthenticatedUserId(req);
+      if (!userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const parsedStatus = parseAssignmentStatus(queryString(req.query, "status"));
+      if (parsedStatus === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Pending, Submitted, or Graded",
+        });
+      }
+
+      const context = await resolveStudentAcademicContext({
+        userId,
+        classId: queryString(req.query, "classId"),
+        sessionId: queryString(req.query, "sessionId"),
+        termId: queryString(req.query, "termId"),
+      });
+
+      const result = await studentAssignmentService.list({
+        studentId: context.studentId,
+        classId: context.classId,
+        sessionId: context.sessionId,
+        termId: context.termId,
+        assignmentId: queryString(req.query, "assignmentId"),
+        subclassId: queryString(req.query, "subclassId"),
+        ...(parsedStatus ? { status: parsedStatus } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Student assignments retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve student assignments");
+    }
+  },
+
+  /**
+   * @openapi
    * /api/v1/student-assignments/untreated:
    *   get:
    *     summary: List class assignments not yet started by a student for registered subjects
