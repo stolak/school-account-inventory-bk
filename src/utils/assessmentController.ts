@@ -22,9 +22,19 @@ export function httpStatusFromAssessmentMessage(message: string): number {
     m.includes("cannot") ||
     m.includes("must") ||
     m.includes("exceed") ||
-    m.includes("greater")
+    m.includes("greater") ||
+    m.includes("no active period")
   ) {
     return 400;
+  }
+  if (m.includes("only available to student") || m.includes("forbidden")) {
+    return 403;
+  }
+  if (m.includes("unauthorized")) {
+    return 401;
+  }
+  if (m.includes("no student profile")) {
+    return 404;
   }
   return 500;
 }

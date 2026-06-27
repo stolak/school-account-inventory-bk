@@ -1,11 +1,7 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode, parseDecimalNonNegative } from "../utils/assessmentHttp";
 import { AssignmentStatus, Prisma } from "@prisma/client";
-import {
-  assignmentInclude,
-  mapAssignmentRow,
-  type AssignmentData,
-} from "./assignmentService";
+import { assignmentInclude, mapAssignmentRow, type AssignmentData } from "./assignmentService";
 
 const include = {
   assignment: {
@@ -17,6 +13,7 @@ const include = {
       status: true,
       assignmentComponentId: true,
       assignmentComponent: { select: { id: true, name: true, maxScore: true } },
+      subject: { select: { id: true, name: true, status: true } },
     },
   },
   student: {

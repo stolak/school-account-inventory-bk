@@ -4,6 +4,8 @@ import { studentAssignmentService } from "../services/studentAssignmentService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
 import { isNumberOrString, isStringOrNullOrUndefined } from "../utils/request";
 import { parseBodyDecimal } from "../utils/assessmentHttp";
+import { getAuthenticatedUserId } from "../middlewares/auth";
+import { resolveStudentAcademicContext } from "../utils/studentContext";
 
 function queryString(query: Request["query"], key: string): string | undefined {
   const raw = query[key];
@@ -23,10 +25,6 @@ function parseUrlArray(raw: unknown): string[] | undefined | "invalid" {
   if (!Array.isArray(raw)) return "invalid";
   if (!raw.every((item) => typeof item === "string")) return "invalid";
   return raw;
-}
-
-function getAuthenticatedUserId(req: Request): string | null {
-  return (req as { user?: { id: string } }).user?.id?.trim() || null;
 }
 
 /**
@@ -273,6 +271,70 @@ export const studentAssignmentController = {
         sessionId: sessionId.trim(),
         termId: termId.trim(),
       });
+
+      return res.json({
+        success: true,
+        message: "Untreated student assignments retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve untreated student assignments");
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/student-assignments/me/untreated:
+   *   get:
+   *     summary: List untreated assignments for the authenticated student
+   *     description: |
+   *       Resolves studentId from the logged-in student user. Uses the student's class
+   *       when classId is omitted, and the active period session/term when those are omitted.
+   *     tags: [StudentAssignments]
+   *     security:
+   *       - bearerAuth: []
+   *     parameters:
+   *       - in: query
+   *         name: classId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: sessionId
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: termId
+   *         schema:
+   *           type: string
+   *     responses:
+   *       200:
+   *         description: Untreated assignments list for the authenticated student
+   *       400:
+   *         description: Validation error or no active period
+   *       401:
+   *         description: Unauthorized
+   *       403:
+   *         description: User is not a student
+   *       404:
+   *         description: No linked student profile
+   *       500:
+   *         description: Server error
+   */
+  listMyUntreated: async (req: Request, res: Response) => {
+    try {
+      const userId = getAuthenticatedUserId(req);
+      if (!userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const context = await resolveStudentAcademicContext({
+        userId,
+        classId: queryString(req.query, "classId"),
+        sessionId: queryString(req.query, "sessionId"),
+        termId: queryString(req.query, "termId"),
+      });
+
+      const data = await studentAssignmentService.listUntreated(context);
 
       return res.json({
         success: true,
