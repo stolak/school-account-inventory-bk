@@ -134,6 +134,7 @@ model User {
   createdAssignments            Assignment[]                   @relation("AssignmentCreatedBy")
   studentAssignments            StudentAssignment[]
   students                      Student[]
+  teacherSubjects               TeacherSubjects[]
 
   @@map("users")
 }
@@ -408,6 +409,7 @@ model SchoolClass {
   defaultClassRemarkSetups           DefaultClassRemarkSetup[]
   assignments                        Assignment[]
   studentAssignments                 StudentAssignment[]
+  teacherSubjects                    TeacherSubjects[]
 
   @@index([createdById])
   @@map("school_classes")
@@ -428,6 +430,7 @@ model SubClass {
   studentAssessmentScores            StudentAssessmentScore[]
   studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
   studentAssignments                 StudentAssignment[]
+  teacherSubjects                    TeacherSubjects[]
 
   @@unique([name, classId])
   @@index([classId])
@@ -519,6 +522,7 @@ model Term {
   assessmentRemarks                  AssessmentRemarks[]
   assignments                        Assignment[]
   studentAssignments                 StudentAssignment[]
+  teacherSubjects                    TeacherSubjects[]
 
   @@unique([name])
   @@map("terms")
@@ -540,6 +544,7 @@ model Session {
   assessmentRemarks                  AssessmentRemarks[]
   assignments                        Assignment[]
   studentAssignments                 StudentAssignment[]
+  teacherSubjects                    TeacherSubjects[]
 
   @@map("sessions")
 }
@@ -614,6 +619,7 @@ model Staff {
   staffJournalTransfers         StaffJournalTransfer[]
   staffSalaryOverrideComponents StaffSalaryOverrideComponent[]
   payrollProcesses              PayrollProcess[]
+  teacherSubjects               TeacherSubjects[]
 
   @@index([userId])
   @@index([StaffNumber])
@@ -1500,6 +1506,7 @@ model Subject {
   studentSubjectRegistrations StudentSubjectRegistration[]
   studentAssessmentScores     StudentAssessmentScore[]
   assignments                 Assignment[]
+  teacherSubjects             TeacherSubjects[]
 
   @@index([status])
   @@map("subjects")
@@ -1829,4 +1836,33 @@ model StudentAssignmentAttachment {
 
   @@index([studentAssignmentId])
   @@map("student_assignment_attachments")
+}
+
+model TeacherSubjects {
+  id         String      @id @default(uuid()) @db.Char(36)
+  staffId    String      @map("staff_id") @db.Char(36)
+  staff      Staff       @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  subjectId  String      @map("subject_id") @db.Char(36)
+  classId    String      @map("class_id") @db.Char(36)
+  subclassId String      @map("subclass_id") @db.Char(36)
+  sessionId  String      @map("session_id") @db.Char(36)
+  termId     String      @map("term_id") @db.Char(36)
+  createdAt  DateTime    @default(now()) @map("created_at")
+  updatedAt  DateTime    @default(now()) @map("updated_at")
+  subject    Subject     @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  class      SchoolClass @relation(fields: [classId], references: [id], onDelete: Restrict)
+  subclass   SubClass    @relation(fields: [subclassId], references: [id], onDelete: Restrict)
+  session    Session     @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  term       Term        @relation(fields: [termId], references: [id], onDelete: Restrict)
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  userId     String?     @db.Char(36)
+
+  @@unique([staffId, subjectId, classId, subclassId, sessionId, termId])
+  @@index([staffId])
+  @@index([subjectId])
+  @@index([classId])
+  @@index([subclassId])
+  @@index([sessionId])
+  @@index([termId])
+  @@map("teacher_subjects")
 }

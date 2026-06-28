@@ -1,8 +1,6 @@
 import prisma from "../utils/prisma";
 import bcrypt from "bcryptjs";
 import { Gender, Prisma, StudentStatus, UserType } from "@prisma/client";
-import { defaulSubheadSettingsService } from "./defaulSubheadSettingsService";
-import { accountChartService } from "./accountChartService";
 
 export interface StudentData {
   id: string;
@@ -64,6 +62,24 @@ export class StudentService {
     return trimmed || null;
   }
 
+  private getEnvRoleId(key: "STUDENT_ROLE_ID" | "PARENT_ROLE_ID"): string | null {
+    const value = process.env[key]?.trim();
+    return value || null;
+  }
+
+  private async assignUserAppRole(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    roleId: string | null
+  ): Promise<void> {
+    if (!roleId) return;
+    await tx.userRole.upsert({
+      where: { userId },
+      create: { userId, roleId },
+      update: { roleId },
+    });
+  }
+
   private async assertStudentEmailAvailable(
     email: string,
     tx: Prisma.TransactionClient
@@ -97,7 +113,7 @@ export class StudentService {
       : { firstName: null, lastName: null };
     const hashedPassword = await bcrypt.hash(StudentService.DEFAULT_USER_PASSWORD, 10);
 
-    await tx.user.create({
+    const user = await tx.user.create({
       data: {
         email: input.guardianEmail,
         password: hashedPassword,
@@ -108,7 +124,10 @@ export class StudentService {
         isActive: true,
         createdById: input.createdById,
       },
+      select: { id: true },
     });
+
+    await this.assignUserAppRole(tx, user.id, this.getEnvRoleId("PARENT_ROLE_ID"));
   }
 
   private async assertClassExists(classId: string) {
@@ -223,6 +242,7 @@ export class StudentService {
             select: { id: true },
           });
           userId = user.id;
+          await this.assignUserAppRole(tx, userId, this.getEnvRoleId("STUDENT_ROLE_ID"));
         }
 
         return tx.student.create({
