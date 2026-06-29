@@ -24,7 +24,7 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [staffId, subjectId, classId, subclassId, sessionId, termId]
+ *             required: [staffId, subjectId, classId, sessionId, termId]
  *             properties:
  *               staffId:
  *                 type: string
@@ -34,6 +34,7 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                 type: string
  *               subclassId:
  *                 type: string
+ *                 nullable: true
  *               sessionId:
  *                 type: string
  *               termId:
@@ -105,7 +106,7 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [staffId, classId, subclassId, sessionId, termId, subjectIds]
+ *             required: [staffId, classId, sessionId, termId, subjectIds]
  *             properties:
  *               staffId:
  *                 type: string
@@ -113,6 +114,7 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                 type: string
  *               subclassId:
  *                 type: string
+ *                 nullable: true
  *               sessionId:
  *                 type: string
  *               termId:
@@ -146,9 +148,6 @@ export const teacherSubjectController = {
       if (!classId || typeof classId !== "string" || !classId.trim()) {
         return res.status(400).json({ success: false, message: "classId is required" });
       }
-      if (!subclassId || typeof subclassId !== "string" || !subclassId.trim()) {
-        return res.status(400).json({ success: false, message: "subclassId is required" });
-      }
       if (!sessionId || typeof sessionId !== "string" || !sessionId.trim()) {
         return res.status(400).json({ success: false, message: "sessionId is required" });
       }
@@ -157,6 +156,9 @@ export const teacherSubjectController = {
       }
       if (!Array.isArray(subjectIds) || subjectIds.length === 0) {
         return res.status(400).json({ success: false, message: "subjectIds must be a non-empty array" });
+      }
+      if (!isStringOrNullOrUndefined(subclassId)) {
+        return res.status(400).json({ success: false, message: "subclassId must be a string or null" });
       }
       if (!isStringOrNullOrUndefined(userId)) {
         return res.status(400).json({ success: false, message: "userId must be a string or null" });
@@ -173,10 +175,10 @@ export const teacherSubjectController = {
       const created = await teacherSubjectService.createMany({
         staffId: staffId.trim(),
         classId: classId.trim(),
-        subclassId: subclassId.trim(),
         sessionId: sessionId.trim(),
         termId: termId.trim(),
         subjectIds: subjectIds.map((id: string) => id.trim()),
+        ...(subclassId !== undefined ? { subclassId: subclassId?.trim() || null } : {}),
         ...(userId !== undefined ? { userId: userId?.trim() || null } : {}),
       });
 
@@ -203,14 +205,14 @@ export const teacherSubjectController = {
       if (!classId || typeof classId !== "string" || !classId.trim()) {
         return res.status(400).json({ success: false, message: "classId is required" });
       }
-      if (!subclassId || typeof subclassId !== "string" || !subclassId.trim()) {
-        return res.status(400).json({ success: false, message: "subclassId is required" });
-      }
       if (!sessionId || typeof sessionId !== "string" || !sessionId.trim()) {
         return res.status(400).json({ success: false, message: "sessionId is required" });
       }
       if (!termId || typeof termId !== "string" || !termId.trim()) {
         return res.status(400).json({ success: false, message: "termId is required" });
+      }
+      if (!isStringOrNullOrUndefined(subclassId)) {
+        return res.status(400).json({ success: false, message: "subclassId must be a string or null" });
       }
       if (!isStringOrNullOrUndefined(userId)) {
         return res.status(400).json({ success: false, message: "userId must be a string or null" });
@@ -220,9 +222,9 @@ export const teacherSubjectController = {
         staffId: staffId.trim(),
         subjectId: subjectId.trim(),
         classId: classId.trim(),
-        subclassId: subclassId.trim(),
         sessionId: sessionId.trim(),
         termId: termId.trim(),
+        ...(subclassId !== undefined ? { subclassId: subclassId?.trim() || null } : {}),
         ...(userId !== undefined ? { userId: userId?.trim() || null } : {}),
       });
 
@@ -378,6 +380,7 @@ export const teacherSubjectController = {
    *                 type: string
    *               subclassId:
    *                 type: string
+   *                 nullable: true
    *               sessionId:
    *                 type: string
    *               termId:
@@ -465,8 +468,8 @@ export const teacherSubjectController = {
       if (classId !== undefined && (typeof classId !== "string" || !classId.trim())) {
         return res.status(400).json({ success: false, message: "classId must be a non-empty string" });
       }
-      if (subclassId !== undefined && (typeof subclassId !== "string" || !subclassId.trim())) {
-        return res.status(400).json({ success: false, message: "subclassId must be a non-empty string" });
+      if (!isStringOrNullOrUndefined(subclassId)) {
+        return res.status(400).json({ success: false, message: "subclassId must be a string or null" });
       }
       if (sessionId !== undefined && (typeof sessionId !== "string" || !sessionId.trim())) {
         return res.status(400).json({ success: false, message: "sessionId must be a non-empty string" });
@@ -482,7 +485,7 @@ export const teacherSubjectController = {
         ...(staffId !== undefined ? { staffId: staffId.trim() } : {}),
         ...(subjectId !== undefined ? { subjectId: subjectId.trim() } : {}),
         ...(classId !== undefined ? { classId: classId.trim() } : {}),
-        ...(subclassId !== undefined ? { subclassId: subclassId.trim() } : {}),
+        ...(subclassId !== undefined ? { subclassId: subclassId?.trim() || null } : {}),
         ...(sessionId !== undefined ? { sessionId: sessionId.trim() } : {}),
         ...(termId !== undefined ? { termId: termId.trim() } : {}),
         ...(userId !== undefined ? { userId: userId?.trim() || null } : {}),

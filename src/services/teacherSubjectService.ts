@@ -23,22 +23,20 @@ export class TeacherSubjectService {
     staffId: string;
     subjectId: string;
     classId: string;
-    subclassId: string;
+    subclassId?: string | null;
     sessionId: string;
     termId: string;
     userId?: string | null;
   }): Promise<{ userId: string | null }> {
-    const [staff, subject, cls, subclass, session, term] = await Promise.all([
+    const subclassId = input.subclassId?.trim() || null;
+
+    const [staff, subject, cls, session, term] = await Promise.all([
       this.prisma.staff.findUnique({
         where: { id: input.staffId },
         select: { id: true, userId: true },
       }),
       this.prisma.subject.findUnique({ where: { id: input.subjectId }, select: { id: true } }),
       this.prisma.schoolClass.findUnique({ where: { id: input.classId }, select: { id: true } }),
-      this.prisma.subClass.findUnique({
-        where: { id: input.subclassId },
-        select: { id: true, classId: true },
-      }),
       this.prisma.session.findUnique({ where: { id: input.sessionId }, select: { id: true } }),
       this.prisma.term.findUnique({ where: { id: input.termId }, select: { id: true } }),
     ]);
@@ -46,11 +44,18 @@ export class TeacherSubjectService {
     if (!staff) throw new Error("Invalid staffId");
     if (!subject) throw new Error("Invalid subjectId");
     if (!cls) throw new Error("Invalid classId");
-    if (!subclass) throw new Error("Invalid subclassId");
     if (!session) throw new Error("Invalid sessionId");
     if (!term) throw new Error("Invalid termId");
-    if (subclass.classId && subclass.classId !== input.classId) {
-      throw new Error("subclassId does not belong to classId");
+
+    if (subclassId) {
+      const subclass = await this.prisma.subClass.findUnique({
+        where: { id: subclassId },
+        select: { id: true, classId: true },
+      });
+      if (!subclass) throw new Error("Invalid subclassId");
+      if (subclass.classId && subclass.classId !== input.classId) {
+        throw new Error("subclassId does not belong to classId");
+      }
     }
 
     let userId = input.userId?.trim() || null;
@@ -68,7 +73,7 @@ export class TeacherSubjectService {
     staffId: string;
     subjectId: string;
     classId: string;
-    subclassId: string;
+    subclassId?: string | null;
     sessionId: string;
     termId: string;
     userId?: string | null;
@@ -76,14 +81,12 @@ export class TeacherSubjectService {
     const staffId = input.staffId.trim();
     const subjectId = input.subjectId.trim();
     const classId = input.classId.trim();
-    const subclassId = input.subclassId.trim();
+    const subclassId = input.subclassId?.trim() || null;
     const sessionId = input.sessionId.trim();
     const termId = input.termId.trim();
 
-    if (!staffId || !subjectId || !classId || !subclassId || !sessionId || !termId) {
-      throw new Error(
-        "staffId, subjectId, classId, subclassId, sessionId, and termId are required"
-      );
+    if (!staffId || !subjectId || !classId || !sessionId || !termId) {
+      throw new Error("staffId, subjectId, classId, sessionId, and termId are required");
     }
 
     const { userId } = await this.assertRefs({
@@ -120,7 +123,7 @@ export class TeacherSubjectService {
   async createMany(input: {
     staffId: string;
     classId: string;
-    subclassId: string;
+    subclassId?: string | null;
     sessionId: string;
     termId: string;
     userId?: string | null;
@@ -128,12 +131,12 @@ export class TeacherSubjectService {
   }): Promise<{ teacherSubjects: TeacherSubjectData[]; count: number }> {
     const staffId = input.staffId.trim();
     const classId = input.classId.trim();
-    const subclassId = input.subclassId.trim();
+    const subclassId = input.subclassId?.trim() || null;
     const sessionId = input.sessionId.trim();
     const termId = input.termId.trim();
 
-    if (!staffId || !classId || !subclassId || !sessionId || !termId) {
-      throw new Error("staffId, classId, subclassId, sessionId, and termId are required");
+    if (!staffId || !classId || !sessionId || !termId) {
+      throw new Error("staffId, classId, sessionId, and termId are required");
     }
     if (!Array.isArray(input.subjectIds) || input.subjectIds.length === 0) {
       throw new Error("subjectIds must be a non-empty array");
@@ -233,7 +236,7 @@ export class TeacherSubjectService {
       staffId?: string;
       subjectId?: string;
       classId?: string;
-      subclassId?: string;
+      subclassId?: string | null;
       sessionId?: string;
       termId?: string;
       userId?: string | null;
@@ -246,7 +249,8 @@ export class TeacherSubjectService {
       staffId: (input.staffId ?? existing.staffId).trim(),
       subjectId: (input.subjectId ?? existing.subjectId).trim(),
       classId: (input.classId ?? existing.classId).trim(),
-      subclassId: (input.subclassId ?? existing.subclassId).trim(),
+      subclassId:
+        input.subclassId !== undefined ? input.subclassId?.trim() || null : existing.subclassId,
       sessionId: (input.sessionId ?? existing.sessionId).trim(),
       termId: (input.termId ?? existing.termId).trim(),
       userId: input.userId !== undefined ? input.userId?.trim() || null : existing.userId,
