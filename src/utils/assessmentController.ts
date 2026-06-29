@@ -11,7 +11,8 @@ export function httpStatusFromAssessmentMessage(message: string): number {
     m.includes("cannot add") ||
     m.includes("locked") ||
     m.includes("referenced") ||
-    m.includes("existing")
+    m.includes("existing") ||
+    m.includes("overlap")
   ) {
     return 409;
   }
@@ -21,9 +22,19 @@ export function httpStatusFromAssessmentMessage(message: string): number {
     m.includes("cannot") ||
     m.includes("must") ||
     m.includes("exceed") ||
-    m.includes("greater")
+    m.includes("greater") ||
+    m.includes("no active period")
   ) {
     return 400;
+  }
+  if (m.includes("only available to student") || m.includes("only available to parent") || m.includes("only available to staff") || m.includes("forbidden")) {
+    return 403;
+  }
+  if (m.includes("unauthorized")) {
+    return 401;
+  }
+  if (m.includes("no student profile") || m.includes("no staff profile")) {
+    return 404;
   }
   return 500;
 }

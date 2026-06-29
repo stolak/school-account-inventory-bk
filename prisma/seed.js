@@ -7,6 +7,24 @@ const prisma = new PrismaClient();
 
 const SUPPLIER_SUBHEAD_SETTINGS_ID = "SUPPLIER_SUBHEAD";
 
+const STUDENT_ROLE_ID = "a2000001-0002-4002-8002-000000000008";
+const PARENT_ROLE_ID = "a2000001-0002-4002-8002-000000000009";
+const SYSTEM_ADMIN_ROLE_ID = "a2000001-0002-4002-8002-000000000002";
+const ACCOUNTANT_ROLE_ID = "a2000001-0002-4002-8002-000000000004";
+const REGISTRAR_ROLE_ID = "a2000001-0002-4002-8002-000000000005";
+const STORE_CLERK_ROLE_ID = "a2000001-0002-4002-8002-000000000006";
+const CLASS_TEACHER_ROLE_ID = "a2000001-0002-4002-8002-000000000010";
+const SUBJECT_TEACHER_ROLE_ID = "a2000001-0002-4002-8002-000000000011";
+
+async function assignUserAppRole(userId, roleId) {
+  if (!userId || !roleId) return;
+  await prisma.userRole.upsert({
+    where: { userId },
+    update: { roleId },
+    create: { userId, roleId },
+  });
+}
+
 /** Mirror SupplierService.createSupplier — ledger under SUPPLIER_SUBHEAD (Accounts Payable). */
 async function ensureSupplierLedgerAccount(supplier) {
   const defaultSubhead = await prisma.defaulSubheadSettings.findUnique({
@@ -242,6 +260,133 @@ async function upsertStaffWithUser(hashedPassword, input) {
       id: input.id,
       StaffNumber: normalizedStaffNumber,
       ...staffData,
+    },
+  });
+
+  if (input.appRoleId) {
+    await assignUserAppRole(user.id, input.appRoleId);
+  }
+
+  return user.id;
+}
+
+/** Mirror StudentService.ensureGuardianUser — Parent account; reuses existing user when email is taken. */
+async function ensureGuardianUser(hashedPassword, input) {
+  const guardianEmail = input.guardianEmail?.trim().toLowerCase();
+  if (!guardianEmail) return null;
+
+  const { firstName, lastName } = input.guardianName
+    ? splitStaffName(input.guardianName)
+    : { firstName: null, lastName: null };
+
+  const user = await prisma.user.upsert({
+    where: { email: guardianEmail },
+    update: {},
+    create: {
+      ...(input.userId ? { id: input.userId } : {}),
+      email: guardianEmail,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      phoneNumber: input.guardianContact?.trim() || null,
+      userType: "Parent",
+      isActive: true,
+      isVerified: true,
+      isEmailVerified: true,
+      isPhoneVerified: false,
+      isDeleted: false,
+      status: "active",
+      createdById: input.createdById,
+    },
+  });
+
+  await assignUserAppRole(user.id, PARENT_ROLE_ID);
+
+  return user.id;
+}
+
+/** Mirror StudentService.createStudent — Student user (when email present), guardian Parent user, and student row. */
+async function upsertStudentWithUsers(hashedPassword, st) {
+  const studentEmail = st.studentEmail?.trim().toLowerCase() || null;
+  const guardianEmail = st.guardianEmail?.trim().toLowerCase() || null;
+
+  if (guardianEmail && guardianEmail !== studentEmail) {
+    await ensureGuardianUser(hashedPassword, {
+      guardianEmail,
+      guardianName: st.guardianName,
+      guardianContact: st.guardianContact,
+      createdById: st.createdById,
+      userId: st.guardianUserId,
+    });
+  }
+
+  let userId = null;
+  if (studentEmail) {
+    const user = await prisma.user.upsert({
+      where: { email: studentEmail },
+      update: {
+        firstName: st.firstName,
+        lastName: st.lastName,
+        userType: "Student",
+        isActive: true,
+      },
+      create: {
+        ...(st.userId ? { id: st.userId } : {}),
+        email: studentEmail,
+        password: hashedPassword,
+        firstName: st.firstName,
+        lastName: st.lastName,
+        userType: "Student",
+        isActive: true,
+        isVerified: true,
+        isEmailVerified: true,
+        isPhoneVerified: false,
+        isDeleted: false,
+        status: "active",
+        createdById: st.createdById,
+      },
+    });
+    userId = user.id;
+    await assignUserAppRole(userId, STUDENT_ROLE_ID);
+  }
+
+  return prisma.student.upsert({
+    where: { admissionNumber: st.admissionNumber },
+    update: {
+      firstName: st.firstName,
+      middleName: st.middleName,
+      lastName: st.lastName,
+      studentEmail,
+      gender: st.gender,
+      dateOfBirth: st.dateOfBirth,
+      classId: st.classId,
+      subClassId: st.subClassId,
+      guardianName: st.guardianName,
+      guardianEmail,
+      guardianContact: st.guardianContact,
+      address: st.address,
+      status: st.status,
+      createdById: st.createdById,
+      userId,
+    },
+    create: {
+      id: st.id,
+      admissionNumber: st.admissionNumber,
+      firstName: st.firstName,
+      middleName: st.middleName,
+      lastName: st.lastName,
+      studentEmail,
+      gender: st.gender,
+      dateOfBirth: st.dateOfBirth,
+      classId: st.classId,
+      subClassId: st.subClassId,
+      guardianName: st.guardianName,
+      guardianEmail,
+      guardianContact: st.guardianContact,
+      address: st.address,
+      status: st.status,
+      createdById: st.createdById,
+      userId,
     },
   });
 }
@@ -570,6 +715,13 @@ async function main() {
       "temp_journal_transfers",
     ];
 
+    const teacherBasePrivileges = [
+      "active_period.read",
+      "sessions.read",
+      "terms.read",
+      ...pickResources(["school_classes", "students", "sub_classes", "staff"], ["read"]),
+    ];
+
     const appRoles = [
       {
         id: "a2000001-0002-4002-8002-000000000001",
@@ -578,7 +730,7 @@ async function main() {
         privilegeNames: allPrivilegeNames,
       },
       {
-        id: "a2000001-0002-4002-8002-000000000002",
+        id: SYSTEM_ADMIN_ROLE_ID,
         name: "System Administrator",
         status: "active",
         privilegeNames: allPrivilegeNames.filter((name) => name !== "upload.write"),
@@ -603,7 +755,7 @@ async function main() {
         ],
       },
       {
-        id: "a2000001-0002-4002-8002-000000000004",
+        id: ACCOUNTANT_ROLE_ID,
         name: "Accountant",
         status: "active",
         privilegeNames: [
@@ -627,7 +779,7 @@ async function main() {
         ],
       },
       {
-        id: "a2000001-0002-4002-8002-000000000005",
+        id: REGISTRAR_ROLE_ID,
         name: "Registrar",
         status: "active",
         privilegeNames: [
@@ -638,7 +790,7 @@ async function main() {
         ],
       },
       {
-        id: "a2000001-0002-4002-8002-000000000006",
+        id: STORE_CLERK_ROLE_ID,
         name: "Store Clerk",
         status: "active",
         privilegeNames: [
@@ -659,6 +811,36 @@ async function main() {
         name: "Viewer",
         status: "active",
         privilegeNames: allReadPrivilegeNames,
+      },
+      {
+        id: STUDENT_ROLE_ID,
+        name: "Student",
+        status: "active",
+        privilegeNames: [
+          "active_period.read",
+          "sessions.read",
+          "terms.read",
+          "school_classes.read",
+          "sub_classes.read",
+        ],
+      },
+      {
+        id: PARENT_ROLE_ID,
+        name: "Parent",
+        status: "active",
+        privilegeNames: ["active_period.read", "students.read", "sessions.read", "terms.read"],
+      },
+      {
+        id: CLASS_TEACHER_ROLE_ID,
+        name: "Class Teacher",
+        status: "active",
+        privilegeNames: teacherBasePrivileges,
+      },
+      {
+        id: SUBJECT_TEACHER_ROLE_ID,
+        name: "Subject Teacher",
+        status: "active",
+        privilegeNames: teacherBasePrivileges,
       },
     ];
 
@@ -715,6 +897,7 @@ async function main() {
       // School Management
       { route: "/classes", caption: "Classes & sub-classes" },
       { route: "/assessment-setup", caption: "Assessment setup" },
+      { route: "/assignment-setup", caption: "Assignments setup" },
       { route: "/assessment-score-entry", caption: "Assessment score entry" },
       { route: "/subject-setup", caption: "subject Setup" },
       { route: "/students", caption: "Students" },
@@ -722,6 +905,8 @@ async function main() {
       { route: "/sessions", caption: "Sessions & terms" },
       { route: "/student-collections", caption: "Student Collections" },
       { route: "/staff-collections", caption: "Staff Collections" },
+      { route: "/my-assignments", caption: "My Assignments" },
+
       // Analytics
       {
         route: "/reports/store-inventory-balance-matrix",
@@ -786,6 +971,40 @@ async function main() {
       }
     }
     console.log(`   ✓ menus linked to Super Admin and System Administrator roles`);
+
+    const myAssignmentsMenu = await prisma.menu.findUnique({
+      where: { route: "/my-assignments" },
+      select: { id: true },
+    });
+    if (myAssignmentsMenu) {
+      const existing = await prisma.roleMenu.findFirst({
+        where: { roleId: STUDENT_ROLE_ID, menuId: myAssignmentsMenu.id },
+      });
+      if (!existing) {
+        await prisma.roleMenu.create({
+          data: { roleId: STUDENT_ROLE_ID, menuId: myAssignmentsMenu.id },
+        });
+      }
+    }
+    console.log("   ✓ My Assignments menu linked to Student role");
+
+    const assignmentSetupMenu = await prisma.menu.findUnique({
+      where: { route: "/assignment-setup" },
+      select: { id: true },
+    });
+    if (assignmentSetupMenu) {
+      for (const roleId of [CLASS_TEACHER_ROLE_ID, SUBJECT_TEACHER_ROLE_ID]) {
+        const existing = await prisma.roleMenu.findFirst({
+          where: { roleId, menuId: assignmentSetupMenu.id },
+        });
+        if (!existing) {
+          await prisma.roleMenu.create({
+            data: { roleId, menuId: assignmentSetupMenu.id },
+          });
+        }
+      }
+    }
+    console.log("   ✓ Assignments setup menu linked to Class Teacher and Subject Teacher roles");
 
     // Chart of accounts — AccountGroup & AccountHead (fixed IDs for idempotent re-seeding)
     console.log("📒 Seeding account groups and account heads...");
@@ -3461,6 +3680,7 @@ async function main() {
         dateOfAppointment: new Date("2015-09-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: SYSTEM_ADMIN_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909002",
@@ -3477,6 +3697,7 @@ async function main() {
         dateOfAppointment: new Date("2017-01-15"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: SYSTEM_ADMIN_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909003",
@@ -3493,6 +3714,7 @@ async function main() {
         dateOfAppointment: new Date("2019-09-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: CLASS_TEACHER_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909004",
@@ -3509,6 +3731,7 @@ async function main() {
         dateOfAppointment: new Date("2020-09-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: SUBJECT_TEACHER_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909005",
@@ -3525,6 +3748,7 @@ async function main() {
         dateOfAppointment: new Date("2021-01-10"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: SUBJECT_TEACHER_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909006",
@@ -3532,7 +3756,7 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909006",
         email: "chidi.okafor@staff.school.ng",
         name: "Mr. Chidi Okafor",
-        position: "teacher",
+        position: "subject_teacher",
         employmentType: "Permanent",
         departmentId: DEPT.ACADEMICS,
         gradeLevelId: GL.GL2,
@@ -3541,6 +3765,7 @@ async function main() {
         dateOfAppointment: new Date("2022-09-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: SUBJECT_TEACHER_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909007",
@@ -3557,6 +3782,7 @@ async function main() {
         dateOfAppointment: new Date("2018-03-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: ACCOUNTANT_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909008",
@@ -3564,7 +3790,7 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909008",
         email: "emmanuel.nwosu@staff.school.ng",
         name: "Mr. Emmanuel Nwosu",
-        position: "assistant_teacher",
+        position: "class_teacher",
         employmentType: "Contractual",
         departmentId: DEPT.ACADEMICS,
         gradeLevelId: GL.GL1,
@@ -3573,13 +3799,140 @@ async function main() {
         dateOfAppointment: new Date("2024-09-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: CLASS_TEACHER_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-345678909009",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a009",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909009",
+        email: "ikechukwu.nwankwo@staff.school.ng",
+        name: "Mr. Ikechukwu Nwankwo",
+        position: "admin",
+        employmentType: "Permanent",
+        departmentId: DEPT.ADMIN,
+        gradeLevelId: GL.GL4,
+        step: 4,
+        salary: 410000,
+        dateOfAppointment: new Date("2019-01-08"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: REGISTRAR_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900a",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00a",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900a",
+        email: "halima.bello@staff.school.ng",
+        name: "Mrs. Halima Bello",
+        position: "admin",
+        employmentType: "Permanent",
+        departmentId: DEPT.ADMIN,
+        gradeLevelId: GL.GL3,
+        step: 3,
+        salary: 360000,
+        dateOfAppointment: new Date("2020-09-01"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: REGISTRAR_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900b",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00b",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900b",
+        email: "sani.ibrahim@staff.school.ng",
+        name: "Mr. Sani Ibrahim",
+        position: "admin",
+        employmentType: "Permanent",
+        departmentId: DEPT.MAINTENANCE,
+        gradeLevelId: GL.GL2,
+        step: 2,
+        salary: 280000,
+        dateOfAppointment: new Date("2021-03-15"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: STORE_CLERK_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900c",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00c",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900c",
+        email: "michael.ode@staff.school.ng",
+        name: "Mr. Michael Ode",
+        position: "admin",
+        employmentType: "Permanent",
+        departmentId: DEPT.MAINTENANCE,
+        gradeLevelId: GL.GL2,
+        step: 2,
+        salary: 275000,
+        dateOfAppointment: new Date("2022-01-10"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: STORE_CLERK_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900d",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00d",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900d",
+        email: "chinwe.okafor@staff.school.ng",
+        name: "Mrs. Chinwe Okafor",
+        position: "admin",
+        employmentType: "Permanent",
+        departmentId: DEPT.ACCOUNTS,
+        gradeLevelId: GL.GL3,
+        step: 3,
+        salary: 350000,
+        dateOfAppointment: new Date("2021-06-01"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: ACCOUNTANT_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900e",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00e",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900e",
+        email: "grace.okon@staff.school.ng",
+        name: "Mrs. Grace Okon",
+        position: "class_teacher",
+        employmentType: "Permanent",
+        departmentId: DEPT.ACADEMICS,
+        gradeLevelId: GL.GL3,
+        step: 3,
+        salary: 370000,
+        dateOfAppointment: new Date("2020-09-01"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: CLASS_TEACHER_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900f",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00f",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900f",
+        email: "david.ibrahim@staff.school.ng",
+        name: "Mr. David Ibrahim",
+        position: "subject_teacher",
+        employmentType: "Permanent",
+        departmentId: DEPT.ACADEMICS,
+        gradeLevelId: GL.GL2,
+        step: 2,
+        salary: 310000,
+        dateOfAppointment: new Date("2023-09-01"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: SUBJECT_TEACHER_ROLE_ID,
       },
     ];
 
     for (const member of staffMembers) {
       await upsertStaffWithUser(hashedPassword, member);
     }
-    console.log(`   ✓ ${staffMembers.length} staff (with user accounts, password: 12345)`);
+    const staffRoleCounts = staffMembers.reduce((acc, member) => {
+      const key = member.appRoleId ?? "unassigned";
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+    console.log(
+      `   ✓ ${staffMembers.length} staff (with user accounts, password: 12345) — roles: ${staffRoleCounts[SYSTEM_ADMIN_ROLE_ID] ?? 0} System Administrator, ${staffRoleCounts[REGISTRAR_ROLE_ID] ?? 0} Registrar, ${staffRoleCounts[STORE_CLERK_ROLE_ID] ?? 0} Store Clerk, ${staffRoleCounts[ACCOUNTANT_ROLE_ID] ?? 0} Accountant, ${staffRoleCounts[CLASS_TEACHER_ROLE_ID] ?? 0} Class Teacher, ${staffRoleCounts[SUBJECT_TEACHER_ROLE_ID] ?? 0} Subject Teacher`
+    );
 
     // Cashiers (linked user or staff + cash ledger for sales posting)
     console.log("💵 Seeding cashiers...");
@@ -3759,6 +4112,8 @@ async function main() {
     const students = [
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907001",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222201",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222301",
         admissionNumber: "ADM2025001",
         firstName: "Chioma",
         middleName: "Ada",
@@ -3777,6 +4132,8 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907002",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222202",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222302",
         admissionNumber: "ADM2025002",
         firstName: "Ibrahim",
         middleName: null,
@@ -3795,6 +4152,7 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907003",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222303",
         admissionNumber: "ADM2025003",
         firstName: "Grace",
         middleName: "Chinelo",
@@ -3813,6 +4171,8 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907004",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222204",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222304",
         admissionNumber: "ADM2025004",
         firstName: "David",
         middleName: "Oluwaseun",
@@ -3831,6 +4191,8 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907005",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222205",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222305",
         admissionNumber: "ADM2025005",
         firstName: "Amina",
         middleName: null,
@@ -3849,6 +4211,8 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907006",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222206",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222306",
         admissionNumber: "ADM2025006",
         firstName: "Emmanuel",
         middleName: "Chukwu",
@@ -3867,6 +4231,7 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907007",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222307",
         admissionNumber: "ADM2025007",
         firstName: "Fatima",
         middleName: "Zainab",
@@ -3885,6 +4250,8 @@ async function main() {
       },
       {
         id: "e6f7a8b9-c0d1-4234-e012-345678907008",
+        userId: "f1a2b3c4-d5e6-4789-a001-222222222208",
+        guardianUserId: "f1a2b3c4-d5e6-4789-a001-222222222308",
         admissionNumber: "ADM2025008",
         firstName: "Samuel",
         middleName: null,
@@ -3904,34 +4271,51 @@ async function main() {
     ];
 
     let studentLedgerCount = 0;
+    let studentUserCount = 0;
+    let guardianUserCount = 0;
+    const guardianEmailsSeeded = new Set();
+
     for (const st of students) {
-      const student = await prisma.student.upsert({
-        where: { admissionNumber: st.admissionNumber },
-        update: {
-          firstName: st.firstName,
-          middleName: st.middleName,
-          lastName: st.lastName,
-          studentEmail: st.studentEmail,
-          gender: st.gender,
-          dateOfBirth: st.dateOfBirth,
-          classId: st.classId,
-          subClassId: st.subClassId,
-          guardianName: st.guardianName,
-          guardianEmail: st.guardianEmail,
-          guardianContact: st.guardianContact,
-          address: st.address,
-          status: st.status,
-          createdById: st.createdById,
-        },
-        create: st,
-      });
+      const guardianEmail = st.guardianEmail?.trim().toLowerCase();
+      const studentEmail = st.studentEmail?.trim().toLowerCase();
+      const guardianWasNew =
+        guardianEmail && guardianEmail !== studentEmail && !guardianEmailsSeeded.has(guardianEmail);
+
+      await upsertStudentWithUsers(hashedPassword, st);
+
+      if (studentEmail) studentUserCount += 1;
+      if (guardianWasNew) {
+        guardianEmailsSeeded.add(guardianEmail);
+        guardianUserCount += 1;
+      }
       // No need of creating ledger accounts for students
       // const ledgerId = await ensureStudentLedgerAccount(student);
       // if (ledgerId) {
       //   studentLedgerCount += 1;
       // }
     }
-    console.log(`   ✓ ${students.length} students, ${studentLedgerCount} student ledger accounts`);
+    console.log(
+      `   ✓ ${students.length} students (${studentUserCount} student users, ${guardianUserCount} guardian users), ${studentLedgerCount} student ledger accounts`
+    );
+
+    const portalStudentUsers = await prisma.user.findMany({
+      where: { userType: "Student" },
+      select: { id: true },
+    });
+    for (const { id } of portalStudentUsers) {
+      await assignUserAppRole(id, STUDENT_ROLE_ID);
+    }
+
+    const portalParentUsers = await prisma.user.findMany({
+      where: { userType: "Parent" },
+      select: { id: true },
+    });
+    for (const { id } of portalParentUsers) {
+      await assignUserAppRole(id, PARENT_ROLE_ID);
+    }
+    console.log(
+      `   ✓ ${portalStudentUsers.length} student users and ${portalParentUsers.length} parent users linked to portal roles`
+    );
 
     // Academic sessions and terms
     console.log("📅 Seeding sessions and terms...");
@@ -4053,7 +4437,10 @@ async function main() {
     // Reset assessment/grading tables for idempotent reseed (dev seed data only)
     await prisma.studentAssessmentScore.deleteMany({});
     await prisma.studentBehaviouralAssessmentScore.deleteMany({});
+    await prisma.assessmentRemarks.deleteMany({});
+    await prisma.defaultClassRemarkSetup.deleteMany({});
     await prisma.studentSubjectRegistration.deleteMany({});
+    await prisma.teacherSubjects.deleteMany({});
     await prisma.classSubject.deleteMany({});
     await prisma.classAssessmentTemplate.deleteMany({});
     await prisma.assessmentComponent.deleteMany({});
@@ -4306,6 +4693,109 @@ async function main() {
           classId: row.classId,
           subclassId: row.subclassId,
           subjectId: row.subjectId,
+          sessionId: row.sessionId,
+          termId: row.termId,
+        },
+        create: row,
+      });
+    }
+
+    const STAFF = {
+      ADA: "a8b9c0d1-e2f3-4234-a012-345678909003",
+      JAMES: "a8b9c0d1-e2f3-4234-a012-345678909004",
+      FATIMA: "a8b9c0d1-e2f3-4234-a012-345678909005",
+      CHIDI: "a8b9c0d1-e2f3-4234-a012-345678909006",
+    };
+
+    const STAFF_USER = {
+      ADA: "a8b9c0d1-e2f3-4234-a012-34567890a003",
+      JAMES: "a8b9c0d1-e2f3-4234-a012-34567890a004",
+      FATIMA: "a8b9c0d1-e2f3-4234-a012-34567890a005",
+      CHIDI: "a8b9c0d1-e2f3-4234-a012-34567890a006",
+    };
+
+    const teacherSubjects = [
+      {
+        id: "f9a0b1c2-d3e4-4567-a890-123456ab0060",
+        staffId: STAFF.ADA,
+        userId: STAFF_USER.ADA,
+        subjectId: SUB.MTH,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "a0b1c2d3-e4f5-4678-b901-234567ab0061",
+        staffId: STAFF.ADA,
+        userId: STAFF_USER.ADA,
+        subjectId: SUB.ENG,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "b1c2d3e4-f5a6-4789-c012-345678ab0062",
+        staffId: STAFF.FATIMA,
+        userId: STAFF_USER.FATIMA,
+        subjectId: SUB.ENG,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1B,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "c2d3e4f5-a6b7-4890-d123-456789ab0063",
+        staffId: STAFF.JAMES,
+        userId: STAFF_USER.JAMES,
+        subjectId: SUB.MTH,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1B,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "d3e4f5a6-b7c8-4901-e234-567890ab0064",
+        staffId: STAFF.JAMES,
+        userId: STAFF_USER.JAMES,
+        subjectId: SUB.BST,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "e4f5a6b7-c8d9-4012-f345-678901ab0065",
+        staffId: STAFF.JAMES,
+        userId: STAFF_USER.JAMES,
+        subjectId: SUB.MTH,
+        classId: classIds.jss2,
+        subclassId: subClassIds.jss2A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "f5a6b7c8-d9e0-4123-a456-789012ab0066",
+        staffId: STAFF.CHIDI,
+        userId: STAFF_USER.CHIDI,
+        subjectId: SUB.CIV,
+        classId: classIds.jss2,
+        subclassId: subClassIds.jss2A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+    ];
+
+    for (const row of teacherSubjects) {
+      await prisma.teacherSubjects.upsert({
+        where: { id: row.id },
+        update: {
+          staffId: row.staffId,
+          userId: row.userId,
+          subjectId: row.subjectId,
+          classId: row.classId,
+          subclassId: row.subclassId,
           sessionId: row.sessionId,
           termId: row.termId,
         },
@@ -4848,7 +5338,7 @@ async function main() {
       `   ✓ ${assessmentTemplates.length} assessment templates, ${assessmentComponents.length} components`
     );
     console.log(
-      `   ✓ ${classAssessmentTemplates.length} class assessment assignments, ${subjects.length} subjects, ${classSubjects.length} class subjects`
+      `   ✓ ${classAssessmentTemplates.length} class assessment assignments, ${subjects.length} subjects, ${classSubjects.length} class subjects, ${teacherSubjects.length} teacher subjects`
     );
     console.log(
       `   ✓ ${studentSubjectRegistrations.length} student subject registrations, ${studentAssessmentScores.length} assessment scores`
@@ -4862,7 +5352,128 @@ async function main() {
     console.log(
       `   ✓ ${behaviouralGradingTemplates.length} behavioural grading template, ${behaviouralGradingItems.length} behavioural grade bands`
     );
-    console.log(`   ✓ ${studentBehaviouralAssessmentScores.length} student behavioural assessment scores`);
+    console.log(
+      `   ✓ ${studentBehaviouralAssessmentScores.length} student behavioural assessment scores`
+    );
+
+    const defaultClassRemarkSetups = [
+      {
+        id: "f3a4b5c6-d7e8-4901-a234-567890ab0063",
+        classId: classIds.jss1,
+        teacherRemark: "An excellent term. Maintain your outstanding work ethic and leadership.",
+        parentRemark: "We are proud of your consistent high performance.",
+        principalRemark: "Exemplary student. Keep setting the standard for others.",
+        headTeacherRemark: null,
+        classTeacherRemark: "Top performer in class. A role model to peers.",
+        otherRemark: null,
+        lowerBoundary: 75,
+        upperBoundary: 100,
+      },
+      {
+        id: "a4b5c6d7-e8f9-4012-b345-678901ab0064",
+        classId: classIds.jss1,
+        teacherRemark: "Very good performance. With more focus you can reach the top band.",
+        parentRemark: "Good progress this term. Encourage steady revision habits.",
+        principalRemark: null,
+        headTeacherRemark: null,
+        classTeacherRemark: "Reliable and attentive in class.",
+        otherRemark: null,
+        lowerBoundary: 65,
+        upperBoundary: 74.99,
+      },
+      {
+        id: "b5c6d7e8-f9a0-4123-c456-789012ab0065",
+        classId: classIds.jss1,
+        teacherRemark: "Good effort overall. Improve consistency in assignments and tests.",
+        parentRemark: "Please support daily study at home.",
+        principalRemark: null,
+        headTeacherRemark: null,
+        classTeacherRemark: null,
+        otherRemark: null,
+        lowerBoundary: 50,
+        upperBoundary: 64.99,
+      },
+      {
+        id: "c6d7e8f9-a0b1-4234-d567-890123ab0066",
+        classId: classIds.jss1,
+        teacherRemark: "Fair performance. More effort is required in core subjects.",
+        parentRemark: "Monitor homework completion and class attendance.",
+        principalRemark: null,
+        headTeacherRemark: null,
+        classTeacherRemark: null,
+        otherRemark: null,
+        lowerBoundary: 40,
+        upperBoundary: 49.99,
+      },
+      {
+        id: "d7e8f9a0-b1c2-4345-e678-901234ab0067",
+        classId: classIds.jss1,
+        teacherRemark: "Needs significant improvement. Extra coaching and practice are advised.",
+        parentRemark: "Urgent attention needed. Please meet with the class teacher.",
+        principalRemark: "Parent conference recommended.",
+        headTeacherRemark: null,
+        classTeacherRemark: null,
+        otherRemark: null,
+        lowerBoundary: 0,
+        upperBoundary: 39.99,
+      },
+      {
+        id: "e8f9a0b1-c2d3-4456-f789-012345ab0068",
+        classId: classIds.jss2,
+        teacherRemark: "Excellent overall average. Continue your disciplined approach to learning.",
+        parentRemark: null,
+        principalRemark: "Commendable performance across subjects.",
+        headTeacherRemark: null,
+        classTeacherRemark: "Shows maturity and initiative.",
+        otherRemark: null,
+        lowerBoundary: 70,
+        upperBoundary: 100,
+      },
+      {
+        id: "f9a0b1c2-d3e4-4567-a890-123456ab0069",
+        classId: classIds.jss2,
+        teacherRemark: "Good average score. Strengthen weak subjects to move higher.",
+        parentRemark: "Encourage regular revision, especially in mathematics and English.",
+        principalRemark: null,
+        headTeacherRemark: null,
+        classTeacherRemark: null,
+        otherRemark: null,
+        lowerBoundary: 50,
+        upperBoundary: 69.99,
+      },
+      {
+        id: "a0b1c2d3-e4f5-4678-b901-234567ab0070",
+        classId: classIds.jss2,
+        teacherRemark: "Below expected average. Immediate improvement plan required.",
+        parentRemark: "Please schedule a meeting with the school.",
+        principalRemark: null,
+        headTeacherRemark: null,
+        classTeacherRemark: null,
+        otherRemark: null,
+        lowerBoundary: 0,
+        upperBoundary: 49.99,
+      },
+    ];
+
+    for (const row of defaultClassRemarkSetups) {
+      await prisma.defaultClassRemarkSetup.upsert({
+        where: { id: row.id },
+        update: {
+          classId: row.classId,
+          teacherRemark: row.teacherRemark,
+          parentRemark: row.parentRemark,
+          principalRemark: row.principalRemark,
+          headTeacherRemark: row.headTeacherRemark,
+          classTeacherRemark: row.classTeacherRemark,
+          otherRemark: row.otherRemark,
+          lowerBoundary: row.lowerBoundary,
+          upperBoundary: row.upperBoundary,
+        },
+        create: row,
+      });
+    }
+
+    console.log(`   ✓ ${defaultClassRemarkSetups.length} default class remark setups`);
 
     // Class default billings (amounts per class for current session / term)
     console.log("📋 Seeding class default billings...");
