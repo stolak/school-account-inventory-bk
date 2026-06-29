@@ -16,6 +16,37 @@ const STORE_CLERK_ROLE_ID = "a2000001-0002-4002-8002-000000000006";
 const CLASS_TEACHER_ROLE_ID = "a2000001-0002-4002-8002-000000000010";
 const SUBJECT_TEACHER_ROLE_ID = "a2000001-0002-4002-8002-000000000011";
 
+const MENU_SCHOOL_MANAGEMENT_ID = "menu0001-0000-4000-8000-000000000001";
+const MENU_INVENTORY_OPS_ID = "menu0001-0000-4000-8000-000000000002";
+
+async function ensureRoleMenu(roleId, menuId) {
+  const existing = await prisma.roleMenu.findFirst({
+    where: { roleId, menuId },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const created = await prisma.roleMenu.create({
+    data: { roleId, menuId },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+async function ensureRoleMenuChild(roleMenuId, menuChildId) {
+  const existing = await prisma.roleMenuChild.findFirst({
+    where: { roleMenuId, menuChildId },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const created = await prisma.roleMenuChild.create({
+    data: { roleMenuId, menuChildId },
+    select: { id: true },
+  });
+  return created.id;
+}
+
 async function assignUserAppRole(userId, roleId) {
   if (!userId || !roleId) return;
   await prisma.userRole.upsert({
@@ -958,6 +989,116 @@ async function main() {
     }
     console.log(`   ✓ ${sidebarMenus.length} menus`);
 
+    const groupedMenus = [
+      {
+        id: MENU_SCHOOL_MANAGEMENT_ID,
+        route: "/school-management",
+        caption: "School Management",
+      },
+      {
+        id: MENU_INVENTORY_OPS_ID,
+        route: "/inventory-operations",
+        caption: "Inventory Operations",
+      },
+    ];
+
+    for (const menu of groupedMenus) {
+      await prisma.menu.upsert({
+        where: { id: menu.id },
+        update: { route: menu.route, caption: menu.caption, status: "Active" },
+        create: { ...menu, status: "Active" },
+      });
+    }
+
+    const menuChildren = [
+      {
+        id: "mc000001-0000-4000-8000-000000000001",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Academic setup",
+        route: "#",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000002",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Classes & sub-classes",
+        route: "/classes",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000003",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Students",
+        route: "/students",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000004",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Staff",
+        route: "/staff",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000005",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Sessions & terms",
+        route: "/sessions",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000006",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Assessment setup",
+        route: "/assessment-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000007",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Assignments setup",
+        route: "/assignment-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000008",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Subject setup",
+        route: "/subject-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000009",
+        menuId: MENU_INVENTORY_OPS_ID,
+        name: "Stock movement",
+        route: "#",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000000a",
+        menuId: MENU_INVENTORY_OPS_ID,
+        name: "Purchases",
+        route: "/purchases",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000000b",
+        menuId: MENU_INVENTORY_OPS_ID,
+        name: "Store transfers",
+        route: "/store-transfers",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000000c",
+        menuId: MENU_INVENTORY_OPS_ID,
+        name: "Suppliers",
+        route: "/suppliers",
+      },
+    ];
+
+    for (const child of menuChildren) {
+      await prisma.menuChildren.upsert({
+        where: { id: child.id },
+        update: {
+          menuId: child.menuId,
+          name: child.name,
+          route: child.route,
+          status: "Active",
+        },
+        create: { ...child, status: "Active" },
+      });
+    }
+    console.log(`   ✓ ${groupedMenus.length} grouped menus, ${menuChildren.length} menu children`);
+
     const systemAdminRoleId = appRoles[1].id;
     const allMenus = await prisma.menu.findMany({ select: { id: true } });
     for (const menu of allMenus) {
@@ -988,23 +1129,36 @@ async function main() {
     }
     console.log("   ✓ My Assignments menu linked to Student role");
 
-    const assignmentSetupMenu = await prisma.menu.findUnique({
-      where: { route: "/assignment-setup" },
-      select: { id: true },
-    });
-    if (assignmentSetupMenu) {
-      for (const roleId of [CLASS_TEACHER_ROLE_ID, SUBJECT_TEACHER_ROLE_ID]) {
-        const existing = await prisma.roleMenu.findFirst({
-          where: { roleId, menuId: assignmentSetupMenu.id },
-        });
-        if (!existing) {
-          await prisma.roleMenu.create({
-            data: { roleId, menuId: assignmentSetupMenu.id },
-          });
-        }
-      }
+    for (const roleId of [CLASS_TEACHER_ROLE_ID, SUBJECT_TEACHER_ROLE_ID]) {
+      const roleMenuId = await ensureRoleMenu(roleId, MENU_SCHOOL_MANAGEMENT_ID);
+      await ensureRoleMenuChild(
+        roleMenuId,
+        "mc000001-0000-4000-8000-000000000007"
+      );
     }
-    console.log("   ✓ Assignments setup menu linked to Class Teacher and Subject Teacher roles");
+    console.log(
+      "   ✓ School Management parent menu linked to Class Teacher and Subject Teacher with Assignments setup child only"
+    );
+
+    const registrarRoleMenuId = await ensureRoleMenu(REGISTRAR_ROLE_ID, MENU_SCHOOL_MANAGEMENT_ID);
+    for (const childId of [
+      "mc000001-0000-4000-8000-000000000002",
+      "mc000001-0000-4000-8000-000000000003",
+      "mc000001-0000-4000-8000-000000000004",
+      "mc000001-0000-4000-8000-000000000005",
+    ]) {
+      await ensureRoleMenuChild(registrarRoleMenuId, childId);
+    }
+
+    const storeClerkRoleMenuId = await ensureRoleMenu(STORE_CLERK_ROLE_ID, MENU_INVENTORY_OPS_ID);
+    for (const childId of [
+      "mc000001-0000-4000-8000-00000000000a",
+      "mc000001-0000-4000-8000-00000000000b",
+      "mc000001-0000-4000-8000-00000000000c",
+    ]) {
+      await ensureRoleMenuChild(storeClerkRoleMenuId, childId);
+    }
+    console.log("   ✓ Registrar and Store Clerk role menu children seeded");
 
     // Chart of accounts — AccountGroup & AccountHead (fixed IDs for idempotent re-seeding)
     console.log("📒 Seeding account groups and account heads...");

@@ -131,7 +131,11 @@ export const menuController = {
         });
       }
 
-      const menus = await menuService.listMenus({ q, status });
+      const menus = await menuService.listMenus({
+        q,
+        status,
+        includeChildren: req.query.includeChildren === "true",
+      });
 
       return res.json({
         success: true,
@@ -231,7 +235,7 @@ export const menuController = {
         });
       }
 
-      const menu = await menuService.getMenuById(id);
+      const menu = await menuService.getMenuById(id, req.query.includeChildren === "true");
 
       if (!menu) {
         return res.status(404).json({
@@ -352,6 +356,249 @@ export const menuController = {
         message: "Failed to delete menu",
         error: error?.message,
       });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/menus/{id}/children:
+   *   get:
+   *     summary: List children for a menu
+   *     tags: [Menus]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: query
+   *         name: status
+   *         schema:
+   *           type: string
+   *           enum: [Active, Inactive, Archived, All]
+   *     responses:
+   *       200:
+   *         description: Menu children list
+   *       404:
+   *         description: Menu not found
+   *   post:
+   *     summary: Create a menu child
+   *     tags: [Menus]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [name, route]
+   *             properties:
+   *               name:
+   *                 type: string
+   *               route:
+   *                 type: string
+   *                 description: Use "#" for non-navigable section headers
+   *               status:
+   *                 type: string
+   *                 enum: [Active, Inactive, Archived]
+   *     responses:
+   *       201:
+   *         description: Menu child created
+   */
+  listMenuChildren: async (req: Request, res: Response) => {
+    try {
+      const menuId = routeParam(req.params.id);
+      if (!menuId) {
+        return res.status(400).json({ success: false, message: "Menu id parameter is required" });
+      }
+
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status = parseMenuStatus(statusRaw);
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, Archived, or All",
+        });
+      }
+
+      const children = await menuService.listMenuChildren(menuId, status);
+
+      return res.json({
+        success: true,
+        message: "Menu children retrieved successfully",
+        data: { children },
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to retrieve menu children";
+      const httpStatus = message.includes("not found") ? 404 : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  createMenuChild: async (req: Request, res: Response) => {
+    try {
+      const menuId = routeParam(req.params.id);
+      const { name, route, status } = req.body ?? {};
+
+      if (!menuId) {
+        return res.status(400).json({ success: false, message: "Menu id parameter is required" });
+      }
+      if (!name || typeof name !== "string" || !name.trim()) {
+        return res.status(400).json({ success: false, message: "name is required" });
+      }
+      if (!route || typeof route !== "string" || !route.trim()) {
+        return res.status(400).json({ success: false, message: "route is required" });
+      }
+      if (status !== undefined && !MENU_STATUSES.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, or Archived",
+        });
+      }
+
+      const child = await menuService.createMenuChild(menuId, {
+        name: name.trim(),
+        route: route.trim(),
+        ...(status !== undefined ? { status } : {}),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Menu child created successfully",
+        data: child,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to create menu child";
+      const httpStatus = message.includes("not found")
+        ? 404
+        : message.includes("required")
+          ? 400
+          : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/menus/{id}/children/{childId}:
+   *   get:
+   *     summary: Get a menu child by ID
+   *     tags: [Menus]
+   *   put:
+   *     summary: Update a menu child
+   *     tags: [Menus]
+   *   delete:
+   *     summary: Delete a menu child
+   *     tags: [Menus]
+   */
+  getMenuChildById: async (req: Request, res: Response) => {
+    try {
+      const menuId = routeParam(req.params.id);
+      const childId = routeParam(req.params.childId);
+      if (!menuId || !childId) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Menu id and child id parameters are required" });
+      }
+
+      const child = await menuService.getMenuChildById(menuId, childId);
+      if (!child) {
+        return res.status(404).json({ success: false, message: "Menu child not found" });
+      }
+
+      return res.json({
+        success: true,
+        message: "Menu child retrieved successfully",
+        data: child,
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        success: false,
+        message: "Failed to retrieve menu child",
+        error: error?.message,
+      });
+    }
+  },
+
+  updateMenuChild: async (req: Request, res: Response) => {
+    try {
+      const menuId = routeParam(req.params.id);
+      const childId = routeParam(req.params.childId);
+      const { name, route, status } = req.body ?? {};
+
+      if (!menuId || !childId) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Menu id and child id parameters are required" });
+      }
+      if (name === undefined && route === undefined && status === undefined) {
+        return res.status(400).json({ success: false, message: "At least one field must be provided" });
+      }
+      if (name !== undefined && (typeof name !== "string" || !name.trim())) {
+        return res.status(400).json({ success: false, message: "name must be a non-empty string" });
+      }
+      if (route !== undefined && (typeof route !== "string" || !route.trim())) {
+        return res.status(400).json({ success: false, message: "route must be a non-empty string" });
+      }
+      if (status !== undefined && !MENU_STATUSES.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, or Archived",
+        });
+      }
+
+      const updated = await menuService.updateMenuChild(menuId, childId, {
+        ...(name !== undefined ? { name: name.trim() } : {}),
+        ...(route !== undefined ? { route: route.trim() } : {}),
+        ...(status !== undefined ? { status } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Menu child updated successfully",
+        data: updated,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to update menu child";
+      const httpStatus = message.includes("not found")
+        ? 404
+        : message.includes("must")
+          ? 400
+          : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  deleteMenuChild: async (req: Request, res: Response) => {
+    try {
+      const menuId = routeParam(req.params.id);
+      const childId = routeParam(req.params.childId);
+      if (!menuId || !childId) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Menu id and child id parameters are required" });
+      }
+
+      const deleted = await menuService.deleteMenuChild(menuId, childId);
+
+      return res.json({
+        success: true,
+        message: "Menu child deleted successfully",
+        data: deleted,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to delete menu child";
+      const httpStatus = message.includes("not found")
+        ? 404
+        : message.includes("referenced")
+          ? 409
+          : 500;
+      return res.status(httpStatus).json({ success: false, message });
     }
   },
 };

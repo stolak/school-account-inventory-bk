@@ -39,6 +39,31 @@ function parseMenuIds(body: unknown): string[] | null {
   return menuIds.map((id) => id.trim());
 }
 
+function parseChildrenMenuIds(body: unknown): string[] | null | undefined {
+  const childrenMenuIds = (body as { childrenMenuIds?: unknown })?.childrenMenuIds;
+  if (childrenMenuIds === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(childrenMenuIds)) {
+    return null;
+  }
+  if (!childrenMenuIds.every((id) => typeof id === "string" && id.trim())) {
+    return null;
+  }
+  return childrenMenuIds.map((id) => id.trim());
+}
+
+function parseMenuChildIds(body: unknown): string[] | null {
+  const menuChildIds = (body as { menuChildIds?: unknown })?.menuChildIds;
+  if (!Array.isArray(menuChildIds) || menuChildIds.length === 0) {
+    return null;
+  }
+  if (!menuChildIds.every((id) => typeof id === "string" && id.trim())) {
+    return null;
+  }
+  return menuChildIds.map((id) => id.trim());
+}
+
 /**
  * @openapi
  * /api/v1/app-roles:
@@ -500,6 +525,12 @@ export const appRoleController = {
    *                 items:
    *                   type: string
    *                 example: ["menu-uuid-1", "menu-uuid-2"]
+   *               childrenMenuIds:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *                 description: Optional menu child IDs to whitelist when assigning parent menus
+   *                 example: ["childrenmenu-uuid-1", "childrenmenu-uuid-2"]
    *     responses:
    *       200:
    *         description: Menus assigned; returns all role-menu links for the role
@@ -531,6 +562,7 @@ export const appRoleController = {
     try {
       const id = routeParam(req.params.id);
       const menuIds = parseMenuIds(req.body);
+      const childrenMenuIds = parseChildrenMenuIds(req.body);
 
       if (!id) {
         return res.status(400).json({
@@ -546,7 +578,17 @@ export const appRoleController = {
         });
       }
 
-      const roleMenus = await appRoleService.addMenusToRole(id, menuIds);
+      if (childrenMenuIds === null) {
+        return res.status(400).json({
+          success: false,
+          message: "childrenMenuIds must be an array of strings",
+        });
+      }
+
+      const roleMenus = await appRoleService.addMenusToRole(id, {
+        menuIds,
+        ...(childrenMenuIds !== undefined ? { childrenMenuIds } : {}),
+      });
 
       return res.json({
         success: true,
@@ -556,7 +598,9 @@ export const appRoleController = {
     } catch (error: any) {
       const message = error?.message ?? "Failed to add menus to role";
       const httpStatus =
-        message === "Role not found" || message.includes("menu IDs were not found")
+        message === "Role not found" ||
+        message.includes("menu IDs were not found") ||
+        message.includes("children menu IDs were not found")
           ? 404
           : 500;
       return res.status(httpStatus).json({ success: false, message });
@@ -637,6 +681,136 @@ export const appRoleController = {
     } catch (error: any) {
       const message = error?.message ?? "Failed to remove menu from role";
       const httpStatus = message === "Role menu record not found" ? 404 : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/app-roles/{id}/menus/{roleMenuId}/children:
+   *   post:
+   *     summary: Assign selected menu children to a role menu (whitelist)
+   *     tags: [AppRoles]
+   *     parameters:
+   *       - in: path
+   *         name: id
+   *         required: true
+   *         schema:
+   *           type: string
+   *       - in: path
+   *         name: roleMenuId
+   *         required: true
+   *         schema:
+   *           type: string
+   *     requestBody:
+   *       required: true
+   *       content:
+   *         application/json:
+   *           schema:
+   *             type: object
+   *             required: [menuChildIds]
+   *             properties:
+   *               menuChildIds:
+   *                 type: array
+   *                 items:
+   *                   type: string
+   *     responses:
+   *       200:
+   *         description: Menu children assigned; returns updated role menu with resolved children
+   *   get:
+   *     summary: Get role menu child assignments and resolved children
+   *     tags: [AppRoles]
+   */
+  addMenuChildrenToRoleMenu: async (req: Request, res: Response) => {
+    try {
+      const id = routeParam(req.params.id);
+      const roleMenuId = routeParam(req.params.roleMenuId);
+      const menuChildIds = parseMenuChildIds(req.body);
+
+      if (!id || !roleMenuId) {
+        return res.status(400).json({
+          success: false,
+          message: "Role id and roleMenuId parameters are required",
+        });
+      }
+      if (!menuChildIds) {
+        return res.status(400).json({
+          success: false,
+          message: "menuChildIds must be a non-empty array of strings",
+        });
+      }
+
+      const roleMenu = await appRoleService.addMenuChildrenToRoleMenu(id, roleMenuId, menuChildIds);
+
+      return res.json({
+        success: true,
+        message: "Menu children added to role menu successfully",
+        data: roleMenu,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to add menu children to role menu";
+      const httpStatus =
+        message.includes("not found") || message.includes("were not found") ? 404 : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  listRoleMenuChildren: async (req: Request, res: Response) => {
+    try {
+      const id = routeParam(req.params.id);
+      const roleMenuId = routeParam(req.params.roleMenuId);
+
+      if (!id || !roleMenuId) {
+        return res.status(400).json({
+          success: false,
+          message: "Role id and roleMenuId parameters are required",
+        });
+      }
+
+      const roleMenu = await appRoleService.listRoleMenuChildren(id, roleMenuId);
+
+      return res.json({
+        success: true,
+        message: "Role menu children retrieved successfully",
+        data: roleMenu,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to retrieve role menu children";
+      const httpStatus = message.includes("not found") ? 404 : 500;
+      return res.status(httpStatus).json({ success: false, message });
+    }
+  },
+
+  /**
+   * @openapi
+   * /api/v1/app-roles/{id}/menus/{roleMenuId}/children/{roleMenuChildId}:
+   *   delete:
+   *     summary: Remove a menu child grant from a role menu
+   *     tags: [AppRoles]
+   */
+  deleteRoleMenuChild: async (req: Request, res: Response) => {
+    try {
+      const id = routeParam(req.params.id);
+      const roleMenuId = routeParam(req.params.roleMenuId);
+      const roleMenuChildId = routeParam(req.params.roleMenuChildId);
+
+      if (!id || !roleMenuId || !roleMenuChildId) {
+        return res.status(400).json({
+          success: false,
+          message: "Role id, roleMenuId, and roleMenuChildId parameters are required",
+        });
+      }
+
+      const roleMenu = await appRoleService.deleteRoleMenuChild(id, roleMenuId, roleMenuChildId);
+
+      return res.json({
+        success: true,
+        message: "Menu child removed from role menu successfully",
+        data: roleMenu,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to remove menu child from role menu";
+      const httpStatus = message.includes("not found") ? 404 : 500;
       return res.status(httpStatus).json({ success: false, message });
     }
   },

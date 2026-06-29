@@ -1,5 +1,6 @@
 import prisma from "../utils/prisma";
 import { Prisma, Status, UserType } from "@prisma/client";
+import { MenuChildData, menuChildSelect, resolveAccessibleMenuChildren } from "../utils/menuAccess";
 
 export interface ListUsersParams {
   /** userType (Prisma UserType) */
@@ -43,11 +44,20 @@ export interface PrivilegeSummary {
   description: string | null;
 }
 
+export interface MenuChildSummary {
+  id: string;
+  menuId: string;
+  name: string;
+  route: string;
+  status: Status;
+}
+
 export interface MenuSummary {
   id: string;
   route: string;
   caption: string;
   status: Status;
+  children: MenuChildSummary[];
 }
 
 export interface AppRoleSummary {
@@ -188,10 +198,33 @@ function mergePrivilegesById(groups: PrivilegeSummary[][]): PrivilegeSummary[] {
 
 function mergeMenusById(menus: MenuSummary[]): MenuSummary[] {
   const byId = new Map<string, MenuSummary>();
-  for (const m of menus) {
-    byId.set(m.id, m);
+  for (const menu of menus) {
+    const existing = byId.get(menu.id);
+    if (!existing) {
+      byId.set(menu.id, {
+        ...menu,
+        children: [...(menu.children ?? [])],
+      });
+      continue;
+    }
+
+    const childById = new Map((existing.children ?? []).map((child) => [child.id, child]));
+    for (const child of menu.children ?? []) {
+      childById.set(child.id, child);
+    }
+    existing.children = [...childById.values()].sort((a, b) => a.name.localeCompare(b.name));
   }
   return [...byId.values()].sort((a, b) => a.route.localeCompare(b.route));
+}
+
+function mapMenuChildSummary(child: MenuChildData): MenuChildSummary {
+  return {
+    id: child.id,
+    menuId: child.menuId,
+    name: child.name,
+    route: child.route,
+    status: child.status,
+  };
 }
 
 export class UserService {
@@ -260,6 +293,8 @@ export class UserService {
               select: {
                 roleMenus: {
                   select: {
+                    id: true,
+                    menuId: true,
                     menu: { select: menuSelect },
                   },
                 },
@@ -275,16 +310,40 @@ export class UserService {
     }
 
     if (user.userType === UserType.SuperAdmin) {
-      return prisma.menu.findMany({
+      const menus = await prisma.menu.findMany({
         select: menuSelect,
         orderBy: { route: "asc" },
       });
+      const children = await prisma.menuChildren.findMany({
+        where: { status: Status.Active },
+        select: menuChildSelect,
+        orderBy: { name: "asc" },
+      });
+      const childrenByMenuId = new Map<string, MenuChildSummary[]>();
+      for (const child of children) {
+        const list = childrenByMenuId.get(child.menuId) ?? [];
+        list.push(mapMenuChildSummary(child));
+        childrenByMenuId.set(child.menuId, list);
+      }
+
+      return menus.map((menu) => ({
+        ...menu,
+        children: childrenByMenuId.get(menu.id) ?? [],
+      }));
     }
 
-    const roleMenus = user.userRoles.flatMap((ur) =>
-      ur.role.roleMenus.map((rm) => rm.menu)
+    const roleMenus = user.userRoles.flatMap((userRole) => userRole.role.roleMenus);
+    const menus = await Promise.all(
+      roleMenus.map(async (roleMenu) => {
+        const children = await resolveAccessibleMenuChildren(roleMenu.id, roleMenu.menuId);
+        return {
+          ...roleMenu.menu,
+          children: children.map(mapMenuChildSummary),
+        };
+      })
     );
-    return mergeMenusById(roleMenus);
+
+    return mergeMenusById(menus);
   }
 
   /**
