@@ -19,7 +19,7 @@ export interface AppRoleData {
 }
 
 export interface AddMenusToRoleInput {
-  menuIds: string[];
+  menuIds?: string[];
   childrenMenuIds?: string[];
 }
 
@@ -303,13 +303,15 @@ export class AppRoleService {
   }
 
   async addMenusToRole(roleId: string, input: AddMenusToRoleInput): Promise<RoleMenuData[]> {
-    const uniqueMenuIds = [...new Set(input.menuIds.map((id) => id.trim()).filter(Boolean))];
+    const uniqueMenuIds = [
+      ...new Set((input.menuIds ?? []).map((id) => id.trim()).filter(Boolean)),
+    ];
     const uniqueChildIds = [
       ...new Set((input.childrenMenuIds ?? []).map((id) => id.trim()).filter(Boolean)),
     ];
 
-    if (!uniqueMenuIds.length) {
-      throw new Error("menuIds must be a non-empty array");
+    if (!uniqueMenuIds.length && !uniqueChildIds.length) {
+      throw new Error("At least one of menuIds or childrenMenuIds must be provided");
     }
 
     const role = await this.prisma.appRole.findUnique({
@@ -320,12 +322,14 @@ export class AppRoleService {
       throw new Error("Role not found");
     }
 
-    const menus = await this.prisma.menu.findMany({
-      where: { id: { in: uniqueMenuIds } },
-      select: { id: true },
-    });
-    if (menus.length !== uniqueMenuIds.length) {
-      throw new Error("One or more menu IDs were not found");
+    if (uniqueMenuIds.length > 0) {
+      const menus = await this.prisma.menu.findMany({
+        where: { id: { in: uniqueMenuIds } },
+        select: { id: true },
+      });
+      if (menus.length !== uniqueMenuIds.length) {
+        throw new Error("One or more menu IDs were not found");
+      }
     }
 
     let children: Array<{ id: string; menuId: string }> = [];
@@ -416,7 +420,6 @@ export class AppRoleService {
   }
 
   async deleteRoleMenu(roleId: string, menuId: string): Promise<RoleMenuData> {
-    console.log(menuId, roleId);
     const record = await this.prisma.roleMenu.findFirst({
       where: { menuId, roleId },
       include: roleMenuInclude,
@@ -495,7 +498,7 @@ export class AppRoleService {
     menuChildId: string
   ): Promise<RoleMenuData> {
     await this.getRoleMenuForRole(roleId, roleMenuId);
-    console.log(menuChildId, roleMenuId);
+
     const assignment = await this.prisma.roleMenuChild.findFirst({
       where: { menuChildId, roleMenuId },
       select: { id: true },

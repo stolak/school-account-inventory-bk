@@ -28,29 +28,17 @@ function parsePrivilegeIds(body: unknown): string[] | null {
   return privilegeIds.map((id) => id.trim());
 }
 
-function parseMenuIds(body: unknown): string[] | null {
-  const menuIds = (body as { menuIds?: unknown })?.menuIds;
-  if (!Array.isArray(menuIds) || menuIds.length === 0) {
-    return null;
-  }
-  if (!menuIds.every((id) => typeof id === "string" && id.trim())) {
-    return null;
-  }
-  return menuIds.map((id) => id.trim());
-}
-
-function parseChildrenMenuIds(body: unknown): string[] | null | undefined {
-  const childrenMenuIds = (body as { childrenMenuIds?: unknown })?.childrenMenuIds;
-  if (childrenMenuIds === undefined) {
+function parseOptionalStringIdArray(value: unknown): string[] | null | undefined {
+  if (value === undefined) {
     return undefined;
   }
-  if (!Array.isArray(childrenMenuIds)) {
+  if (!Array.isArray(value)) {
     return null;
   }
-  if (!childrenMenuIds.every((id) => typeof id === "string" && id.trim())) {
+  if (!value.every((id) => typeof id === "string" && id.trim())) {
     return null;
   }
-  return childrenMenuIds.map((id) => id.trim());
+  return value.map((id) => id.trim());
 }
 
 function parseMenuChildIds(body: unknown): string[] | null {
@@ -518,7 +506,7 @@ export const appRoleController = {
    *         application/json:
    *           schema:
    *             type: object
-   *             required: [menuIds]
+   *             description: Provide at least one of menuIds or childrenMenuIds as a non-empty array
    *             properties:
    *               menuIds:
    *                 type: array
@@ -561,8 +549,9 @@ export const appRoleController = {
   addMenusToRole: async (req: Request, res: Response) => {
     try {
       const id = routeParam(req.params.id);
-      const menuIds = parseMenuIds(req.body);
-      const childrenMenuIds = parseChildrenMenuIds(req.body);
+      const body = req.body as { menuIds?: unknown; childrenMenuIds?: unknown };
+      const menuIds = parseOptionalStringIdArray(body.menuIds);
+      const childrenMenuIds = parseOptionalStringIdArray(body.childrenMenuIds);
 
       if (!id) {
         return res.status(400).json({
@@ -571,10 +560,10 @@ export const appRoleController = {
         });
       }
 
-      if (!menuIds) {
+      if (menuIds === null) {
         return res.status(400).json({
           success: false,
-          message: "menuIds must be a non-empty array of strings",
+          message: "menuIds must be an array of strings",
         });
       }
 
@@ -585,9 +574,21 @@ export const appRoleController = {
         });
       }
 
+      const resolvedMenuIds = menuIds ?? [];
+      const resolvedChildrenMenuIds = childrenMenuIds ?? [];
+
+      if (resolvedMenuIds.length === 0 && resolvedChildrenMenuIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "At least one of menuIds or childrenMenuIds must be a non-empty array",
+        });
+      }
+
       const roleMenus = await appRoleService.addMenusToRole(id, {
-        menuIds,
-        ...(childrenMenuIds !== undefined ? { childrenMenuIds } : {}),
+        ...(resolvedMenuIds.length > 0 ? { menuIds: resolvedMenuIds } : {}),
+        ...(resolvedChildrenMenuIds.length > 0
+          ? { childrenMenuIds: resolvedChildrenMenuIds }
+          : {}),
       });
 
       return res.json({
