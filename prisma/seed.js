@@ -4257,6 +4257,7 @@ async function main() {
     await prisma.assessmentRemarks.deleteMany({});
     await prisma.defaultClassRemarkSetup.deleteMany({});
     await prisma.studentSubjectRegistration.deleteMany({});
+    await prisma.teacherSubjects.deleteMany({});
     await prisma.classSubject.deleteMany({});
     await prisma.classAssessmentTemplate.deleteMany({});
     await prisma.assessmentComponent.deleteMany({});
@@ -4509,6 +4510,109 @@ async function main() {
           classId: row.classId,
           subclassId: row.subclassId,
           subjectId: row.subjectId,
+          sessionId: row.sessionId,
+          termId: row.termId,
+        },
+        create: row,
+      });
+    }
+
+    const STAFF = {
+      ADA: "a8b9c0d1-e2f3-4234-a012-345678909003",
+      JAMES: "a8b9c0d1-e2f3-4234-a012-345678909004",
+      FATIMA: "a8b9c0d1-e2f3-4234-a012-345678909005",
+      CHIDI: "a8b9c0d1-e2f3-4234-a012-345678909006",
+    };
+
+    const STAFF_USER = {
+      ADA: "a8b9c0d1-e2f3-4234-a012-34567890a003",
+      JAMES: "a8b9c0d1-e2f3-4234-a012-34567890a004",
+      FATIMA: "a8b9c0d1-e2f3-4234-a012-34567890a005",
+      CHIDI: "a8b9c0d1-e2f3-4234-a012-34567890a006",
+    };
+
+    const teacherSubjects = [
+      {
+        id: "f9a0b1c2-d3e4-4567-a890-123456ab0060",
+        staffId: STAFF.ADA,
+        userId: STAFF_USER.ADA,
+        subjectId: SUB.MTH,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "a0b1c2d3-e4f5-4678-b901-234567ab0061",
+        staffId: STAFF.ADA,
+        userId: STAFF_USER.ADA,
+        subjectId: SUB.ENG,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "b1c2d3e4-f5a6-4789-c012-345678ab0062",
+        staffId: STAFF.FATIMA,
+        userId: STAFF_USER.FATIMA,
+        subjectId: SUB.ENG,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1B,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "c2d3e4f5-a6b7-4890-d123-456789ab0063",
+        staffId: STAFF.JAMES,
+        userId: STAFF_USER.JAMES,
+        subjectId: SUB.MTH,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1B,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "d3e4f5a6-b7c8-4901-e234-567890ab0064",
+        staffId: STAFF.JAMES,
+        userId: STAFF_USER.JAMES,
+        subjectId: SUB.BST,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "e4f5a6b7-c8d9-4012-f345-678901ab0065",
+        staffId: STAFF.JAMES,
+        userId: STAFF_USER.JAMES,
+        subjectId: SUB.MTH,
+        classId: classIds.jss2,
+        subclassId: subClassIds.jss2A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "f5a6b7c8-d9e0-4123-a456-789012ab0066",
+        staffId: STAFF.CHIDI,
+        userId: STAFF_USER.CHIDI,
+        subjectId: SUB.CIV,
+        classId: classIds.jss2,
+        subclassId: subClassIds.jss2A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+    ];
+
+    for (const row of teacherSubjects) {
+      await prisma.teacherSubjects.upsert({
+        where: { id: row.id },
+        update: {
+          staffId: row.staffId,
+          userId: row.userId,
+          subjectId: row.subjectId,
+          classId: row.classId,
+          subclassId: row.subclassId,
           sessionId: row.sessionId,
           termId: row.termId,
         },
@@ -5051,7 +5155,7 @@ async function main() {
       `   ✓ ${assessmentTemplates.length} assessment templates, ${assessmentComponents.length} components`
     );
     console.log(
-      `   ✓ ${classAssessmentTemplates.length} class assessment assignments, ${subjects.length} subjects, ${classSubjects.length} class subjects`
+      `   ✓ ${classAssessmentTemplates.length} class assessment assignments, ${subjects.length} subjects, ${classSubjects.length} class subjects, ${teacherSubjects.length} teacher subjects`
     );
     console.log(
       `   ✓ ${studentSubjectRegistrations.length} student subject registrations, ${studentAssessmentScores.length} assessment scores`

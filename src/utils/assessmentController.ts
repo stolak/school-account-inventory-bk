@@ -27,13 +27,13 @@ export function httpStatusFromAssessmentMessage(message: string): number {
   ) {
     return 400;
   }
-  if (m.includes("only available to student") || m.includes("only available to parent") || m.includes("forbidden")) {
+  if (m.includes("only available to student") || m.includes("only available to parent") || m.includes("only available to staff") || m.includes("forbidden")) {
     return 403;
   }
   if (m.includes("unauthorized")) {
     return 401;
   }
-  if (m.includes("no student profile")) {
+  if (m.includes("no student profile") || m.includes("no staff profile")) {
     return 404;
   }
   return 500;

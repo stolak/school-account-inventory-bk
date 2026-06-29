@@ -80,6 +80,7 @@ import assessmentRemarksRouter from "./assessmentRemarks";
 import defaultClassRemarkSetupRouter from "./defaultClassRemarkSetup";
 import assignmentRouter from "./assignment";
 import studentAssignmentRouter from "./studentAssignment";
+import teacherSubjectRouter from "./teacherSubject";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -165,6 +166,7 @@ router.use("/assessment-remarks", assessmentRemarksRouter);
 router.use("/default-class-remark-setups", defaultClassRemarkSetupRouter);
 router.use("/assignments", assignmentRouter);
 router.use("/student-assignments", studentAssignmentRouter);
+router.use("/teacher-subjects", teacherSubjectRouter);
 
 router.use("/upload", uploadRouter);
 

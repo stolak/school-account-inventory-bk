@@ -195,6 +195,11 @@ const options: swaggerJSDoc.Options = {
         description:
           "Student assignment submissions with attachments, scoring, and grading (CRUD and upsert)",
       },
+      {
+        name: "TeacherSubjects",
+        description:
+          "Teacher subject assignments per staff, class, subclass, session, and term (CRUD)",
+      },
       { name: "Uoms", description: "Unit of measurement (UoM) management" },
       { name: "Donations", description: "Inventory donation transactions" },
       { name: "Sales", description: "Inventory sales transactions (bulk create, list, grouped by reference)" },
