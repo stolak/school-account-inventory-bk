@@ -9,6 +9,12 @@ const SUPPLIER_SUBHEAD_SETTINGS_ID = "SUPPLIER_SUBHEAD";
 
 const STUDENT_ROLE_ID = "a2000001-0002-4002-8002-000000000008";
 const PARENT_ROLE_ID = "a2000001-0002-4002-8002-000000000009";
+const SYSTEM_ADMIN_ROLE_ID = "a2000001-0002-4002-8002-000000000002";
+const ACCOUNTANT_ROLE_ID = "a2000001-0002-4002-8002-000000000004";
+const REGISTRAR_ROLE_ID = "a2000001-0002-4002-8002-000000000005";
+const STORE_CLERK_ROLE_ID = "a2000001-0002-4002-8002-000000000006";
+const CLASS_TEACHER_ROLE_ID = "a2000001-0002-4002-8002-000000000010";
+const SUBJECT_TEACHER_ROLE_ID = "a2000001-0002-4002-8002-000000000011";
 
 async function assignUserAppRole(userId, roleId) {
   if (!userId || !roleId) return;
@@ -256,6 +262,12 @@ async function upsertStaffWithUser(hashedPassword, input) {
       ...staffData,
     },
   });
+
+  if (input.appRoleId) {
+    await assignUserAppRole(user.id, input.appRoleId);
+  }
+
+  return user.id;
 }
 
 /** Mirror StudentService.ensureGuardianUser — Parent account; reuses existing user when email is taken. */
@@ -703,6 +715,13 @@ async function main() {
       "temp_journal_transfers",
     ];
 
+    const teacherBasePrivileges = [
+      "active_period.read",
+      "sessions.read",
+      "terms.read",
+      ...pickResources(["school_classes", "students", "sub_classes", "staff"], ["read"]),
+    ];
+
     const appRoles = [
       {
         id: "a2000001-0002-4002-8002-000000000001",
@@ -711,7 +730,7 @@ async function main() {
         privilegeNames: allPrivilegeNames,
       },
       {
-        id: "a2000001-0002-4002-8002-000000000002",
+        id: SYSTEM_ADMIN_ROLE_ID,
         name: "System Administrator",
         status: "active",
         privilegeNames: allPrivilegeNames.filter((name) => name !== "upload.write"),
@@ -736,7 +755,7 @@ async function main() {
         ],
       },
       {
-        id: "a2000001-0002-4002-8002-000000000004",
+        id: ACCOUNTANT_ROLE_ID,
         name: "Accountant",
         status: "active",
         privilegeNames: [
@@ -760,7 +779,7 @@ async function main() {
         ],
       },
       {
-        id: "a2000001-0002-4002-8002-000000000005",
+        id: REGISTRAR_ROLE_ID,
         name: "Registrar",
         status: "active",
         privilegeNames: [
@@ -771,7 +790,7 @@ async function main() {
         ],
       },
       {
-        id: "a2000001-0002-4002-8002-000000000006",
+        id: STORE_CLERK_ROLE_ID,
         name: "Store Clerk",
         status: "active",
         privilegeNames: [
@@ -810,6 +829,18 @@ async function main() {
         name: "Parent",
         status: "active",
         privilegeNames: ["active_period.read", "students.read", "sessions.read", "terms.read"],
+      },
+      {
+        id: CLASS_TEACHER_ROLE_ID,
+        name: "Class Teacher",
+        status: "active",
+        privilegeNames: teacherBasePrivileges,
+      },
+      {
+        id: SUBJECT_TEACHER_ROLE_ID,
+        name: "Subject Teacher",
+        status: "active",
+        privilegeNames: teacherBasePrivileges,
       },
     ];
 
@@ -956,6 +987,24 @@ async function main() {
       }
     }
     console.log("   ✓ My Assignments menu linked to Student role");
+
+    const assignmentSetupMenu = await prisma.menu.findUnique({
+      where: { route: "/assignment-setup" },
+      select: { id: true },
+    });
+    if (assignmentSetupMenu) {
+      for (const roleId of [CLASS_TEACHER_ROLE_ID, SUBJECT_TEACHER_ROLE_ID]) {
+        const existing = await prisma.roleMenu.findFirst({
+          where: { roleId, menuId: assignmentSetupMenu.id },
+        });
+        if (!existing) {
+          await prisma.roleMenu.create({
+            data: { roleId, menuId: assignmentSetupMenu.id },
+          });
+        }
+      }
+    }
+    console.log("   ✓ Assignments setup menu linked to Class Teacher and Subject Teacher roles");
 
     // Chart of accounts — AccountGroup & AccountHead (fixed IDs for idempotent re-seeding)
     console.log("📒 Seeding account groups and account heads...");
@@ -3631,6 +3680,7 @@ async function main() {
         dateOfAppointment: new Date("2015-09-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: SYSTEM_ADMIN_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909002",
@@ -3647,6 +3697,7 @@ async function main() {
         dateOfAppointment: new Date("2017-01-15"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: SYSTEM_ADMIN_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909003",
@@ -3663,6 +3714,7 @@ async function main() {
         dateOfAppointment: new Date("2019-09-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: CLASS_TEACHER_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909004",
@@ -3679,6 +3731,7 @@ async function main() {
         dateOfAppointment: new Date("2020-09-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: SUBJECT_TEACHER_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909005",
@@ -3695,6 +3748,7 @@ async function main() {
         dateOfAppointment: new Date("2021-01-10"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: SUBJECT_TEACHER_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909006",
@@ -3702,7 +3756,7 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909006",
         email: "chidi.okafor@staff.school.ng",
         name: "Mr. Chidi Okafor",
-        position: "teacher",
+        position: "subject_teacher",
         employmentType: "Permanent",
         departmentId: DEPT.ACADEMICS,
         gradeLevelId: GL.GL2,
@@ -3711,6 +3765,7 @@ async function main() {
         dateOfAppointment: new Date("2022-09-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: SUBJECT_TEACHER_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909007",
@@ -3727,6 +3782,7 @@ async function main() {
         dateOfAppointment: new Date("2018-03-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: ACCOUNTANT_ROLE_ID,
       },
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909008",
@@ -3734,7 +3790,7 @@ async function main() {
         StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909008",
         email: "emmanuel.nwosu@staff.school.ng",
         name: "Mr. Emmanuel Nwosu",
-        position: "assistant_teacher",
+        position: "class_teacher",
         employmentType: "Contractual",
         departmentId: DEPT.ACADEMICS,
         gradeLevelId: GL.GL1,
@@ -3743,13 +3799,140 @@ async function main() {
         dateOfAppointment: new Date("2024-09-01"),
         status: "Active",
         createdById: adminUserId,
+        appRoleId: CLASS_TEACHER_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-345678909009",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a009",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909009",
+        email: "ikechukwu.nwankwo@staff.school.ng",
+        name: "Mr. Ikechukwu Nwankwo",
+        position: "admin",
+        employmentType: "Permanent",
+        departmentId: DEPT.ADMIN,
+        gradeLevelId: GL.GL4,
+        step: 4,
+        salary: 410000,
+        dateOfAppointment: new Date("2019-01-08"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: REGISTRAR_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900a",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00a",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900a",
+        email: "halima.bello@staff.school.ng",
+        name: "Mrs. Halima Bello",
+        position: "admin",
+        employmentType: "Permanent",
+        departmentId: DEPT.ADMIN,
+        gradeLevelId: GL.GL3,
+        step: 3,
+        salary: 360000,
+        dateOfAppointment: new Date("2020-09-01"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: REGISTRAR_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900b",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00b",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900b",
+        email: "sani.ibrahim@staff.school.ng",
+        name: "Mr. Sani Ibrahim",
+        position: "admin",
+        employmentType: "Permanent",
+        departmentId: DEPT.MAINTENANCE,
+        gradeLevelId: GL.GL2,
+        step: 2,
+        salary: 280000,
+        dateOfAppointment: new Date("2021-03-15"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: STORE_CLERK_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900c",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00c",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900c",
+        email: "michael.ode@staff.school.ng",
+        name: "Mr. Michael Ode",
+        position: "admin",
+        employmentType: "Permanent",
+        departmentId: DEPT.MAINTENANCE,
+        gradeLevelId: GL.GL2,
+        step: 2,
+        salary: 275000,
+        dateOfAppointment: new Date("2022-01-10"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: STORE_CLERK_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900d",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00d",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900d",
+        email: "chinwe.okafor@staff.school.ng",
+        name: "Mrs. Chinwe Okafor",
+        position: "admin",
+        employmentType: "Permanent",
+        departmentId: DEPT.ACCOUNTS,
+        gradeLevelId: GL.GL3,
+        step: 3,
+        salary: 350000,
+        dateOfAppointment: new Date("2021-06-01"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: ACCOUNTANT_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900e",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00e",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900e",
+        email: "grace.okon@staff.school.ng",
+        name: "Mrs. Grace Okon",
+        position: "class_teacher",
+        employmentType: "Permanent",
+        departmentId: DEPT.ACADEMICS,
+        gradeLevelId: GL.GL3,
+        step: 3,
+        salary: 370000,
+        dateOfAppointment: new Date("2020-09-01"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: CLASS_TEACHER_ROLE_ID,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4234-a012-34567890900f",
+        userId: "a8b9c0d1-e2f3-4234-a012-34567890a00f",
+        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900f",
+        email: "david.ibrahim@staff.school.ng",
+        name: "Mr. David Ibrahim",
+        position: "subject_teacher",
+        employmentType: "Permanent",
+        departmentId: DEPT.ACADEMICS,
+        gradeLevelId: GL.GL2,
+        step: 2,
+        salary: 310000,
+        dateOfAppointment: new Date("2023-09-01"),
+        status: "Active",
+        createdById: adminUserId,
+        appRoleId: SUBJECT_TEACHER_ROLE_ID,
       },
     ];
 
     for (const member of staffMembers) {
       await upsertStaffWithUser(hashedPassword, member);
     }
-    console.log(`   ✓ ${staffMembers.length} staff (with user accounts, password: 12345)`);
+    const staffRoleCounts = staffMembers.reduce((acc, member) => {
+      const key = member.appRoleId ?? "unassigned";
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {});
+    console.log(
+      `   ✓ ${staffMembers.length} staff (with user accounts, password: 12345) — roles: ${staffRoleCounts[SYSTEM_ADMIN_ROLE_ID] ?? 0} System Administrator, ${staffRoleCounts[REGISTRAR_ROLE_ID] ?? 0} Registrar, ${staffRoleCounts[STORE_CLERK_ROLE_ID] ?? 0} Store Clerk, ${staffRoleCounts[ACCOUNTANT_ROLE_ID] ?? 0} Accountant, ${staffRoleCounts[CLASS_TEACHER_ROLE_ID] ?? 0} Class Teacher, ${staffRoleCounts[SUBJECT_TEACHER_ROLE_ID] ?? 0} Subject Teacher`
+    );
 
     // Cashiers (linked user or staff + cash ledger for sales posting)
     console.log("💵 Seeding cashiers...");
