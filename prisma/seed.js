@@ -18,6 +18,8 @@ const SUBJECT_TEACHER_ROLE_ID = "a2000001-0002-4002-8002-000000000011";
 
 const MENU_SCHOOL_MANAGEMENT_ID = "menu0001-0000-4000-8000-000000000001";
 const MENU_INVENTORY_OPS_ID = "menu0001-0000-4000-8000-000000000002";
+const MENU_INVENTORY_INFLOWS_ID = "menu0001-0000-4000-8000-000000000003";
+const MENU_INVENTORY_OUTFLOWS_ID = "menu0001-0000-4000-8000-000000000004";
 
 async function ensureRoleMenu(roleId, menuId) {
   const existing = await prisma.roleMenu.findFirst({
@@ -915,8 +917,6 @@ async function main() {
     const sidebarMenus = [
       // Main
       { route: "/", caption: "Dashboard" },
-      { route: "/purchases", caption: "Purchases" },
-      { route: "/donations", caption: "Donations" },
       { route: "/project-disbursement", caption: "Project disbursement" },
       { route: "/facility-item-distribution", caption: "Facility item distribution" },
       { route: "/sales", caption: "Sales" },
@@ -1000,15 +1000,37 @@ async function main() {
         route: "/inventory-operations",
         caption: "Inventory Operations",
       },
+      {
+        id: MENU_INVENTORY_INFLOWS_ID,
+        route: "/inventory-inflows",
+        caption: "Inventory inflows",
+      },
+      {
+        id: MENU_INVENTORY_OUTFLOWS_ID,
+        route: "/inventory-outflows",
+        caption: "Inventory outflows",
+      },
     ];
 
     for (const menu of groupedMenus) {
       await prisma.menu.upsert({
-        where: { id: menu.id },
-        update: { route: menu.route, caption: menu.caption, status: "Active" },
+        where: { route: menu.route },
+        update: { caption: menu.caption, status: "Active" },
         create: { ...menu, status: "Active" },
       });
     }
+
+    const groupedMenuIdBySeedId = Object.fromEntries(
+      (
+        await prisma.menu.findMany({
+          where: { route: { in: groupedMenus.map((menu) => menu.route) } },
+          select: { id: true, route: true },
+        })
+      ).map((row) => {
+        const seedMenu = groupedMenus.find((menu) => menu.route === row.route);
+        return [seedMenu.id, row.id];
+      })
+    );
 
     const menuChildren = [
       {
@@ -1083,18 +1105,67 @@ async function main() {
         name: "Suppliers",
         route: "/suppliers",
       },
+      {
+        id: "mc000001-0000-4000-8000-00000000000d",
+        menuId: MENU_INVENTORY_INFLOWS_ID,
+        name: "Purchases",
+        route: "/purchases",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000000e",
+        menuId: MENU_INVENTORY_INFLOWS_ID,
+        name: "Donations",
+        route: "/donations",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000000f",
+        menuId: MENU_INVENTORY_INFLOWS_ID,
+        name: "Transfers",
+        route: "/store-transfers",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000010",
+        menuId: MENU_INVENTORY_OUTFLOWS_ID,
+        name: "Students",
+        route: "/outflow-students",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000011",
+        menuId: MENU_INVENTORY_OUTFLOWS_ID,
+        name: "Staff",
+        route: "/outflow-staff",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000012",
+        menuId: MENU_INVENTORY_OUTFLOWS_ID,
+        name: "Projects",
+        route: "/outflow-projects",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000013",
+        menuId: MENU_INVENTORY_OUTFLOWS_ID,
+        name: "Facility",
+        route: "/outflow-facility",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000014",
+        menuId: MENU_INVENTORY_OUTFLOWS_ID,
+        name: "Sales",
+        route: "/outflow-sales",
+      },
     ];
 
     for (const child of menuChildren) {
+      const menuId = groupedMenuIdBySeedId[child.menuId] ?? child.menuId;
       await prisma.menuChildren.upsert({
         where: { id: child.id },
         update: {
-          menuId: child.menuId,
+          menuId,
           name: child.name,
           route: child.route,
           status: "Active",
         },
-        create: { ...child, status: "Active" },
+        create: { ...child, menuId, status: "Active" },
       });
     }
     console.log(`   ✓ ${groupedMenus.length} grouped menus, ${menuChildren.length} menu children`);
@@ -1131,10 +1202,7 @@ async function main() {
 
     for (const roleId of [CLASS_TEACHER_ROLE_ID, SUBJECT_TEACHER_ROLE_ID]) {
       const roleMenuId = await ensureRoleMenu(roleId, MENU_SCHOOL_MANAGEMENT_ID);
-      await ensureRoleMenuChild(
-        roleMenuId,
-        "mc000001-0000-4000-8000-000000000007"
-      );
+      await ensureRoleMenuChild(roleMenuId, "mc000001-0000-4000-8000-000000000007");
     }
     console.log(
       "   ✓ School Management parent menu linked to Class Teacher and Subject Teacher with Assignments setup child only"
