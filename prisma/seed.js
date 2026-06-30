@@ -23,6 +23,7 @@ const MENU_INVENTORY_OUTFLOWS_ID = "menu0001-0000-4000-8000-000000000004";
 const MENU_ASSESSMENT_SETUP_ID = "menu0001-0000-4000-8000-000000000005";
 const MENU_INVENTORY_REPORTS_ID = "menu0001-0000-4000-8000-000000000006";
 const MENU_STUDENT_BILLINGS_ID = "menu0001-0000-4000-8000-000000000007";
+const MENU_STUDENT_FINANCIAL_REPORTS_ID = "menu0001-0000-4000-8000-000000000008";
 
 async function ensureRoleMenu(roleId, menuId) {
   const existing = await prisma.roleMenu.findFirst({
@@ -957,6 +958,7 @@ async function main() {
       // { route: "/administrative-expense-components", caption: "Administrative expense components" },
       { route: "/administrative-expenses", caption: "Administrative expenses" },
       { route: "/billing", caption: "Student Billings" },
+      { route: "/reports/student-accounts", caption: "Student financial reports" },
       { route: "/journal-transfers", caption: "Journal transfers" },
       { route: "/staff-journal-transfers", caption: "Staff journal transfers" },
       // Setup
@@ -1016,6 +1018,11 @@ async function main() {
         id: MENU_STUDENT_BILLINGS_ID,
         route: "/billing",
         caption: "Student Billings",
+      },
+      {
+        id: MENU_STUDENT_FINANCIAL_REPORTS_ID,
+        route: "/reports/student-accounts",
+        caption: "Student financial reports",
       },
     ];
 
@@ -1243,6 +1250,24 @@ async function main() {
         menuId: MENU_STUDENT_BILLINGS_ID,
         name: "Student journal transfers",
         route: "/student-journal-transfers",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000023",
+        menuId: MENU_STUDENT_FINANCIAL_REPORTS_ID,
+        name: "Student billing summary",
+        route: "/reports/student-billing-summary",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000024",
+        menuId: MENU_STUDENT_FINANCIAL_REPORTS_ID,
+        name: "Student balances",
+        route: "/reports/student-balances",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000025",
+        menuId: MENU_STUDENT_FINANCIAL_REPORTS_ID,
+        name: "Student transaction log",
+        route: "/reports/student-transaction-log",
       },
     ];
 
