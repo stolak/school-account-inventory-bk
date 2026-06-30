@@ -20,6 +20,9 @@ const MENU_SCHOOL_MANAGEMENT_ID = "menu0001-0000-4000-8000-000000000001";
 const MENU_INVENTORY_OPS_ID = "menu0001-0000-4000-8000-000000000002";
 const MENU_INVENTORY_INFLOWS_ID = "menu0001-0000-4000-8000-000000000003";
 const MENU_INVENTORY_OUTFLOWS_ID = "menu0001-0000-4000-8000-000000000004";
+const MENU_ASSESSMENT_SETUP_ID = "menu0001-0000-4000-8000-000000000005";
+const MENU_INVENTORY_REPORTS_ID = "menu0001-0000-4000-8000-000000000006";
+const MENU_STUDENT_BILLINGS_ID = "menu0001-0000-4000-8000-000000000007";
 
 async function ensureRoleMenu(roleId, menuId) {
   const existing = await prisma.roleMenu.findFirst({
@@ -927,7 +930,6 @@ async function main() {
       { route: "/store-transfers", caption: "Store transfers" },
       // School Management
       { route: "/classes", caption: "Classes & sub-classes" },
-      { route: "/assessment-setup", caption: "Assessment setup" },
       { route: "/assignment-setup", caption: "Assignments setup" },
       { route: "/assessment-score-entry", caption: "Assessment score entry" },
       { route: "/subject-setup", caption: "subject Setup" },
@@ -939,15 +941,8 @@ async function main() {
       { route: "/my-assignments", caption: "My Assignments" },
 
       // Analytics
-      {
-        route: "/reports/store-inventory-balance-matrix",
-        caption: "Store inventory matrix",
-      },
-      { route: "/reports/student-inventory", caption: "Student collections summary" },
-      { route: "/reports/student-items-received", caption: "Student items received" },
-      { route: "/reports/inventory-collections", caption: "Inventory Collections Report" },
-      { route: "/reports/item-balances", caption: "Item balance report" },
-      { route: "/reports/item-transaction-log", caption: "Item transaction log" },
+
+      { route: "/reports/inventory", caption: "Inventory reports" },
       { route: "/reports/account-statement", caption: "Account statement" },
       { route: "/reports/trial-balance", caption: "Trial balance" },
       { route: "/reports/balance-sheet", caption: "Balance sheet" },
@@ -961,11 +956,8 @@ async function main() {
       { route: "/account-subheads", caption: "Account setup" },
       // { route: "/administrative-expense-components", caption: "Administrative expense components" },
       { route: "/administrative-expenses", caption: "Administrative expenses" },
-      { route: "/billing-items", caption: "Billing & discounts" },
-      { route: "/student-billing", caption: "Student billing" },
-      { route: "/class-default-billings", caption: "Class default billing" },
+      { route: "/billing", caption: "Student Billings" },
       { route: "/journal-transfers", caption: "Journal transfers" },
-      { route: "/student-journal-transfers", caption: "Student journal transfers" },
       { route: "/staff-journal-transfers", caption: "Staff journal transfers" },
       // Setup
       { route: "/inventory", caption: "Inventory" },
@@ -1009,6 +1001,21 @@ async function main() {
         id: MENU_INVENTORY_OUTFLOWS_ID,
         route: "/inventory-outflows",
         caption: "Inventory outflows",
+      },
+      {
+        id: MENU_ASSESSMENT_SETUP_ID,
+        route: "/assessment-setup",
+        caption: "Assessment setup",
+      },
+      {
+        id: MENU_INVENTORY_REPORTS_ID,
+        route: "/reports/inventory",
+        caption: "Inventory reports",
+      },
+      {
+        id: MENU_STUDENT_BILLINGS_ID,
+        route: "/billing",
+        caption: "Student Billings",
       },
     ];
 
@@ -1152,6 +1159,90 @@ async function main() {
         menuId: MENU_INVENTORY_OUTFLOWS_ID,
         name: "Sales",
         route: "/outflow-sales",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000015",
+        menuId: MENU_ASSESSMENT_SETUP_ID,
+        name: "Assessment Templates",
+        route: "/assessment-templates",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000016",
+        menuId: MENU_ASSESSMENT_SETUP_ID,
+        name: "Class Templates",
+        route: "/class-assessment-templates",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000017",
+        menuId: MENU_ASSESSMENT_SETUP_ID,
+        name: "Assessment Grading",
+        route: "/grading-templates",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000018",
+        menuId: MENU_ASSESSMENT_SETUP_ID,
+        name: "Behavioural Templates",
+        route: "/behavioural-assessment-templates",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000019",
+        menuId: MENU_ASSESSMENT_SETUP_ID,
+        name: "Behavioural Grading",
+        route: "/behavioural-grading-templates",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001a",
+        menuId: MENU_INVENTORY_REPORTS_ID,
+        name: "Student collections summary",
+        route: "/reports/student-inventory",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001b",
+        menuId: MENU_INVENTORY_REPORTS_ID,
+        name: "Store inventory matrix",
+        route: "/reports/store-inventory-balance-matrix",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001c",
+        menuId: MENU_INVENTORY_REPORTS_ID,
+        name: "Student items received",
+        route: "/reports/student-items-received",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001d",
+        menuId: MENU_INVENTORY_REPORTS_ID,
+        name: "Item balance report",
+        route: "/reports/item-balances",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001e",
+        menuId: MENU_INVENTORY_REPORTS_ID,
+        name: "Item transaction log",
+        route: "/reports/item-transaction-log",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001f",
+        menuId: MENU_STUDENT_BILLINGS_ID,
+        name: "Billing items",
+        route: "/billing-items",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000020",
+        menuId: MENU_STUDENT_BILLINGS_ID,
+        name: "Student billing",
+        route: "/student-billing",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000021",
+        menuId: MENU_STUDENT_BILLINGS_ID,
+        name: "Class default billing",
+        route: "/class-default-billings",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000022",
+        menuId: MENU_STUDENT_BILLINGS_ID,
+        name: "Student journal transfers",
+        route: "/student-journal-transfers",
       },
     ];
 
