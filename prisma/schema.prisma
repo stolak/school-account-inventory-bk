@@ -256,13 +256,31 @@ model AppRole {
 }
 
 model Menu {
-  id        String     @id @default(uuid()) @db.Char(36)
-  route     String     @unique
-  caption   String
-  status    Status     @default(Active)
-  roleMenus RoleMenu[]
+  id            String         @id @default(uuid()) @db.Char(36)
+  route         String         @unique
+  caption       String
+  status        Status         @default(Active)
+  roleMenus     RoleMenu[]
+  menuChildrens MenuChildren[]
 
   @@map("menus")
+}
+
+model MenuChildren {
+  id        String   @id @default(uuid()) @db.Char(36)
+  menuId    String   @map("menu_id") @db.Char(36)
+  menu      Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
+  name      String
+  route     String
+  status    Status   @default(Active)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @default(now()) @map("updated_at")
+
+  /// Per-role grants for this child under a parent RoleMenu assignment.
+  roleMenuChildren RoleMenuChild[]
+
+  @@index([menuId])
+  @@map("menu_children")
 }
 
 model RoleMenu {
@@ -273,10 +291,31 @@ model RoleMenu {
   menu Menu     @relation(fields: [menuId], references: [id], onDelete: Cascade)
   role AppRole? @relation(fields: [roleId], references: [id])
 
+  /// Selected child routes under this role+parent menu. Empty = all active children.
+  roleMenuChildren RoleMenuChild[]
+
   @@unique([roleId, menuId])
   @@index([roleId])
   @@index([menuId])
   @@map("role_menus")
+}
+
+/// Grants a role access to specific child items under an assigned parent menu (RoleMenu).
+/// A row links one RoleMenu assignment to one MenuChildren entry.
+/// Resolution: if no rows exist for a RoleMenu, the role sees all active MenuChildren of that menu;
+/// if one or more rows exist, only those children are visible (whitelist).
+model RoleMenuChild {
+  id          String @id @default(uuid()) @db.Char(36)
+  roleMenuId  String @map("role_menu_id") @db.Char(36)
+  menuChildId String @map("menu_child_id") @db.Char(36)
+
+  roleMenu  RoleMenu     @relation(fields: [roleMenuId], references: [id], onDelete: Cascade)
+  menuChild MenuChildren @relation(fields: [menuChildId], references: [id], onDelete: Cascade)
+
+  @@unique([roleMenuId, menuChildId])
+  @@index([roleMenuId])
+  @@index([menuChildId])
+  @@map("role_menu_children")
 }
 
 model UserRole {

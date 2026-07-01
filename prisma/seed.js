@@ -16,6 +16,43 @@ const STORE_CLERK_ROLE_ID = "a2000001-0002-4002-8002-000000000006";
 const CLASS_TEACHER_ROLE_ID = "a2000001-0002-4002-8002-000000000010";
 const SUBJECT_TEACHER_ROLE_ID = "a2000001-0002-4002-8002-000000000011";
 
+const MENU_SCHOOL_MANAGEMENT_ID = "menu0001-0000-4000-8000-000000000001";
+const MENU_INVENTORY_OPS_ID = "menu0001-0000-4000-8000-000000000002";
+const MENU_INVENTORY_INFLOWS_ID = "menu0001-0000-4000-8000-000000000003";
+const MENU_INVENTORY_OUTFLOWS_ID = "menu0001-0000-4000-8000-000000000004";
+const MENU_ASSESSMENT_SETUP_ID = "menu0001-0000-4000-8000-000000000005";
+const MENU_INVENTORY_REPORTS_ID = "menu0001-0000-4000-8000-000000000006";
+const MENU_STUDENT_BILLINGS_ID = "menu0001-0000-4000-8000-000000000007";
+const MENU_STUDENT_FINANCIAL_REPORTS_ID = "menu0001-0000-4000-8000-000000000008";
+
+async function ensureRoleMenu(roleId, menuId) {
+  const existing = await prisma.roleMenu.findFirst({
+    where: { roleId, menuId },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const created = await prisma.roleMenu.create({
+    data: { roleId, menuId },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+async function ensureRoleMenuChild(roleMenuId, menuChildId) {
+  const existing = await prisma.roleMenuChild.findFirst({
+    where: { roleMenuId, menuChildId },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const created = await prisma.roleMenuChild.create({
+    data: { roleMenuId, menuChildId },
+    select: { id: true },
+  });
+  return created.id;
+}
+
 async function assignUserAppRole(userId, roleId) {
   if (!userId || !roleId) return;
   await prisma.userRole.upsert({
@@ -884,8 +921,6 @@ async function main() {
     const sidebarMenus = [
       // Main
       { route: "/", caption: "Dashboard" },
-      { route: "/purchases", caption: "Purchases" },
-      { route: "/donations", caption: "Donations" },
       { route: "/project-disbursement", caption: "Project disbursement" },
       { route: "/facility-item-distribution", caption: "Facility item distribution" },
       { route: "/sales", caption: "Sales" },
@@ -896,7 +931,6 @@ async function main() {
       { route: "/store-transfers", caption: "Store transfers" },
       // School Management
       { route: "/classes", caption: "Classes & sub-classes" },
-      { route: "/assessment-setup", caption: "Assessment setup" },
       { route: "/assignment-setup", caption: "Assignments setup" },
       { route: "/assessment-score-entry", caption: "Assessment score entry" },
       { route: "/subject-setup", caption: "subject Setup" },
@@ -908,15 +942,8 @@ async function main() {
       { route: "/my-assignments", caption: "My Assignments" },
 
       // Analytics
-      {
-        route: "/reports/store-inventory-balance-matrix",
-        caption: "Store inventory matrix",
-      },
-      { route: "/reports/student-inventory", caption: "Student collections summary" },
-      { route: "/reports/student-items-received", caption: "Student items received" },
-      { route: "/reports/inventory-collections", caption: "Inventory Collections Report" },
-      { route: "/reports/item-balances", caption: "Item balance report" },
-      { route: "/reports/item-transaction-log", caption: "Item transaction log" },
+
+      { route: "/reports/inventory", caption: "Inventory reports" },
       { route: "/reports/account-statement", caption: "Account statement" },
       { route: "/reports/trial-balance", caption: "Trial balance" },
       { route: "/reports/balance-sheet", caption: "Balance sheet" },
@@ -930,11 +957,9 @@ async function main() {
       { route: "/account-subheads", caption: "Account setup" },
       // { route: "/administrative-expense-components", caption: "Administrative expense components" },
       { route: "/administrative-expenses", caption: "Administrative expenses" },
-      { route: "/billing-items", caption: "Billing & discounts" },
-      { route: "/student-billing", caption: "Student billing" },
-      { route: "/class-default-billings", caption: "Class default billing" },
+      { route: "/billing", caption: "Student Billings" },
+      { route: "/reports/student-accounts", caption: "Student financial reports" },
       { route: "/journal-transfers", caption: "Journal transfers" },
-      { route: "/student-journal-transfers", caption: "Student journal transfers" },
       { route: "/staff-journal-transfers", caption: "Staff journal transfers" },
       // Setup
       { route: "/inventory", caption: "Inventory" },
@@ -957,6 +982,309 @@ async function main() {
       });
     }
     console.log(`   ✓ ${sidebarMenus.length} menus`);
+
+    const groupedMenus = [
+      {
+        id: MENU_SCHOOL_MANAGEMENT_ID,
+        route: "/school-management",
+        caption: "School Management",
+      },
+      {
+        id: MENU_INVENTORY_OPS_ID,
+        route: "/inventory-operations",
+        caption: "Inventory Operations",
+      },
+      {
+        id: MENU_INVENTORY_INFLOWS_ID,
+        route: "/inventory-inflows",
+        caption: "Inventory inflows",
+      },
+      {
+        id: MENU_INVENTORY_OUTFLOWS_ID,
+        route: "/inventory-outflows",
+        caption: "Inventory outflows",
+      },
+      {
+        id: MENU_ASSESSMENT_SETUP_ID,
+        route: "/assessment-setup",
+        caption: "Assessment setup",
+      },
+      {
+        id: MENU_INVENTORY_REPORTS_ID,
+        route: "/reports/inventory",
+        caption: "Inventory reports",
+      },
+      {
+        id: MENU_STUDENT_BILLINGS_ID,
+        route: "/billing",
+        caption: "Student Billings",
+      },
+      {
+        id: MENU_STUDENT_FINANCIAL_REPORTS_ID,
+        route: "/reports/student-accounts",
+        caption: "Student financial reports",
+      },
+    ];
+
+    for (const menu of groupedMenus) {
+      await prisma.menu.upsert({
+        where: { route: menu.route },
+        update: { caption: menu.caption, status: "Active" },
+        create: { ...menu, status: "Active" },
+      });
+    }
+
+    const groupedMenuIdBySeedId = Object.fromEntries(
+      (
+        await prisma.menu.findMany({
+          where: { route: { in: groupedMenus.map((menu) => menu.route) } },
+          select: { id: true, route: true },
+        })
+      ).map((row) => {
+        const seedMenu = groupedMenus.find((menu) => menu.route === row.route);
+        return [seedMenu.id, row.id];
+      })
+    );
+
+    const menuChildren = [
+      {
+        id: "mc000001-0000-4000-8000-000000000001",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Academic setup",
+        route: "#",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000002",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Classes & sub-classes",
+        route: "/classes",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000003",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Students",
+        route: "/students",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000004",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Staff",
+        route: "/staff",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000005",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Sessions & terms",
+        route: "/sessions",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000006",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Assessment setup",
+        route: "/assessment-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000007",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Assignments setup",
+        route: "/assignment-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000008",
+        menuId: MENU_SCHOOL_MANAGEMENT_ID,
+        name: "Subject setup",
+        route: "/subject-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000009",
+        menuId: MENU_INVENTORY_OPS_ID,
+        name: "Stock movement",
+        route: "#",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000000a",
+        menuId: MENU_INVENTORY_OPS_ID,
+        name: "Purchases",
+        route: "/purchases",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000000b",
+        menuId: MENU_INVENTORY_OPS_ID,
+        name: "Store transfers",
+        route: "/store-transfers",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000000c",
+        menuId: MENU_INVENTORY_OPS_ID,
+        name: "Suppliers",
+        route: "/suppliers",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000000d",
+        menuId: MENU_INVENTORY_INFLOWS_ID,
+        name: "Purchases",
+        route: "/purchases",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000000e",
+        menuId: MENU_INVENTORY_INFLOWS_ID,
+        name: "Donations",
+        route: "/donations",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000000f",
+        menuId: MENU_INVENTORY_INFLOWS_ID,
+        name: "Transfers",
+        route: "/store-transfers",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000010",
+        menuId: MENU_INVENTORY_OUTFLOWS_ID,
+        name: "Students",
+        route: "/outflow-students",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000011",
+        menuId: MENU_INVENTORY_OUTFLOWS_ID,
+        name: "Staff",
+        route: "/outflow-staff",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000012",
+        menuId: MENU_INVENTORY_OUTFLOWS_ID,
+        name: "Projects",
+        route: "/outflow-projects",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000013",
+        menuId: MENU_INVENTORY_OUTFLOWS_ID,
+        name: "Facility",
+        route: "/outflow-facility",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000014",
+        menuId: MENU_INVENTORY_OUTFLOWS_ID,
+        name: "Sales",
+        route: "/outflow-sales",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000015",
+        menuId: MENU_ASSESSMENT_SETUP_ID,
+        name: "Assessment Templates",
+        route: "/assessment-templates",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000016",
+        menuId: MENU_ASSESSMENT_SETUP_ID,
+        name: "Class Templates",
+        route: "/class-assessment-templates",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000017",
+        menuId: MENU_ASSESSMENT_SETUP_ID,
+        name: "Assessment Grading",
+        route: "/grading-templates",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000018",
+        menuId: MENU_ASSESSMENT_SETUP_ID,
+        name: "Behavioural Templates",
+        route: "/behavioural-assessment-templates",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000019",
+        menuId: MENU_ASSESSMENT_SETUP_ID,
+        name: "Behavioural Grading",
+        route: "/behavioural-grading-templates",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001a",
+        menuId: MENU_INVENTORY_REPORTS_ID,
+        name: "Student collections summary",
+        route: "/reports/student-inventory",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001b",
+        menuId: MENU_INVENTORY_REPORTS_ID,
+        name: "Store inventory matrix",
+        route: "/reports/store-inventory-balance-matrix",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001c",
+        menuId: MENU_INVENTORY_REPORTS_ID,
+        name: "Student items received",
+        route: "/reports/student-items-received",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001d",
+        menuId: MENU_INVENTORY_REPORTS_ID,
+        name: "Item balance report",
+        route: "/reports/item-balances",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001e",
+        menuId: MENU_INVENTORY_REPORTS_ID,
+        name: "Item transaction log",
+        route: "/reports/item-transaction-log",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000001f",
+        menuId: MENU_STUDENT_BILLINGS_ID,
+        name: "Billing items",
+        route: "/billing-items",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000020",
+        menuId: MENU_STUDENT_BILLINGS_ID,
+        name: "Student billing",
+        route: "/student-billing",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000021",
+        menuId: MENU_STUDENT_BILLINGS_ID,
+        name: "Class default billing",
+        route: "/class-default-billings",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000022",
+        menuId: MENU_STUDENT_BILLINGS_ID,
+        name: "Student journal transfers",
+        route: "/student-journal-transfers",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000023",
+        menuId: MENU_STUDENT_FINANCIAL_REPORTS_ID,
+        name: "Student billing summary",
+        route: "/reports/student-billing-summary",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000024",
+        menuId: MENU_STUDENT_FINANCIAL_REPORTS_ID,
+        name: "Student balances",
+        route: "/reports/student-balances",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000025",
+        menuId: MENU_STUDENT_FINANCIAL_REPORTS_ID,
+        name: "Student transaction log",
+        route: "/reports/student-transaction-log",
+      },
+    ];
+
+    for (const child of menuChildren) {
+      const menuId = groupedMenuIdBySeedId[child.menuId] ?? child.menuId;
+      await prisma.menuChildren.upsert({
+        where: { id: child.id },
+        update: {
+          menuId,
+          name: child.name,
+          route: child.route,
+          status: "Active",
+        },
+        create: { ...child, menuId, status: "Active" },
+      });
+    }
+    console.log(`   ✓ ${groupedMenus.length} grouped menus, ${menuChildren.length} menu children`);
 
     const systemAdminRoleId = appRoles[1].id;
     const allMenus = await prisma.menu.findMany({ select: { id: true } });
@@ -988,23 +1316,33 @@ async function main() {
     }
     console.log("   ✓ My Assignments menu linked to Student role");
 
-    const assignmentSetupMenu = await prisma.menu.findUnique({
-      where: { route: "/assignment-setup" },
-      select: { id: true },
-    });
-    if (assignmentSetupMenu) {
-      for (const roleId of [CLASS_TEACHER_ROLE_ID, SUBJECT_TEACHER_ROLE_ID]) {
-        const existing = await prisma.roleMenu.findFirst({
-          where: { roleId, menuId: assignmentSetupMenu.id },
-        });
-        if (!existing) {
-          await prisma.roleMenu.create({
-            data: { roleId, menuId: assignmentSetupMenu.id },
-          });
-        }
-      }
+    for (const roleId of [CLASS_TEACHER_ROLE_ID, SUBJECT_TEACHER_ROLE_ID]) {
+      const roleMenuId = await ensureRoleMenu(roleId, MENU_SCHOOL_MANAGEMENT_ID);
+      await ensureRoleMenuChild(roleMenuId, "mc000001-0000-4000-8000-000000000007");
     }
-    console.log("   ✓ Assignments setup menu linked to Class Teacher and Subject Teacher roles");
+    console.log(
+      "   ✓ School Management parent menu linked to Class Teacher and Subject Teacher with Assignments setup child only"
+    );
+
+    const registrarRoleMenuId = await ensureRoleMenu(REGISTRAR_ROLE_ID, MENU_SCHOOL_MANAGEMENT_ID);
+    for (const childId of [
+      "mc000001-0000-4000-8000-000000000002",
+      "mc000001-0000-4000-8000-000000000003",
+      "mc000001-0000-4000-8000-000000000004",
+      "mc000001-0000-4000-8000-000000000005",
+    ]) {
+      await ensureRoleMenuChild(registrarRoleMenuId, childId);
+    }
+
+    const storeClerkRoleMenuId = await ensureRoleMenu(STORE_CLERK_ROLE_ID, MENU_INVENTORY_OPS_ID);
+    for (const childId of [
+      "mc000001-0000-4000-8000-00000000000a",
+      "mc000001-0000-4000-8000-00000000000b",
+      "mc000001-0000-4000-8000-00000000000c",
+    ]) {
+      await ensureRoleMenuChild(storeClerkRoleMenuId, childId);
+    }
+    console.log("   ✓ Registrar and Store Clerk role menu children seeded");
 
     // Chart of accounts — AccountGroup & AccountHead (fixed IDs for idempotent re-seeding)
     console.log("📒 Seeding account groups and account heads...");
