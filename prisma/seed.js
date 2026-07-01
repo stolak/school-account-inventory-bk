@@ -24,6 +24,9 @@ const MENU_ASSESSMENT_SETUP_ID = "menu0001-0000-4000-8000-000000000005";
 const MENU_INVENTORY_REPORTS_ID = "menu0001-0000-4000-8000-000000000006";
 const MENU_STUDENT_BILLINGS_ID = "menu0001-0000-4000-8000-000000000007";
 const MENU_STUDENT_FINANCIAL_REPORTS_ID = "menu0001-0000-4000-8000-000000000008";
+const MENU_ACCOUNT_SETTINGS_ID = "menu0001-0000-4000-8000-000000000009";
+const MENU_ACCOUNTING_REPORTS_ID = "menu0001-0000-4000-8000-00000000000a";
+const MENU_ACCOUNT_POSTING_ID = "menu0001-0000-4000-8000-00000000000b";
 
 async function ensureRoleMenu(roleId, menuId) {
   const existing = await prisma.roleMenu.findFirst({
@@ -944,26 +947,19 @@ async function main() {
       // Analytics
 
       { route: "/reports/inventory", caption: "Inventory reports" },
-      { route: "/reports/account-statement", caption: "Account statement" },
-      { route: "/reports/trial-balance", caption: "Trial balance" },
-      { route: "/reports/balance-sheet", caption: "Balance sheet" },
+
       { route: "/reports/student-billing-summary", caption: "Student billing summary" },
       { route: "/reports/student-balances", caption: "Student balances" },
-      { route: "/reports/staff-balances", caption: "Staff balances" },
-      { route: "/reports/student-transaction-log", caption: "Student transaction log" },
-      { route: "/reports/staff-transaction-log", caption: "Staff transaction log" },
-      { route: "/reports/profit-and-loss", caption: "Profit & loss" },
+      { route: "/account/posting", caption: "Account Posting" },
+      { route: "/reports/accounting", caption: "Account Report & Analytics" },
       // Accounting
-      { route: "/account-subheads", caption: "Account setup" },
+      { route: "/account-settings", caption: "Account settings" },
       // { route: "/administrative-expense-components", caption: "Administrative expense components" },
       { route: "/administrative-expenses", caption: "Administrative expenses" },
       { route: "/billing", caption: "Student Billings" },
       { route: "/reports/student-accounts", caption: "Student financial reports" },
-      { route: "/journal-transfers", caption: "Journal transfers" },
-      { route: "/staff-journal-transfers", caption: "Staff journal transfers" },
       // Setup
       { route: "/inventory", caption: "Inventory" },
-      { route: "/default-account-settings", caption: "Default account settings" },
       { route: "/users", caption: "User management" },
       { route: "/app-roles", caption: "Role management" },
       { route: "/menus", caption: "Menu management" },
@@ -1023,6 +1019,21 @@ async function main() {
         id: MENU_STUDENT_FINANCIAL_REPORTS_ID,
         route: "/reports/student-accounts",
         caption: "Student financial reports",
+      },
+      {
+        id: MENU_ACCOUNT_SETTINGS_ID,
+        route: "/account-settings",
+        caption: "Account settings",
+      },
+      {
+        id: MENU_ACCOUNTING_REPORTS_ID,
+        route: "/reports/accounting",
+        caption: "Account Report & Analytics",
+      },
+      {
+        id: MENU_ACCOUNT_POSTING_ID,
+        route: "/account/posting",
+        caption: "Account Posting",
       },
     ];
 
@@ -1268,6 +1279,108 @@ async function main() {
         menuId: MENU_STUDENT_FINANCIAL_REPORTS_ID,
         name: "Student transaction log",
         route: "/reports/student-transaction-log",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000026",
+        menuId: MENU_ACCOUNT_SETTINGS_ID,
+        name: "Account subheads",
+        route: "/account-subheads",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000027",
+        menuId: MENU_ACCOUNT_SETTINGS_ID,
+        name: "Account chart setup",
+        route: "/account-chart-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000028",
+        menuId: MENU_ACCOUNT_SETTINGS_ID,
+        name: "Cashiers",
+        route: "/cashiers",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000029",
+        menuId: MENU_ACCOUNT_SETTINGS_ID,
+        name: "Cashier setup",
+        route: "/cashier-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000002a",
+        menuId: MENU_ACCOUNT_SETTINGS_ID,
+        name: "Default settings",
+        route: "/default-settings",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000002b",
+        menuId: MENU_ACCOUNT_SETTINGS_ID,
+        name: "Default subhead settings",
+        route: "/default-subhead-settings",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000002c",
+        menuId: MENU_ACCOUNT_SETTINGS_ID,
+        name: "Default account settings",
+        route: "/default-account-settings",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000020",
+        menuId: MENU_ACCOUNT_SETTINGS_ID,
+        name: "Administrative expenses",
+        route: "/administrative-expenses",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000002d",
+        menuId: MENU_ACCOUNTING_REPORTS_ID,
+        name: "Staff balances",
+        route: "/reports/staff-balances",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000002e",
+        menuId: MENU_ACCOUNTING_REPORTS_ID,
+        name: "Staff transaction log",
+        route: "/reports/staff-transaction-log",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000002f",
+        menuId: MENU_ACCOUNTING_REPORTS_ID,
+        name: "Account statement",
+        route: "/reports/account-statement",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000030",
+        menuId: MENU_ACCOUNTING_REPORTS_ID,
+        name: "Trial balance",
+        route: "/reports/trial-balance",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000031",
+        menuId: MENU_ACCOUNTING_REPORTS_ID,
+        name: "Balance sheet",
+        route: "/reports/balance-sheet",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000032",
+        menuId: MENU_ACCOUNTING_REPORTS_ID,
+        name: "Profit & loss",
+        route: "/reports/profit-and-loss",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000033",
+        menuId: MENU_ACCOUNT_POSTING_ID,
+        name: "Staff journal transfers",
+        route: "/staff-journal-transfers",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000034",
+        menuId: MENU_ACCOUNT_POSTING_ID,
+        name: "Journal transfers",
+        route: "/journal-transfers",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000035",
+        menuId: MENU_ACCOUNT_POSTING_ID,
+        name: "Administrative expenses",
+        route: "/administrative-expenses-posting",
       },
     ];
 
