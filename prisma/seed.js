@@ -27,6 +27,8 @@ const MENU_STUDENT_FINANCIAL_REPORTS_ID = "menu0001-0000-4000-8000-000000000008"
 const MENU_ACCOUNT_SETTINGS_ID = "menu0001-0000-4000-8000-000000000009";
 const MENU_ACCOUNTING_REPORTS_ID = "menu0001-0000-4000-8000-00000000000a";
 const MENU_ACCOUNT_POSTING_ID = "menu0001-0000-4000-8000-00000000000b";
+const MENU_FACILITY_SETUP_ID = "menu0001-0000-4000-8000-00000000000c";
+const MENU_ACCESS_MANAGEMENT_ID = "menu0001-0000-4000-8000-00000000000d";
 
 async function ensureRoleMenu(roleId, menuId) {
   const existing = await prisma.roleMenu.findFirst({
@@ -929,8 +931,7 @@ async function main() {
       { route: "/sales", caption: "Sales" },
       { route: "/suppliers", caption: "Suppliers" },
       { route: "/projects", caption: "Projects" },
-      { route: "/facility-unit-setup", caption: "Facility/unit setup" },
-      { route: "/store-setup", caption: "Store setup" },
+      { route: "/facility-setup", caption: "Facility/unit setup" },
       { route: "/store-transfers", caption: "Store transfers" },
       // School Management
       { route: "/classes", caption: "Classes & sub-classes" },
@@ -960,8 +961,7 @@ async function main() {
       { route: "/reports/student-accounts", caption: "Student financial reports" },
       // Setup
       { route: "/inventory", caption: "Inventory" },
-      { route: "/users", caption: "User management" },
-      { route: "/app-roles", caption: "Role management" },
+      { route: "/access-management", caption: "Access management" },
       { route: "/menus", caption: "Menu management" },
 
       // payroll
@@ -1034,6 +1034,16 @@ async function main() {
         id: MENU_ACCOUNT_POSTING_ID,
         route: "/account/posting",
         caption: "Account Posting",
+      },
+      {
+        id: MENU_FACILITY_SETUP_ID,
+        route: "/facility-setup",
+        caption: "Facility/unit setup",
+      },
+      {
+        id: MENU_ACCESS_MANAGEMENT_ID,
+        route: "/access-management",
+        caption: "Access management",
       },
     ];
 
@@ -1381,6 +1391,36 @@ async function main() {
         menuId: MENU_ACCOUNT_POSTING_ID,
         name: "Administrative expenses",
         route: "/administrative-expenses-posting",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000036",
+        menuId: MENU_FACILITY_SETUP_ID,
+        name: "Projects setup",
+        route: "/projects-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000037",
+        menuId: MENU_FACILITY_SETUP_ID,
+        name: "Facility unit setup",
+        route: "/facility-unit-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000038",
+        menuId: MENU_FACILITY_SETUP_ID,
+        name: "Store setup",
+        route: "/store-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-000000000039",
+        menuId: MENU_ACCESS_MANAGEMENT_ID,
+        name: "Users setup",
+        route: "/users-setup",
+      },
+      {
+        id: "mc000001-0000-4000-8000-00000000003a",
+        menuId: MENU_ACCESS_MANAGEMENT_ID,
+        name: "Role management",
+        route: "/app-roles",
       },
     ];
 
