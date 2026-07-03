@@ -968,6 +968,8 @@ async function main() {
       { route: "/payroll/salary-components", caption: "Salary components" },
       { route: "/payroll/salary-charts", caption: "Salary charts" },
       { route: "/payroll/report", caption: "Payroll reports" },
+      // perant
+      { route: "/parent/assignments", caption: "Parent assignments" },
     ];
 
     for (const item of sidebarMenus) {
@@ -1468,6 +1470,15 @@ async function main() {
       }
     }
     console.log("   ✓ My Assignments menu linked to Student role");
+
+    const parentAssignmentsMenu = await prisma.menu.findUnique({
+      where: { route: "/parent/assignments" },
+      select: { id: true },
+    });
+    if (parentAssignmentsMenu) {
+      await ensureRoleMenu(PARENT_ROLE_ID, parentAssignmentsMenu.id);
+    }
+    console.log("   ✓ Parent assignments menu linked to Parent role");
 
     for (const roleId of [CLASS_TEACHER_ROLE_ID, SUBJECT_TEACHER_ROLE_ID]) {
       const roleMenuId = await ensureRoleMenu(roleId, MENU_SCHOOL_MANAGEMENT_ID);

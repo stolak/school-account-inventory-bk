@@ -203,7 +203,7 @@ export class AuthService {
     contact: UserContact
   ): Promise<UserProfileContext> {
     const students = await prisma.student.findMany({
-      where: { userId },
+      where: { guardianEmail: contact.email },
       include: classSubclassSelect,
     });
 
