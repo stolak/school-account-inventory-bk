@@ -9,6 +9,7 @@ router.get("/student-report", studentAssessmentScoreController.studentAssessment
 router.get("/student-score-report", studentAssessmentScoreController.studentSubjectScoreReport);
 router.get("/student-scores", studentAssessmentScoreController.studentSubjectScores);
 router.get("/score-sheet", studentAssessmentScoreController.scoreSheet);
+router.get("/broadsheet", studentAssessmentScoreController.broadsheet);
 router.get("/", studentAssessmentScoreController.list);
 router.get("/:id", studentAssessmentScoreController.getById);
 router.put("/:id", studentAssessmentScoreController.update);

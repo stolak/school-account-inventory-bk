@@ -472,6 +472,89 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *       500:
  *         description: Server error
  */
+/**
+ * @openapi
+ * /api/v1/student-assessment-scores/broadsheet:
+ *   get:
+ *     summary: Class broadsheet — all students with per-subject total scores and grades
+ *     tags: [StudentAssessmentScores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: classId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: subclassId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: termId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Broadsheet with per-student subject totals and grades
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       studentId:
+ *                         type: string
+ *                       studentName:
+ *                         type: string
+ *                       subjects:
+ *                         type: array
+ *                         items:
+ *                           type: object
+ *                           properties:
+ *                             id:
+ *                               type: string
+ *                               description: Subject ID
+ *                             subjectName:
+ *                               type: string
+ *                             totalScore:
+ *                               type: number
+ *                             grade:
+ *                               type: string
+ *             example:
+ *               success: true
+ *               message: Broadsheet retrieved successfully
+ *               data:
+ *                 - studentId: "e6f7a8b9-c0d1-4234-e012-345678907001"
+ *                   studentName: "Chioma Adebayo"
+ *                   subjects:
+ *                     - id: "a5b6c7d8-e9f0-4178-b234-567890ab0024"
+ *                       subjectName: "Mathematics"
+ *                       totalScore: 90
+ *                       grade: "A"
+ *                     - id: "b6c7d8e9-f0a1-4289-c345-678901bc0035"
+ *                       subjectName: "English Language"
+ *                       totalScore: 78
+ *                       grade: "B"
+ *       400:
+ *         description: Validation error
+ *       500:
+ *         description: Server error
+ */
 export const studentAssessmentScoreController = {
   createBulk: async (req: Request, res: Response) => {
     try {
@@ -740,6 +823,40 @@ export const studentAssessmentScoreController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to retrieve student assessment report");
+    }
+  },
+
+  broadsheet: async (req: Request, res: Response) => {
+    try {
+      const classId = queryString(req.query, "classId");
+      const subclassId = queryString(req.query, "subclassId");
+      const sessionId = queryString(req.query, "sessionId");
+      const termId = queryString(req.query, "termId");
+
+      if (!classId?.trim()) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+      if (!sessionId?.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId?.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+
+      const result = await studentAssessmentScoreService.getBroadsheet({
+        classId: classId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+        ...(subclassId?.trim() ? { subclassId: subclassId.trim() } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Broadsheet retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve broadsheet");
     }
   },
 

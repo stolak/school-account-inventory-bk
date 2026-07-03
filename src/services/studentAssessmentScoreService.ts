@@ -110,6 +110,19 @@ export interface StudentAssessmentReportResult {
   averageScore: number;
 }
 
+export interface BroadsheetSubjectEntry {
+  id: string;
+  subjectName: string;
+  totalScore: number;
+  grade: string;
+}
+
+export interface BroadsheetStudentEntry {
+  studentId: string;
+  studentName: string;
+  subjects: BroadsheetSubjectEntry[];
+}
+
 type GradeBand = {
   grade: string;
   minScore: Prisma.Decimal;
@@ -856,6 +869,100 @@ export class StudentAssessmentScoreService {
       overallScore,
       averageScore,
     };
+  }
+
+  /**
+   * Broadsheet: every student in the class (optionally a subclass) for the given
+   * session and term, with each registered subject's total score (summed across
+   * all active assessment components) and the grade derived from the class grading
+   * template.
+   */
+  async getBroadsheet(params: {
+    classId: string;
+    subclassId?: string;
+    sessionId: string;
+    termId: string;
+  }): Promise<BroadsheetStudentEntry[]> {
+    const classId = params.classId.trim();
+    const sessionId = params.sessionId.trim();
+    const termId = params.termId.trim();
+    const subclassId = params.subclassId?.trim();
+
+    if (!classId || !sessionId || !termId) {
+      throw new Error("classId, sessionId, and termId are required");
+    }
+
+    const { components } = await this.resolveTemplateAndComponents(classId, sessionId, termId);
+    const gradeItems = await this.resolveGradeItems(classId, sessionId, termId);
+    const componentIds = components.map((component) => component.id);
+
+    const registrations = await this.prisma.studentSubjectRegistration.findMany({
+      where: {
+        classId,
+        sessionId,
+        termId,
+        ...(subclassId ? { subclassId } : {}),
+      },
+      select: {
+        id: true,
+        studentId: true,
+        student: { select: { firstName: true, lastName: true } },
+        subject: { select: { id: true, name: true } },
+      },
+      orderBy: [
+        { student: { lastName: "asc" } },
+        { student: { firstName: "asc" } },
+        { subject: { name: "asc" } },
+      ],
+    });
+    if (registrations.length === 0) return [];
+
+    const registrationIds = registrations.map((reg) => reg.id);
+    const scores =
+      registrationIds.length > 0 && componentIds.length > 0
+        ? await this.prisma.studentAssessmentScore.findMany({
+            where: {
+              studentSubjectRegistrationId: { in: registrationIds },
+              componentId: { in: componentIds },
+            },
+            select: { studentSubjectRegistrationId: true, score: true },
+          })
+        : [];
+
+    const totalByRegistration = new Map<string, number>();
+    for (const row of scores) {
+      const previous = totalByRegistration.get(row.studentSubjectRegistrationId) ?? 0;
+      totalByRegistration.set(
+        row.studentSubjectRegistrationId,
+        previous + Number(row.score.toString())
+      );
+    }
+
+    const studentOrder: string[] = [];
+    const studentById = new Map<string, BroadsheetStudentEntry>();
+    for (const reg of registrations) {
+      let entry = studentById.get(reg.studentId);
+      if (!entry) {
+        entry = {
+          studentId: reg.studentId,
+          studentName: `${reg.student.firstName} ${reg.student.lastName}`,
+          subjects: [],
+        };
+        studentById.set(reg.studentId, entry);
+        studentOrder.push(reg.studentId);
+      }
+
+      const totalScore = roundScore(totalByRegistration.get(reg.id) ?? 0);
+      const { grade } = this.resolveGradeForTotalScore(totalScore, gradeItems);
+      entry.subjects.push({
+        id: reg.subject.id,
+        subjectName: reg.subject.name,
+        totalScore,
+        grade,
+      });
+    }
+
+    return studentOrder.map((studentId) => studentById.get(studentId)!);
   }
 
   async getById(id: string): Promise<StudentAssessmentScoreData | null> {
