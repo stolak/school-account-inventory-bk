@@ -135,6 +135,7 @@ model User {
   studentAssignments            StudentAssignment[]
   students                      Student[]
   teacherSubjects               TeacherSubjects[]
+  attendanceRecordsMarked       AttendanceRecord[] @relation("AttendanceMarkedBy")
 
   @@map("users")
 }
@@ -537,6 +538,7 @@ model Student {
   studentBehaviouralAssessmentScores StudentBehaviouralAssessmentScore[]
   assessmentRemarks                  AssessmentRemarks[]
   studentAssignments                 StudentAssignment[]
+  attendanceRecords                  AttendanceRecord[]
 
   @@index([classId])
   @@index([createdById])
@@ -562,6 +564,7 @@ model Term {
   assignments                        Assignment[]
   studentAssignments                 StudentAssignment[]
   teacherSubjects                    TeacherSubjects[]
+  attendanceRecords                  AttendanceRecord[]
 
   @@unique([name])
   @@map("terms")
@@ -584,6 +587,7 @@ model Session {
   assignments                        Assignment[]
   studentAssignments                 StudentAssignment[]
   teacherSubjects                    TeacherSubjects[]
+  attendanceRecords                  AttendanceRecord[]
 
   @@map("sessions")
 }
@@ -1788,6 +1792,14 @@ enum AssignmentStatus {
   Graded
 }
 
+enum AttendanceStatus {
+  Present
+  Absent
+  Late
+  Excused
+  HalfDay
+}
+
 model Assignment {
   id                    String               @id @default(uuid()) @db.Char(36)
   topic                 String               @map("topic")
@@ -1907,4 +1919,32 @@ model TeacherSubjects {
   @@index([sessionId])
   @@index([termId])
   @@map("teacher_subjects")
+}
+
+model AttendanceRecord {
+  id             String           @id @default(uuid()) @db.Char(36)
+  sessionId      String           @map("session_id") @db.Char(36)
+  session        Session          @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  termId         String           @map("term_id") @db.Char(36)
+  term           Term             @relation(fields: [termId], references: [id], onDelete: Restrict)
+  studentId      String           @map("student_id") @db.Char(36)
+  student        Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  status         AttendanceStatus @default(Present)
+  attendanceDate DateTime         @map("attendance_date") @db.Date
+  checkInTime    DateTime         @map("check_in_time")
+  checkOutTime   DateTime?        @map("check_out_time")
+  markedById     String           @map("marked_by") @db.Char(36)
+  markedBy       User             @relation("AttendanceMarkedBy", fields: [markedById], references: [id], onDelete: Restrict)
+  latitude       Decimal?         @db.Decimal(10, 8)
+  longitude      Decimal?         @db.Decimal(11, 8)
+  remarks        String?          @db.Text
+  createdAt      DateTime         @default(now()) @map("created_at")
+
+  @@unique([studentId, attendanceDate])
+  @@index([sessionId])
+  @@index([termId])
+  @@index([studentId])
+  @@index([markedById])
+  @@index([attendanceDate])
+  @@map("attendance_records")
 }

@@ -81,6 +81,7 @@ import defaultClassRemarkSetupRouter from "./defaultClassRemarkSetup";
 import assignmentRouter from "./assignment";
 import studentAssignmentRouter from "./studentAssignment";
 import teacherSubjectRouter from "./teacherSubject";
+import attendanceRecordRouter from "./attendanceRecord";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -167,6 +168,7 @@ router.use("/default-class-remark-setups", defaultClassRemarkSetupRouter);
 router.use("/assignments", assignmentRouter);
 router.use("/student-assignments", studentAssignmentRouter);
 router.use("/teacher-subjects", teacherSubjectRouter);
+router.use("/attendance-records", attendanceRecordRouter);
 
 router.use("/upload", uploadRouter);
 
