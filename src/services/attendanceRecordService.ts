@@ -185,10 +185,7 @@ function formatDateOnly(value: Date): string {
   return value.toISOString().slice(0, 10);
 }
 
-function studentFullName(student: {
-  firstName: string;
-  lastName: string;
-}): string {
+function studentFullName(student: { firstName: string; lastName: string }): string {
   return `${student.firstName} ${student.lastName}`;
 }
 
@@ -470,6 +467,7 @@ export class AttendanceRecordService {
   ): Promise<AttendanceStudentSummaryReport> {
     // Ignore status filter so present/absent breakdown and school-open days stay complete.
     const reportWhere = this.buildReportWhere({ ...params, status: undefined });
+    console.log(reportWhere);
     const [openDateGroups, rows] = await Promise.all([
       this.prisma.attendanceRecord.groupBy({
         by: ["attendanceDate"],
@@ -494,7 +492,7 @@ export class AttendanceRecordService {
         orderBy: [{ student: { lastName: "asc" } }, { student: { firstName: "asc" } }],
       }),
     ]);
-
+    console.log(rows);
     const schoolOpenedDays = openDateGroups.length;
     const summaryByStudentId = new Map<string, AttendanceStudentSummaryEntry>();
     const studentOrder: string[] = [];
@@ -720,13 +718,12 @@ export class AttendanceRecordService {
     const studentIds = records.map((record) => record.studentId);
     const duplicateStudentIds = studentIds.filter((id, index) => studentIds.indexOf(id) !== index);
     if (duplicateStudentIds.length > 0) {
-      throw new Error(`Duplicate studentId in records: ${[...new Set(duplicateStudentIds)].join(", ")}`);
+      throw new Error(
+        `Duplicate studentId in records: ${[...new Set(duplicateStudentIds)].join(", ")}`
+      );
     }
 
-    const attendanceDate = parseDateOnly(
-      input.attendanceDate ?? new Date(),
-      "attendanceDate"
-    );
+    const attendanceDate = parseDateOnly(input.attendanceDate ?? new Date(), "attendanceDate");
     const { sessionId, termId } = await this.resolveSessionTermForAttendanceDate(
       attendanceDate,
       input.sessionId,
