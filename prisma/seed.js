@@ -970,6 +970,9 @@ async function main() {
       { route: "/payroll/report", caption: "Payroll reports" },
       // perant
       { route: "/parent/assignments", caption: "Parent assignments" },
+      // attendance
+      { route: "/student-attendance", caption: "Attendance records" },
+      // { route: "/attendance/reports", caption: "Attendance reports" },
     ];
 
     for (const item of sidebarMenus) {

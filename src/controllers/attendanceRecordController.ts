@@ -168,7 +168,11 @@ function requireMarkedById(req: Request, res: Response): string | null {
  * /api/v1/attendance-records/bulk:
  *   post:
  *     summary: Submit attendance for multiple students
- *     description: Creates or updates attendance for each student for the same session, term, and date.
+ *     description: |
+ *       Creates or updates attendance for each student for the same date.
+ *       sessionId and termId are optional; when omitted, values are taken from the active period
+ *       if attendanceDate falls within that period's startDate and endDate.
+ *       attendanceDate is optional and defaults to the current date.
  *     tags: [AttendanceRecords]
  *     security:
  *       - bearerAuth: []
@@ -178,7 +182,7 @@ function requireMarkedById(req: Request, res: Response): string | null {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [sessionId, termId, attendanceDate, records]
+ *             required: [records]
  *             properties:
  *               sessionId:
  *                 type: string
@@ -187,6 +191,7 @@ function requireMarkedById(req: Request, res: Response): string | null {
  *               attendanceDate:
  *                 type: string
  *                 format: date
+ *                 description: Defaults to current date when omitted
  *               records:
  *                 type: array
  *                 minItems: 1
@@ -564,14 +569,11 @@ export const attendanceRecordController = {
 
       const { sessionId, termId, attendanceDate, records } = req.body ?? {};
 
-      if (!sessionId || typeof sessionId !== "string" || !sessionId.trim()) {
-        return res.status(400).json({ success: false, message: "sessionId is required" });
+      if (sessionId !== undefined && (typeof sessionId !== "string" || !sessionId.trim())) {
+        return res.status(400).json({ success: false, message: "sessionId must be a non-empty string" });
       }
-      if (!termId || typeof termId !== "string" || !termId.trim()) {
-        return res.status(400).json({ success: false, message: "termId is required" });
-      }
-      if (!attendanceDate) {
-        return res.status(400).json({ success: false, message: "attendanceDate is required" });
+      if (termId !== undefined && (typeof termId !== "string" || !termId.trim())) {
+        return res.status(400).json({ success: false, message: "termId must be a non-empty string" });
       }
       if (!Array.isArray(records) || records.length === 0) {
         return res.status(400).json({ success: false, message: "records must be a non-empty array" });
@@ -607,9 +609,13 @@ export const attendanceRecordController = {
       }
 
       const result = await attendanceRecordService.createMany({
-        sessionId: sessionId.trim(),
-        termId: termId.trim(),
-        attendanceDate,
+        ...(typeof sessionId === "string" && sessionId.trim()
+          ? { sessionId: sessionId.trim() }
+          : {}),
+        ...(typeof termId === "string" && termId.trim() ? { termId: termId.trim() } : {}),
+        ...(attendanceDate !== undefined && attendanceDate !== null
+          ? { attendanceDate }
+          : {}),
         markedById,
         records,
       });

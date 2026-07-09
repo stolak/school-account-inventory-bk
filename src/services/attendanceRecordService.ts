@@ -1,6 +1,7 @@
 import prisma from "../utils/prisma";
 import { AttendanceStatus, Prisma } from "@prisma/client";
 import { isPrismaKnownErrorWithCode, parseDecimalNonNegative } from "../utils/assessmentHttp";
+import { activePeriodService } from "./activePeriodService";
 
 const include = {
   session: { select: { id: true, name: true, status: true } },
@@ -656,19 +657,47 @@ export class AttendanceRecordService {
     }
   }
 
+  private async resolveSessionTermForAttendanceDate(
+    attendanceDate: Date,
+    sessionId?: string,
+    termId?: string
+  ): Promise<{ sessionId: string; termId: string }> {
+    const providedSessionId = sessionId?.trim() || "";
+    const providedTermId = termId?.trim() || "";
+
+    if (providedSessionId && providedTermId) {
+      return { sessionId: providedSessionId, termId: providedTermId };
+    }
+
+    const activePeriod = await activePeriodService.getActivePeriod();
+    if (!activePeriod) {
+      throw new Error("No active period configured; sessionId and termId are required");
+    }
+
+    const periodStart = parseDateOnly(activePeriod.startDate, "activePeriod.startDate");
+    const periodEnd = parseDateOnly(activePeriod.endDate, "activePeriod.endDate");
+    if (attendanceDate < periodStart || attendanceDate > periodEnd) {
+      throw new Error(
+        "attendanceDate is outside the active period startDate and endDate; provide sessionId and termId explicitly"
+      );
+    }
+
+    return {
+      sessionId: providedSessionId || activePeriod.sessionId,
+      termId: providedTermId || activePeriod.termId,
+    };
+  }
+
   async createMany(input: {
-    sessionId: string;
-    termId: string;
-    attendanceDate: Date | string;
+    sessionId?: string;
+    termId?: string;
+    attendanceDate?: Date | string;
     markedById: string;
     records: AttendanceRecordInput[];
   }): Promise<{ attendanceRecords: AttendanceRecordData[]; count: number }> {
-    const sessionId = input.sessionId.trim();
-    const termId = input.termId.trim();
     const markedById = input.markedById.trim();
-
-    if (!sessionId || !termId || !markedById) {
-      throw new Error("sessionId, termId, and markedById are required");
+    if (!markedById) {
+      throw new Error("markedById is required");
     }
     if (!Array.isArray(input.records) || input.records.length === 0) {
       throw new Error("records must be a non-empty array");
@@ -694,9 +723,18 @@ export class AttendanceRecordService {
       throw new Error(`Duplicate studentId in records: ${[...new Set(duplicateStudentIds)].join(", ")}`);
     }
 
+    const attendanceDate = parseDateOnly(
+      input.attendanceDate ?? new Date(),
+      "attendanceDate"
+    );
+    const { sessionId, termId } = await this.resolveSessionTermForAttendanceDate(
+      attendanceDate,
+      input.sessionId,
+      input.termId
+    );
+
     await this.assertRefsForMany(sessionId, termId, markedById, studentIds);
 
-    const attendanceDate = parseDateOnly(input.attendanceDate, "attendanceDate");
     const context = { sessionId, termId, attendanceDate, markedById };
 
     try {
