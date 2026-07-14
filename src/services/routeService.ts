@@ -17,7 +17,31 @@ const include = {
       },
     },
   },
-  _count: { select: { vehicleRoutes: true } },
+  routeBustops: {
+    select: {
+      id: true,
+      bustopId: true,
+      stopOrder: true,
+      bustop: {
+        select: {
+          id: true,
+          name: true,
+          latitude: true,
+          longitude: true,
+          status: true,
+        },
+      },
+    },
+    orderBy: { stopOrder: "asc" as const },
+  },
+  _count: {
+    select: {
+      vehicleRoutes: true,
+      routeBustops: true,
+      studentTransports: true,
+      vehicleTrips: true,
+    },
+  },
 } satisfies Prisma.RouteInclude;
 
 type Row = Prisma.RouteGetPayload<{ include: typeof include }>;
@@ -29,6 +53,7 @@ export interface RouteData {
   createdAt: Date;
   updatedAt: Date;
   vehicleRoutes: Row["vehicleRoutes"];
+  routeBustops: Row["routeBustops"];
   _count: Row["_count"];
 }
 
@@ -40,6 +65,7 @@ function mapRow(row: Row): RouteData {
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     vehicleRoutes: row.vehicleRoutes,
+    routeBustops: row.routeBustops,
     _count: row._count,
   };
 }
