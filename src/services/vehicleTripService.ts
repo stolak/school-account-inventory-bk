@@ -72,6 +72,15 @@ function parseOptionalCoordinate(
   return parseDecimalNonNegative(value, fieldName);
 }
 
+const ACTIVE_TRIP_STATUSES: VehicleTripStatus[] = [
+  VehicleTripStatus.Pending,
+  VehicleTripStatus.InProgress,
+];
+
+function isActiveTripStatus(status: VehicleTripStatus): boolean {
+  return ACTIVE_TRIP_STATUSES.includes(status);
+}
+
 export class VehicleTripService {
   private prisma = prisma;
 
@@ -88,6 +97,26 @@ export class VehicleTripService {
     if (!vehicle) throw new Error("Invalid vehicleId");
     if (!route) throw new Error("Invalid routeId");
     if (!driver) throw new Error("Invalid driverId");
+  }
+
+  /** Pending and InProgress count as active; a vehicle may have only one. */
+  private async assertNoActiveTripForVehicle(
+    vehicleId: string,
+    excludeTripId?: string
+  ): Promise<void> {
+    const active = await this.prisma.vehicleTrip.findFirst({
+      where: {
+        vehicleId,
+        status: { in: ACTIVE_TRIP_STATUSES },
+        ...(excludeTripId ? { id: { not: excludeTripId } } : {}),
+      },
+      select: { id: true, status: true },
+    });
+    if (active) {
+      throw new Error(
+        "Vehicle already has an active trip (Pending or InProgress). Complete or cancel it before starting a new one"
+      );
+    }
   }
 
   async create(input: {
@@ -122,6 +151,11 @@ export class VehicleTripService {
 
     await this.assertRefs({ vehicleId, routeId, driverId });
 
+    const status = input.status ?? VehicleTripStatus.Pending;
+    if (isActiveTripStatus(status)) {
+      await this.assertNoActiveTripForVehicle(vehicleId);
+    }
+
     const startTime =
       input.startTime === undefined || input.startTime === null
         ? null
@@ -130,8 +164,8 @@ export class VehicleTripService {
       input.endTime === undefined || input.endTime === null
         ? null
         : parseDateTime(input.endTime, "endTime");
-    if (startTime && endTime && endTime < startTime) {
-      throw new Error("endTime must be greater than or equal to startTime");
+    if (startTime && endTime && startTime > endTime) {
+      throw new Error("startTime cannot be greater than endTime");
     }
 
     const row = await this.prisma.vehicleTrip.create({
@@ -144,7 +178,7 @@ export class VehicleTripService {
         latitude: parseOptionalCoordinate(input.latitude, "latitude"),
         longitude: parseOptionalCoordinate(input.longitude, "longitude"),
         ...(input.tripDirection !== undefined ? { tripDirection: input.tripDirection } : {}),
-        ...(input.status !== undefined ? { status: input.status } : {}),
+        status,
       },
       include,
     });
@@ -252,8 +286,21 @@ export class VehicleTripService {
 
     const effectiveStart = startTime !== undefined ? startTime : existing.startTime;
     const effectiveEnd = endTime !== undefined ? endTime : existing.endTime;
-    if (effectiveStart && effectiveEnd && effectiveEnd < effectiveStart) {
-      throw new Error("endTime must be greater than or equal to startTime");
+    if (effectiveStart && effectiveEnd && effectiveStart > effectiveEnd) {
+      throw new Error("startTime cannot be greater than endTime");
+    }
+
+    let nextStatus = input.status ?? existing.status;
+    // A trip with endTime is finished: Completed if students boarded, otherwise Cancelled
+    if (effectiveEnd !== null) {
+      nextStatus =
+        existing._count.studentTransportHistories > 0
+          ? VehicleTripStatus.Completed
+          : VehicleTripStatus.Cancelled;
+    }
+
+    if (isActiveTripStatus(nextStatus)) {
+      await this.assertNoActiveTripForVehicle(existing.vehicleId, id);
     }
 
     try {
@@ -271,7 +318,7 @@ export class VehicleTripService {
           ...(input.driverId !== undefined ? { driverId: input.driverId.trim() } : {}),
           ...(input.routeId !== undefined ? { routeId: input.routeId.trim() } : {}),
           ...(input.tripDirection !== undefined ? { tripDirection: input.tripDirection } : {}),
-          ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.status !== undefined || effectiveEnd !== null ? { status: nextStatus } : {}),
         },
         include,
       });

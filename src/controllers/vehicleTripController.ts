@@ -80,6 +80,8 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *     responses:
  *       201:
  *         description: Vehicle trip created
+ *       409:
+ *         description: Vehicle already has an active trip (Pending or InProgress)
  *       401:
  *         description: Unauthorized
  *       403:
@@ -183,6 +185,7 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *                 type: string
  *                 format: date-time
  *                 nullable: true
+ *                 description: When set, status becomes Completed (or Cancelled if no students boarded)
  *               latitude:
  *                 type: number
  *                 nullable: true
@@ -199,11 +202,14 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *               status:
  *                 type: string
  *                 enum: [Pending, InProgress, Completed, Cancelled]
+ *                 description: Overridden to Completed/Cancelled when endTime is present
  *     responses:
  *       200:
  *         description: Vehicle trip updated
  *       400:
- *         description: Validation error
+ *         description: Validation error (e.g. startTime greater than endTime)
+ *       409:
+ *         description: Vehicle already has an active trip (Pending or InProgress)
  *       404:
  *         description: Not found
  *   delete:
