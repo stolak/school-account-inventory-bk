@@ -1,6 +1,7 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode, parseDecimalNonNegative } from "../utils/assessmentHttp";
-import { Prisma, VehicleTripStatus } from "@prisma/client";
+import { Direction, Prisma, VehicleTripStatus } from "@prisma/client";
+import { resolveStaffId } from "../utils/staffContext";
 
 const include = {
   vehicle: {
@@ -21,10 +22,11 @@ export interface VehicleTripData {
   route: Row["route"];
   driverId: string;
   driver: Row["driver"];
-  startTime: Date;
+  startTime: Date | null;
   endTime: Date | null;
   latitude: string | null;
   longitude: string | null;
+  tripDirection: Direction;
   status: VehicleTripStatus;
   createdAt: Date;
   updatedAt: Date;
@@ -44,6 +46,7 @@ function mapRow(row: Row): VehicleTripData {
     endTime: row.endTime,
     latitude: row.latitude?.toString() ?? null,
     longitude: row.longitude?.toString() ?? null,
+    tripDirection: row.tripDirection,
     status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -90,31 +93,44 @@ export class VehicleTripService {
   async create(input: {
     vehicleId: string;
     routeId: string;
-    driverId: string;
-    startTime: Date | string;
+    driverId?: string | null;
+    authenticatedUserId?: string | null;
+    startTime?: Date | string | null;
     endTime?: Date | string | null;
     latitude?: string | number | null;
     longitude?: string | number | null;
+    tripDirection?: Direction;
     status?: VehicleTripStatus;
   }): Promise<VehicleTripData> {
     const vehicleId = input.vehicleId.trim();
     const routeId = input.routeId.trim();
-    const driverId = input.driverId.trim();
-    if (!vehicleId || !routeId || !driverId) {
-      throw new Error("vehicleId, routeId, and driverId are required");
+    if (!vehicleId || !routeId) {
+      throw new Error("vehicleId and routeId are required");
     }
-    if (input.startTime === undefined || input.startTime === null) {
-      throw new Error("startTime is required");
+
+    let driverId =
+      input.driverId === undefined || input.driverId === null ? "" : String(input.driverId).trim();
+
+    if (!driverId) {
+      const userId = input.authenticatedUserId?.trim();
+      if (!userId) {
+        throw new Error("Unauthorized");
+      }
+      // Non-staff users are denied by resolveStaffId
+      driverId = await resolveStaffId(userId);
     }
 
     await this.assertRefs({ vehicleId, routeId, driverId });
 
-    const startTime = parseDateTime(input.startTime, "startTime");
+    const startTime =
+      input.startTime === undefined || input.startTime === null
+        ? null
+        : parseDateTime(input.startTime, "startTime");
     const endTime =
       input.endTime === undefined || input.endTime === null
         ? null
         : parseDateTime(input.endTime, "endTime");
-    if (endTime && endTime < startTime) {
+    if (startTime && endTime && endTime < startTime) {
       throw new Error("endTime must be greater than or equal to startTime");
     }
 
@@ -127,6 +143,7 @@ export class VehicleTripService {
         endTime,
         latitude: parseOptionalCoordinate(input.latitude, "latitude"),
         longitude: parseOptionalCoordinate(input.longitude, "longitude"),
+        ...(input.tripDirection !== undefined ? { tripDirection: input.tripDirection } : {}),
         ...(input.status !== undefined ? { status: input.status } : {}),
       },
       include,
@@ -134,16 +151,19 @@ export class VehicleTripService {
     return mapRow(row);
   }
 
-  async list(params: {
-    vehicleId?: string;
-    routeId?: string;
-    driverId?: string;
-    status?: VehicleTripStatus;
-    fromDate?: string;
-    toDate?: string;
-    page?: number;
-    limit?: number;
-  } = {}) {
+  async list(
+    params: {
+      vehicleId?: string;
+      routeId?: string;
+      driverId?: string;
+      status?: VehicleTripStatus;
+      tripDirection?: Direction;
+      fromDate?: string;
+      toDate?: string;
+      page?: number;
+      limit?: number;
+    } = {}
+  ) {
     const page = clampInt(params.page ?? 1, 1, 1_000_000);
     const limit = clampInt(params.limit ?? 20, 1, 100);
     const skip = (page - 1) * limit;
@@ -153,6 +173,7 @@ export class VehicleTripService {
     if (params.routeId?.trim()) where.routeId = params.routeId.trim();
     if (params.driverId?.trim()) where.driverId = params.driverId.trim();
     if (params.status !== undefined) where.status = params.status;
+    if (params.tripDirection !== undefined) where.tripDirection = params.tripDirection;
 
     const startTime: Prisma.DateTimeFilter = {};
     if (params.fromDate?.trim()) startTime.gte = parseDateTime(params.fromDate.trim(), "fromDate");
@@ -184,11 +205,13 @@ export class VehicleTripService {
   async update(
     id: string,
     input: {
+      startTime?: Date | string | null;
       endTime?: Date | string | null;
       latitude?: string | number | null;
       longitude?: string | number | null;
       driverId?: string;
       routeId?: string;
+      tripDirection?: Direction;
       status?: VehicleTripStatus;
     }
   ): Promise<VehicleTripData> {
@@ -212,13 +235,22 @@ export class VehicleTripService {
       if (!route) throw new Error("Invalid routeId");
     }
 
+    const startTime =
+      input.startTime === undefined
+        ? undefined
+        : input.startTime === null
+          ? null
+          : parseDateTime(input.startTime, "startTime");
     const endTime =
       input.endTime === undefined
         ? undefined
         : input.endTime === null
           ? null
           : parseDateTime(input.endTime, "endTime");
-    if (endTime && endTime < existing.startTime) {
+
+    const effectiveStart = startTime !== undefined ? startTime : existing.startTime;
+    const effectiveEnd = endTime !== undefined ? endTime : existing.endTime;
+    if (effectiveStart && effectiveEnd && effectiveEnd < effectiveStart) {
       throw new Error("endTime must be greater than or equal to startTime");
     }
 
@@ -226,6 +258,7 @@ export class VehicleTripService {
       const row = await this.prisma.vehicleTrip.update({
         where: { id },
         data: {
+          ...(startTime !== undefined ? { startTime } : {}),
           ...(endTime !== undefined ? { endTime } : {}),
           ...(input.latitude !== undefined
             ? { latitude: parseOptionalCoordinate(input.latitude, "latitude") }
@@ -235,6 +268,7 @@ export class VehicleTripService {
             : {}),
           ...(input.driverId !== undefined ? { driverId: input.driverId.trim() } : {}),
           ...(input.routeId !== undefined ? { routeId: input.routeId.trim() } : {}),
+          ...(input.tripDirection !== undefined ? { tripDirection: input.tripDirection } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
         },
         include,

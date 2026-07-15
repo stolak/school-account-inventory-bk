@@ -128,6 +128,55 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  */
 /**
  * @openapi
+ * /api/v1/vehicles/mine:
+ *   get:
+ *     summary: List vehicles assigned to the authenticated staff member
+ *     description: |
+ *       Resolves the JWT user to a Staff profile (Staff.userId), then returns
+ *       vehicles where driverId matches that staff id.
+ *     tags: [Vehicles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: q
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Active, Inactive, Archived, All]
+ *       - in: query
+ *         name: vehicleType
+ *         schema:
+ *           type: string
+ *           enum: [Car, Bus]
+ *       - in: query
+ *         name: vehicleMake
+ *         schema:
+ *           type: string
+ *           enum: [Toyota, Honda, Nissan, Suzuki, Hyundai, Kia]
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Vehicles assigned to the authenticated staff
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: User is not staff
+ *       404:
+ *         description: No linked staff profile
+ */
+/**
+ * @openapi
  * /api/v1/vehicles/{id}:
  *   get:
  *     summary: Get a vehicle by ID
@@ -347,6 +396,52 @@ export const vehicleController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to retrieve vehicles");
+    }
+  },
+
+  listMine: async (req: Request, res: Response) => {
+    try {
+      const userId = getAuthenticatedUserId(req);
+      if (!userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const status = parseStatus(queryString(req.query, "status"));
+      if (status === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "status must be Active, Inactive, Archived, or All",
+        });
+      }
+      const vehicleType = parseVehicleType(queryString(req.query, "vehicleType"));
+      if (vehicleType === "invalid") {
+        return res.status(400).json({ success: false, message: "vehicleType must be Car or Bus" });
+      }
+
+      const vehicleMake = parseVehicleMake(queryString(req.query, "vehicleMake"));
+      if (vehicleMake === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "vehicleMake must be one of Toyota, Honda, Nissan, Suzuki, Hyundai, Kia",
+        });
+      }
+
+      const result = await vehicleService.listForAuthenticatedStaff(userId, {
+        q: queryString(req.query, "q"),
+        status,
+        vehicleType,
+        ...(vehicleMake !== undefined && vehicleMake !== null ? { vehicleMake } : {}),
+        page: parseIntOrUndefined(req.query.page),
+        limit: parseIntOrUndefined(req.query.limit),
+      });
+
+      return res.json({
+        success: true,
+        message: "Assigned vehicles retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve assigned vehicles");
     }
   },
 

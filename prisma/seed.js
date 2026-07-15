@@ -972,7 +972,10 @@ async function main() {
       { route: "/parent/assignments", caption: "Parent assignments" },
       // attendance
       { route: "/student-attendance", caption: "Attendance records" },
+      // transportation
       { route: "/transportation-settings", caption: "Transportation settings" },
+      { route: "/student-transports", caption: "Student transports" },
+      { route: "/vehicle-trips", caption: "Vehicle trips" },
     ];
 
     for (const item of sidebarMenus) {

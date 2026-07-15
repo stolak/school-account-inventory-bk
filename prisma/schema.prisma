@@ -2071,10 +2071,11 @@ model VehicleTrip {
   route                     Route                     @relation(fields: [routeId], references: [id], onDelete: Restrict)
   driverId                  String                    @map("driver_id") @db.Char(36)
   driver                    Staff                     @relation(fields: [driverId], references: [id], onDelete: Restrict)
-  startTime                 DateTime                  @map("start_time")
+  startTime                 DateTime?                 @map("start_time")
   endTime                   DateTime?                 @map("end_time")
   latitude                  Decimal?                  @db.Decimal(10, 8)
   longitude                 Decimal?                  @db.Decimal(11, 8)
+  tripDirection             Direction                 @default(HomeToSchool) @map("trip_direction")
   createdAt                 DateTime                  @default(now()) @map("created_at")
   updatedAt                 DateTime                  @updatedAt @map("updated_at")
   studentTransportHistories StudentTransportHistory[]

@@ -22,6 +22,7 @@ const include = {
       startTime: true,
       endTime: true,
       status: true,
+      tripDirection: true,
       vehicle: {
         select: { id: true, vehicleNumber: true, vehicleType: true, vehicleMake: true, status: true },
       },

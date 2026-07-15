@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
-import { VehicleTripStatus } from "@prisma/client";
+import { Direction, VehicleTripStatus } from "@prisma/client";
 import { vehicleTripService } from "../services/vehicleTripService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
+import { getAuthenticatedUserId } from "../middlewares/auth";
 import { parseIntOrUndefined } from "../utils/request";
 
 function queryString(query: Request["query"], key: string): string | undefined {
@@ -24,11 +25,20 @@ function parseVehicleTripStatus(
   return "invalid";
 }
 
+function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
+  if (raw === undefined) return undefined;
+  if (raw === Direction.HomeToSchool || raw === Direction.SchoolToHome) return raw;
+  return "invalid";
+}
+
 /**
  * @openapi
  * /api/v1/vehicle-trips:
  *   post:
  *     summary: Start or record a vehicle trip
+ *     description: |
+ *       driverId is optional. If omitted, the authenticated user must be staff;
+ *       their staff id is used as driverId. Non-staff users are denied.
  *     tags: [VehicleTrips]
  *     security:
  *       - bearerAuth: []
@@ -38,7 +48,7 @@ function parseVehicleTripStatus(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [vehicleId, routeId, driverId, startTime]
+ *             required: [vehicleId, routeId]
  *             properties:
  *               vehicleId:
  *                 type: string
@@ -46,9 +56,11 @@ function parseVehicleTripStatus(
  *                 type: string
  *               driverId:
  *                 type: string
+ *                 description: Optional; defaults to authenticated staff id when omitted
  *               startTime:
  *                 type: string
  *                 format: date-time
+ *                 nullable: true
  *               endTime:
  *                 type: string
  *                 format: date-time
@@ -59,12 +71,19 @@ function parseVehicleTripStatus(
  *               longitude:
  *                 type: number
  *                 nullable: true
+ *               tripDirection:
+ *                 type: string
+ *                 enum: [HomeToSchool, SchoolToHome]
  *               status:
  *                 type: string
  *                 enum: [Pending, InProgress, Completed, Cancelled]
  *     responses:
  *       201:
  *         description: Vehicle trip created
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Authenticated user is not staff (when driverId omitted)
  *   get:
  *     summary: List vehicle trips
  *     tags: [VehicleTrips]
@@ -88,6 +107,11 @@ function parseVehicleTripStatus(
  *         schema:
  *           type: string
  *           enum: [Pending, InProgress, Completed, Cancelled]
+ *       - in: query
+ *         name: tripDirection
+ *         schema:
+ *           type: string
+ *           enum: [HomeToSchool, SchoolToHome]
  *       - in: query
  *         name: fromDate
  *         schema:
@@ -149,6 +173,10 @@ function parseVehicleTripStatus(
  *           schema:
  *             type: object
  *             properties:
+ *               startTime:
+ *                 type: string
+ *                 format: date-time
+ *                 nullable: true
  *               endTime:
  *                 type: string
  *                 format: date-time
@@ -163,6 +191,9 @@ function parseVehicleTripStatus(
  *                 type: string
  *               routeId:
  *                 type: string
+ *               tripDirection:
+ *                 type: string
+ *                 enum: [HomeToSchool, SchoolToHome]
  *               status:
  *                 type: string
  *                 enum: [Pending, InProgress, Completed, Cancelled]
@@ -196,19 +227,32 @@ function parseVehicleTripStatus(
 export const vehicleTripController = {
   create: async (req: Request, res: Response) => {
     try {
-      const { vehicleId, routeId, driverId, startTime, endTime, latitude, longitude, status } =
-        req.body ?? {};
+      const {
+        vehicleId,
+        routeId,
+        driverId,
+        startTime,
+        endTime,
+        latitude,
+        longitude,
+        tripDirection,
+        status,
+      } = req.body ?? {};
       if (!vehicleId || typeof vehicleId !== "string" || !vehicleId.trim()) {
         return res.status(400).json({ success: false, message: "vehicleId is required" });
       }
       if (!routeId || typeof routeId !== "string" || !routeId.trim()) {
         return res.status(400).json({ success: false, message: "routeId is required" });
       }
-      if (!driverId || typeof driverId !== "string" || !driverId.trim()) {
-        return res.status(400).json({ success: false, message: "driverId is required" });
-      }
-      if (startTime === undefined || startTime === null) {
-        return res.status(400).json({ success: false, message: "startTime is required" });
+      if (
+        driverId !== undefined &&
+        driverId !== null &&
+        (typeof driverId !== "string" || !driverId.trim())
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "driverId must be a non-empty string when provided",
+        });
       }
 
       const parsedStatus = parseVehicleTripStatus(status);
@@ -219,14 +263,28 @@ export const vehicleTripController = {
         });
       }
 
+      const parsedTripDirection = parseTripDirection(tripDirection);
+      if (parsedTripDirection === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "tripDirection must be one of HomeToSchool, SchoolToHome",
+        });
+      }
+
+      const authenticatedUserId = getAuthenticatedUserId(req);
+      const providedDriverId =
+        typeof driverId === "string" && driverId.trim() ? driverId.trim() : undefined;
+
       const created = await vehicleTripService.create({
         vehicleId: vehicleId.trim(),
         routeId: routeId.trim(),
-        driverId: driverId.trim(),
-        startTime,
+        ...(providedDriverId ? { driverId: providedDriverId } : {}),
+        authenticatedUserId,
+        ...(startTime !== undefined ? { startTime } : {}),
         ...(endTime !== undefined ? { endTime } : {}),
         ...(latitude !== undefined ? { latitude } : {}),
         ...(longitude !== undefined ? { longitude } : {}),
+        ...(parsedTripDirection !== undefined ? { tripDirection: parsedTripDirection } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
       });
 
@@ -250,11 +308,20 @@ export const vehicleTripController = {
         });
       }
 
+      const tripDirection = parseTripDirection(queryString(req.query, "tripDirection"));
+      if (tripDirection === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "tripDirection must be one of HomeToSchool, SchoolToHome",
+        });
+      }
+
       const result = await vehicleTripService.list({
         vehicleId: queryString(req.query, "vehicleId"),
         routeId: queryString(req.query, "routeId"),
         driverId: queryString(req.query, "driverId"),
         ...(status !== undefined ? { status } : {}),
+        ...(tripDirection !== undefined ? { tripDirection } : {}),
         fromDate: queryString(req.query, "fromDate"),
         toDate: queryString(req.query, "toDate"),
         page: parseIntOrUndefined(req.query.page),
@@ -296,13 +363,24 @@ export const vehicleTripController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { endTime, latitude, longitude, driverId, routeId, status } = req.body ?? {};
+      const {
+        startTime,
+        endTime,
+        latitude,
+        longitude,
+        driverId,
+        routeId,
+        tripDirection,
+        status,
+      } = req.body ?? {};
       if (
+        startTime === undefined &&
         endTime === undefined &&
         latitude === undefined &&
         longitude === undefined &&
         driverId === undefined &&
         routeId === undefined &&
+        tripDirection === undefined &&
         status === undefined
       ) {
         return res.status(400).json({
@@ -319,12 +397,22 @@ export const vehicleTripController = {
         });
       }
 
+      const parsedTripDirection = parseTripDirection(tripDirection);
+      if (parsedTripDirection === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "tripDirection must be one of HomeToSchool, SchoolToHome",
+        });
+      }
+
       const updated = await vehicleTripService.update(id, {
+        ...(startTime !== undefined ? { startTime } : {}),
         ...(endTime !== undefined ? { endTime } : {}),
         ...(latitude !== undefined ? { latitude } : {}),
         ...(longitude !== undefined ? { longitude } : {}),
         ...(driverId !== undefined ? { driverId: String(driverId) } : {}),
         ...(routeId !== undefined ? { routeId: String(routeId) } : {}),
+        ...(parsedTripDirection !== undefined ? { tripDirection: parsedTripDirection } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
       });
 

@@ -1,6 +1,7 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
 import { Prisma, Status, VehicleMake, VehicleType } from "@prisma/client";
+import { resolveStaffId } from "../utils/staffContext";
 
 const include = {
   driver: {
@@ -199,6 +200,33 @@ export class VehicleService {
   async getById(id: string): Promise<VehicleData | null> {
     const row = await this.prisma.vehicle.findUnique({ where: { id }, include });
     return row ? mapRow(row) : null;
+  }
+
+  /**
+   * Lists vehicles assigned to the staff profile linked to the authenticated user
+   * (Vehicle.driverId = Staff.id where Staff.userId = userId).
+   */
+  async listForAuthenticatedStaff(
+    userId: string,
+    params: {
+      q?: string;
+      status?: Status | "All";
+      vehicleType?: VehicleType;
+      vehicleMake?: VehicleMake;
+      page?: number;
+      limit?: number;
+    } = {}
+  ): Promise<{
+    staffId: string;
+    vehicles: VehicleData[];
+    pagination: { page: number; limit: number; total: number; totalPages: number };
+  }> {
+    const staffId = await resolveStaffId(userId);
+    const result = await this.list({
+      ...params,
+      driverId: staffId,
+    });
+    return { staffId, ...result };
   }
 
   async update(
