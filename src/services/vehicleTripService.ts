@@ -175,17 +175,19 @@ export class VehicleTripService {
     if (params.status !== undefined) where.status = params.status;
     if (params.tripDirection !== undefined) where.tripDirection = params.tripDirection;
 
-    const startTime: Prisma.DateTimeFilter = {};
-    if (params.fromDate?.trim()) startTime.gte = parseDateTime(params.fromDate.trim(), "fromDate");
-    if (params.toDate?.trim()) startTime.lte = parseDateTime(params.toDate.trim(), "toDate");
-    if (Object.keys(startTime).length > 0) where.startTime = startTime;
+    const dateFilter: Prisma.DateTimeFilter = {};
+    if (params.fromDate?.trim()) dateFilter.gte = parseDateTime(params.fromDate.trim(), "fromDate");
+    if (params.toDate?.trim()) dateFilter.lte = parseDateTime(params.toDate.trim(), "toDate");
+    if (Object.keys(dateFilter).length > 0) {
+      where.OR = [{ startTime: dateFilter }, { createdAt: dateFilter }];
+    }
 
     const [total, rows] = await Promise.all([
       this.prisma.vehicleTrip.count({ where }),
       this.prisma.vehicleTrip.findMany({
         where,
         include,
-        orderBy: { startTime: "desc" },
+        orderBy: [{ startTime: "desc" }, { createdAt: "desc" }],
         skip,
         take: limit,
       }),

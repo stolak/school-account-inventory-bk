@@ -114,11 +114,13 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *           enum: [HomeToSchool, SchoolToHome]
  *       - in: query
  *         name: fromDate
+ *         description: Inclusive lower bound matched against startTime or createdAt
  *         schema:
  *           type: string
  *           format: date-time
  *       - in: query
  *         name: toDate
+ *         description: Inclusive upper bound matched against startTime or createdAt
  *         schema:
  *           type: string
  *           format: date-time
