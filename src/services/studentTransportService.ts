@@ -13,7 +13,7 @@ const include = {
       classId: true,
     },
   },
-  route: { select: { id: true, name: true } },
+  route: { select: { id: true, name: true, status: true } },
   bustop: {
     select: { id: true, name: true, latitude: true, longitude: true, status: true },
   },

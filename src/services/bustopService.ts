@@ -8,7 +8,7 @@ const include = {
       id: true,
       routeId: true,
       stopOrder: true,
-      route: { select: { id: true, name: true } },
+      route: { select: { id: true, name: true, status: true } },
     },
     orderBy: { stopOrder: "asc" as const },
   },

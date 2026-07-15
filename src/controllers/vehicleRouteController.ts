@@ -87,6 +87,44 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *       201:
  *         description: Vehicle routes assigned
  */
+/**
+ * @openapi
+ * /api/v1/vehicle-routes/{id}:
+ *   get:
+ *     summary: Get a vehicle-route assignment by ID
+ *     tags: [VehicleRoutes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Vehicle route assignment
+ *       404:
+ *         description: Not found
+ *   delete:
+ *     summary: Remove a vehicle-route assignment
+ *     tags: [VehicleRoutes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Vehicle route assignment removed
+ *       404:
+ *         description: Not found
+ */
 export const vehicleRouteController = {
   create: async (req: Request, res: Response) => {
     try {

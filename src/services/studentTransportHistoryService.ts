@@ -25,7 +25,7 @@ const include = {
       vehicle: {
         select: { id: true, vehicleNumber: true, vehicleType: true, vehicleMake: true, status: true },
       },
-      route: { select: { id: true, name: true } },
+      route: { select: { id: true, name: true, status: true } },
       driver: { select: { id: true, StaffNumber: true, name: true, email: true } },
     },
   },

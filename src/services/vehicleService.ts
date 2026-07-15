@@ -11,7 +11,7 @@ const include = {
     select: {
       id: true,
       routeId: true,
-      route: { select: { id: true, name: true, description: true } },
+      route: { select: { id: true, name: true, description: true, status: true } },
       createdAt: true,
     },
   },

@@ -6274,11 +6274,13 @@ async function main() {
         id: TRANSPORT.routes.lekki,
         name: "Lekki Corridor",
         description: "Admiralty Way through Jakande to school gate",
+        status: "Active",
       },
       {
         id: TRANSPORT.routes.ikeja,
         name: "Ikeja Express",
         description: "Alausa and Ikeja City Mall to school gate",
+        status: "Active",
       },
     ];
 
@@ -6288,6 +6290,7 @@ async function main() {
         update: {
           name: route.name,
           description: route.description,
+          status: route.status,
         },
         create: route,
       });

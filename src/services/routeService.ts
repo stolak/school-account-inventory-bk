@@ -1,6 +1,6 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
-import { Prisma } from "@prisma/client";
+import { Prisma, Status } from "@prisma/client";
 
 const include = {
   vehicleRoutes: {
@@ -51,6 +51,7 @@ export interface RouteData {
   id: string;
   name: string;
   description: string | null;
+  status: Status;
   createdAt: Date;
   updatedAt: Date;
   vehicleRoutes: Row["vehicleRoutes"];
@@ -63,6 +64,7 @@ function mapRow(row: Row): RouteData {
     id: row.id,
     name: row.name,
     description: row.description,
+    status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     vehicleRoutes: row.vehicleRoutes,
@@ -78,7 +80,11 @@ function clampInt(n: number, min: number, max: number) {
 export class RouteService {
   private prisma = prisma;
 
-  async create(input: { name: string; description?: string | null }): Promise<RouteData> {
+  async create(input: {
+    name: string;
+    description?: string | null;
+    status?: Status;
+  }): Promise<RouteData> {
     const name = input.name.trim();
     if (!name) throw new Error("name is required");
 
@@ -90,6 +96,7 @@ export class RouteService {
             input.description === undefined || input.description === null
               ? null
               : String(input.description).trim() || null,
+          ...(input.status !== undefined ? { status: input.status } : {}),
         },
         include,
       });
@@ -104,6 +111,7 @@ export class RouteService {
 
   async list(params: {
     q?: string;
+    status?: Status | "All";
     page?: number;
     limit?: number;
   } = {}): Promise<{
@@ -115,6 +123,8 @@ export class RouteService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.RouteWhereInput = {};
+    if (params.status === undefined) where.status = Status.Active;
+    else if (params.status !== "All") where.status = params.status;
     if (params.q?.trim()) {
       const q = params.q.trim();
       where.OR = [{ name: { contains: q } }, { description: { contains: q } }];
@@ -149,7 +159,7 @@ export class RouteService {
 
   async update(
     id: string,
-    input: { name?: string; description?: string | null }
+    input: { name?: string; description?: string | null; status?: Status }
   ): Promise<RouteData> {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Route not found");
@@ -169,6 +179,7 @@ export class RouteService {
                   input.description === null ? null : String(input.description).trim() || null,
               }
             : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
         },
         include,
       });
@@ -188,10 +199,15 @@ export class RouteService {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Route not found");
 
-    const assignmentCount = await this.prisma.vehicleRoute.count({ where: { routeId: id } });
-    if (assignmentCount > 0) {
+    const [assignmentCount, bustopCount, transportCount, tripCount] = await Promise.all([
+      this.prisma.vehicleRoute.count({ where: { routeId: id } }),
+      this.prisma.routeBustop.count({ where: { routeId: id } }),
+      this.prisma.studentTransport.count({ where: { routeId: id } }),
+      this.prisma.vehicleTrip.count({ where: { routeId: id } }),
+    ]);
+    if (assignmentCount > 0 || bustopCount > 0 || transportCount > 0 || tripCount > 0) {
       throw new Error(
-        `Cannot delete route because it is assigned to vehicles (${assignmentCount})`
+        `Cannot delete route because it is referenced by vehicles (${assignmentCount}), bustops (${bustopCount}), student transports (${transportCount}), or trips (${tripCount})`
       );
     }
 

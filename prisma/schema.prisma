@@ -2018,6 +2018,7 @@ model Route {
   routeBustops      RouteBustop[]
   vehicleTrips      VehicleTrip[]
   studentTransports StudentTransport[]
+  status            Status             @default(Active) @map("status")
 
   @@unique([name])
   @@index([name])

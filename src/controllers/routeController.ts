@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { Status } from "@prisma/client";
 import { routeService } from "../services/routeService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
 import { parseIntOrUndefined } from "../utils/request";
@@ -6,6 +7,13 @@ import { parseIntOrUndefined } from "../utils/request";
 function queryString(query: Request["query"], key: string): string | undefined {
   const raw = query[key];
   return typeof raw === "string" ? raw : undefined;
+}
+
+function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
+  if (raw === undefined) return undefined;
+  if (raw === "All") return "All";
+  if (raw === Status.Active || raw === Status.Inactive || raw === Status.Archived) return raw;
+  return "invalid";
 }
 
 /**
@@ -29,6 +37,9 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *               description:
  *                 type: string
  *                 nullable: true
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive, Archived]
  *     responses:
  *       201:
  *         description: Route created
@@ -46,6 +57,11 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         name: q
  *         schema:
  *           type: string
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Active, Inactive, Archived, All]
  *       - in: query
  *         name: page
  *         schema:
@@ -102,6 +118,9 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *               description:
  *                 type: string
  *                 nullable: true
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive, Archived]
  *     responses:
  *       200:
  *         description: Route updated
@@ -127,16 +146,24 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *       200:
  *         description: Route deleted
  *       400:
- *         description: Cannot delete because it is assigned to vehicles
+ *         description: Cannot delete because it is referenced
  *       404:
  *         description: Not found
  */
 export const routeController = {
   create: async (req: Request, res: Response) => {
     try {
-      const { name, description } = req.body ?? {};
+      const { name, description, status } = req.body ?? {};
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ success: false, message: "name is required" });
+      }
+
+      const parsedStatus = parseStatus(status);
+      if (parsedStatus === "invalid" || parsedStatus === "All") {
+        return res.status(400).json({
+          success: false,
+          message: "status must be one of Active, Inactive, Archived",
+        });
       }
 
       const created = await routeService.create({
@@ -144,6 +171,7 @@ export const routeController = {
         ...(description !== undefined
           ? { description: description === null ? null : String(description) }
           : {}),
+        ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
       });
 
       return res.status(201).json({
@@ -158,8 +186,17 @@ export const routeController = {
 
   list: async (req: Request, res: Response) => {
     try {
+      const status = parseStatus(queryString(req.query, "status"));
+      if (status === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "status must be one of Active, Inactive, Archived, All",
+        });
+      }
+
       const result = await routeService.list({
         q: queryString(req.query, "q"),
+        status,
         page: parseIntOrUndefined(req.query.page),
         limit: parseIntOrUndefined(req.query.limit),
       });
@@ -199,15 +236,23 @@ export const routeController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { name, description } = req.body ?? {};
-      if (name === undefined && description === undefined) {
+      const { name, description, status } = req.body ?? {};
+      if (name === undefined && description === undefined && status === undefined) {
         return res.status(400).json({
           success: false,
-          message: "At least one of name or description must be provided",
+          message: "At least one of name, description, or status must be provided",
         });
       }
       if (name !== undefined && (typeof name !== "string" || !name.trim())) {
         return res.status(400).json({ success: false, message: "name cannot be empty" });
+      }
+
+      const parsedStatus = parseStatus(status);
+      if (parsedStatus === "invalid" || parsedStatus === "All") {
+        return res.status(400).json({
+          success: false,
+          message: "status must be one of Active, Inactive, Archived",
+        });
       }
 
       const updated = await routeService.update(id, {
@@ -215,6 +260,7 @@ export const routeController = {
         ...(description !== undefined
           ? { description: description === null ? null : String(description) }
           : {}),
+        ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
       });
 
       return res.json({
