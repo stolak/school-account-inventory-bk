@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { Status } from "@prisma/client";
+import { Status, TransportSubscriptionType } from "@prisma/client";
 import { studentTransportService } from "../services/studentTransportService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
 import { parseIntOrUndefined } from "../utils/request";
@@ -13,6 +13,20 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
   if (raw === undefined) return undefined;
   if (raw === "All") return "All";
   if (raw === Status.Active || raw === Status.Inactive || raw === Status.Archived) return raw;
+  return "invalid";
+}
+
+function parseSubscriptionType(
+  raw: unknown
+): TransportSubscriptionType | undefined | "invalid" {
+  if (raw === undefined) return undefined;
+  if (
+    raw === TransportSubscriptionType.RoundTrip ||
+    raw === TransportSubscriptionType.OneWaySchool ||
+    raw === TransportSubscriptionType.OneWayHome
+  ) {
+    return raw;
+  }
   return "invalid";
 }
 
@@ -41,6 +55,9 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  *               status:
  *                 type: string
  *                 enum: [Active, Inactive, Archived]
+ *               subscriptionType:
+ *                 type: string
+ *                 enum: [RoundTrip, OneWaySchool, OneWayHome]
  *     responses:
  *       201:
  *         description: Student transport assigned
@@ -67,6 +84,11 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  *         schema:
  *           type: string
  *           enum: [Active, Inactive, Archived, All]
+ *       - in: query
+ *         name: subscriptionType
+ *         schema:
+ *           type: string
+ *           enum: [RoundTrip, OneWaySchool, OneWayHome]
  *       - in: query
  *         name: page
  *         schema:
@@ -104,6 +126,9 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  *               status:
  *                 type: string
  *                 enum: [Active, Inactive, Archived]
+ *               subscriptionType:
+ *                 type: string
+ *                 enum: [RoundTrip, OneWaySchool, OneWayHome]
  *     responses:
  *       200:
  *         description: Student transport upserted
@@ -128,10 +153,84 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  *       404:
  *         description: Not found
  */
+/**
+ * @openapi
+ * /api/v1/student-transports/{id}:
+ *   get:
+ *     summary: Get a student transport assignment by ID
+ *     tags: [StudentTransports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Student transport assignment
+ *       404:
+ *         description: Not found
+ *   put:
+ *     summary: Update a student transport assignment
+ *     tags: [StudentTransports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               routeId:
+ *                 type: string
+ *               bustopId:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive, Archived]
+ *               subscriptionType:
+ *                 type: string
+ *                 enum: [RoundTrip, OneWaySchool, OneWayHome]
+ *     responses:
+ *       200:
+ *         description: Student transport updated
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Not found
+ *   delete:
+ *     summary: Remove a student transport assignment
+ *     tags: [StudentTransports]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Student transport assignment removed
+ *       404:
+ *         description: Not found
+ */
 export const studentTransportController = {
   create: async (req: Request, res: Response) => {
     try {
-      const { studentId, routeId, bustopId, status } = req.body ?? {};
+      const { studentId, routeId, bustopId, status, subscriptionType } = req.body ?? {};
       if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
         return res.status(400).json({ success: false, message: "studentId is required" });
       }
@@ -150,11 +249,22 @@ export const studentTransportController = {
         });
       }
 
+      const parsedSubscriptionType = parseSubscriptionType(subscriptionType);
+      if (parsedSubscriptionType === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "subscriptionType must be one of RoundTrip, OneWaySchool, OneWayHome",
+        });
+      }
+
       const created = await studentTransportService.create({
         studentId: studentId.trim(),
         routeId: routeId.trim(),
         bustopId: bustopId.trim(),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
+        ...(parsedSubscriptionType !== undefined
+          ? { subscriptionType: parsedSubscriptionType }
+          : {}),
       });
 
       return res.status(201).json({
@@ -169,7 +279,7 @@ export const studentTransportController = {
 
   upsert: async (req: Request, res: Response) => {
     try {
-      const { studentId, routeId, bustopId, status } = req.body ?? {};
+      const { studentId, routeId, bustopId, status, subscriptionType } = req.body ?? {};
       if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
         return res.status(400).json({ success: false, message: "studentId is required" });
       }
@@ -188,11 +298,22 @@ export const studentTransportController = {
         });
       }
 
+      const parsedSubscriptionType = parseSubscriptionType(subscriptionType);
+      if (parsedSubscriptionType === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "subscriptionType must be one of RoundTrip, OneWaySchool, OneWayHome",
+        });
+      }
+
       const row = await studentTransportService.upsert({
         studentId: studentId.trim(),
         routeId: routeId.trim(),
         bustopId: bustopId.trim(),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
+        ...(parsedSubscriptionType !== undefined
+          ? { subscriptionType: parsedSubscriptionType }
+          : {}),
       });
 
       return res.json({
@@ -215,11 +336,22 @@ export const studentTransportController = {
         });
       }
 
+      const subscriptionType = parseSubscriptionType(
+        queryString(req.query, "subscriptionType")
+      );
+      if (subscriptionType === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "subscriptionType must be one of RoundTrip, OneWaySchool, OneWayHome",
+        });
+      }
+
       const result = await studentTransportService.list({
         studentId: queryString(req.query, "studentId"),
         routeId: queryString(req.query, "routeId"),
         bustopId: queryString(req.query, "bustopId"),
         status,
+        ...(subscriptionType !== undefined ? { subscriptionType } : {}),
         page: parseIntOrUndefined(req.query.page),
         limit: parseIntOrUndefined(req.query.limit),
       });
@@ -285,11 +417,17 @@ export const studentTransportController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { routeId, bustopId, status } = req.body ?? {};
-      if (routeId === undefined && bustopId === undefined && status === undefined) {
+      const { routeId, bustopId, status, subscriptionType } = req.body ?? {};
+      if (
+        routeId === undefined &&
+        bustopId === undefined &&
+        status === undefined &&
+        subscriptionType === undefined
+      ) {
         return res.status(400).json({
           success: false,
-          message: "At least one of routeId, bustopId, or status must be provided",
+          message:
+            "At least one of routeId, bustopId, status, or subscriptionType must be provided",
         });
       }
 
@@ -301,10 +439,21 @@ export const studentTransportController = {
         });
       }
 
+      const parsedSubscriptionType = parseSubscriptionType(subscriptionType);
+      if (parsedSubscriptionType === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "subscriptionType must be one of RoundTrip, OneWaySchool, OneWayHome",
+        });
+      }
+
       const updated = await studentTransportService.update(id, {
         ...(routeId !== undefined ? { routeId: String(routeId) } : {}),
         ...(bustopId !== undefined ? { bustopId: String(bustopId) } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
+        ...(parsedSubscriptionType !== undefined
+          ? { subscriptionType: parsedSubscriptionType }
+          : {}),
       });
 
       return res.json({

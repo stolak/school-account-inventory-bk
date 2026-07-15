@@ -1,6 +1,6 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
-import { Prisma, Status } from "@prisma/client";
+import { Prisma, Status, TransportSubscriptionType } from "@prisma/client";
 
 const include = {
   student: {
@@ -57,6 +57,7 @@ export class StudentTransportService {
     routeId: string;
     bustopId: string;
     status?: Status;
+    subscriptionType?: TransportSubscriptionType;
   }): Promise<StudentTransportData> {
     const studentId = input.studentId.trim();
     const routeId = input.routeId.trim();
@@ -74,6 +75,9 @@ export class StudentTransportService {
           routeId,
           bustopId,
           ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.subscriptionType !== undefined
+            ? { subscriptionType: input.subscriptionType }
+            : {}),
         },
         include,
       });
@@ -90,6 +94,7 @@ export class StudentTransportService {
     routeId: string;
     bustopId: string;
     status?: Status;
+    subscriptionType?: TransportSubscriptionType;
   }): Promise<StudentTransportData> {
     const studentId = input.studentId.trim();
     const routeId = input.routeId.trim();
@@ -107,11 +112,17 @@ export class StudentTransportService {
         routeId,
         bustopId,
         ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.subscriptionType !== undefined
+          ? { subscriptionType: input.subscriptionType }
+          : {}),
       },
       update: {
         routeId,
         bustopId,
         ...(input.status !== undefined ? { status: input.status } : {}),
+        ...(input.subscriptionType !== undefined
+          ? { subscriptionType: input.subscriptionType }
+          : {}),
       },
       include,
     });
@@ -122,6 +133,7 @@ export class StudentTransportService {
     routeId?: string;
     bustopId?: string;
     status?: Status | "All";
+    subscriptionType?: TransportSubscriptionType;
     page?: number;
     limit?: number;
   } = {}) {
@@ -133,6 +145,7 @@ export class StudentTransportService {
     if (params.studentId?.trim()) where.studentId = params.studentId.trim();
     if (params.routeId?.trim()) where.routeId = params.routeId.trim();
     if (params.bustopId?.trim()) where.bustopId = params.bustopId.trim();
+    if (params.subscriptionType !== undefined) where.subscriptionType = params.subscriptionType;
     if (params.status === undefined) where.status = Status.Active;
     else if (params.status !== "All") where.status = params.status;
 
@@ -170,6 +183,7 @@ export class StudentTransportService {
       routeId?: string;
       bustopId?: string;
       status?: Status;
+      subscriptionType?: TransportSubscriptionType;
     }
   ): Promise<StudentTransportData> {
     const existing = await this.getById(id);
@@ -192,6 +206,9 @@ export class StudentTransportService {
           ...(input.routeId !== undefined ? { routeId } : {}),
           ...(input.bustopId !== undefined ? { bustopId } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
+          ...(input.subscriptionType !== undefined
+            ? { subscriptionType: input.subscriptionType }
+            : {}),
         },
         include,
       });

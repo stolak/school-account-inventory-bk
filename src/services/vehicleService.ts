@@ -1,6 +1,6 @@
 import prisma from "../utils/prisma";
-import { isPrismaKnownErrorWithCode, parseDecimalNonNegative } from "../utils/assessmentHttp";
-import { Prisma, Status, VehicleType } from "@prisma/client";
+import { isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
+import { Prisma, Status, VehicleMake, VehicleType } from "@prisma/client";
 
 const include = {
   driver: {
@@ -15,7 +15,7 @@ const include = {
       createdAt: true,
     },
   },
-  _count: { select: { vehicleRoutes: true } },
+  _count: { select: { vehicleRoutes: true, vehicleTrips: true } },
 } satisfies Prisma.VehicleInclude;
 
 type Row = Prisma.VehicleGetPayload<{ include: typeof include }>;
@@ -24,12 +24,11 @@ export interface VehicleData {
   id: string;
   vehicleNumber: string;
   vehicleType: VehicleType;
+  vehicleMake: VehicleMake | null;
   capacity: number;
-  driverId: string;
+  driverId: string | null;
   driver: Row["driver"];
   status: Status;
-  latitude: string | null;
-  longitude: string | null;
   remarks: string | null;
   createdById: string;
   userId: string | null;
@@ -45,12 +44,11 @@ function mapRow(row: Row): VehicleData {
     id: row.id,
     vehicleNumber: row.vehicleNumber,
     vehicleType: row.vehicleType,
+    vehicleMake: row.vehicleMake,
     capacity: row.capacity,
     driverId: row.driverId,
     driver: row.driver,
     status: row.status,
-    latitude: row.latitude?.toString() ?? null,
-    longitude: row.longitude?.toString() ?? null,
     remarks: row.remarks,
     createdById: row.createdById,
     userId: row.userId,
@@ -64,14 +62,6 @@ function mapRow(row: Row): VehicleData {
 
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
-}
-
-function parseOptionalCoordinate(
-  value: string | number | null | undefined,
-  fieldName: string
-): Prisma.Decimal | null {
-  if (value === undefined || value === null || value === "") return null;
-  return parseDecimalNonNegative(value, fieldName);
 }
 
 function trimRemarks(value: string | null | undefined): string | null {
@@ -102,28 +92,29 @@ export class VehicleService {
   async create(input: {
     vehicleNumber: string;
     vehicleType?: VehicleType;
+    vehicleMake?: VehicleMake | null;
     capacity?: number;
-    driverId: string;
+    driverId?: string | null;
     status?: Status;
-    latitude?: string | number | null;
-    longitude?: string | number | null;
     remarks?: string | null;
     createdById: string;
     userId?: string | null;
   }): Promise<VehicleData> {
     const vehicleNumber = input.vehicleNumber.trim();
-    const driverId = input.driverId.trim();
     const createdById = input.createdById.trim();
+    const driverId =
+      input.driverId === undefined || input.driverId === null
+        ? null
+        : String(input.driverId).trim() || null;
     const userId = input.userId?.trim() || null;
 
     if (!vehicleNumber) throw new Error("vehicleNumber is required");
-    if (!driverId) throw new Error("driverId is required");
     if (!createdById) throw new Error("createdById is required");
     if (input.capacity !== undefined && (!Number.isInteger(input.capacity) || input.capacity < 1)) {
       throw new Error("capacity must be a positive integer");
     }
 
-    await this.assertDriver(driverId);
+    if (driverId) await this.assertDriver(driverId);
     if (userId) await this.assertUser(userId);
 
     try {
@@ -133,10 +124,9 @@ export class VehicleService {
           driverId,
           createdById,
           ...(input.vehicleType !== undefined ? { vehicleType: input.vehicleType } : {}),
+          ...(input.vehicleMake !== undefined ? { vehicleMake: input.vehicleMake } : {}),
           ...(input.capacity !== undefined ? { capacity: input.capacity } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
-          latitude: parseOptionalCoordinate(input.latitude, "latitude"),
-          longitude: parseOptionalCoordinate(input.longitude, "longitude"),
           remarks: trimRemarks(input.remarks),
           userId,
         },
@@ -144,6 +134,9 @@ export class VehicleService {
       });
       return mapRow(row);
     } catch (e) {
+      if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
+        throw new Error("Vehicle number already exists");
+      }
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2003") {
         throw new Error("Invalid driverId or userId");
       }
@@ -155,6 +148,7 @@ export class VehicleService {
     q?: string;
     status?: Status | "All";
     vehicleType?: VehicleType;
+    vehicleMake?: VehicleMake;
     driverId?: string;
     page?: number;
     limit?: number;
@@ -173,6 +167,7 @@ export class VehicleService {
       where.status = params.status;
     }
     if (params.vehicleType) where.vehicleType = params.vehicleType;
+    if (params.vehicleMake) where.vehicleMake = params.vehicleMake;
     if (params.driverId?.trim()) where.driverId = params.driverId.trim();
     if (params.q?.trim()) {
       const q = params.q.trim();
@@ -211,11 +206,10 @@ export class VehicleService {
     input: {
       vehicleNumber?: string;
       vehicleType?: VehicleType;
+      vehicleMake?: VehicleMake | null;
       capacity?: number;
-      driverId?: string;
+      driverId?: string | null;
       status?: Status;
-      latitude?: string | number | null;
-      longitude?: string | number | null;
       remarks?: string | null;
       userId?: string | null;
     }
@@ -229,10 +223,14 @@ export class VehicleService {
     if (input.capacity !== undefined && (!Number.isInteger(input.capacity) || input.capacity < 1)) {
       throw new Error("capacity must be a positive integer");
     }
+
+    let driverId: string | null | undefined = undefined;
     if (input.driverId !== undefined) {
-      if (!input.driverId.trim()) throw new Error("driverId cannot be empty");
-      await this.assertDriver(input.driverId.trim());
+      driverId =
+        input.driverId === null ? null : String(input.driverId).trim() || null;
+      if (driverId) await this.assertDriver(driverId);
     }
+
     if (input.userId !== undefined && input.userId !== null && input.userId.trim()) {
       await this.assertUser(input.userId.trim());
     }
@@ -245,15 +243,10 @@ export class VehicleService {
             ? { vehicleNumber: input.vehicleNumber.trim() }
             : {}),
           ...(input.vehicleType !== undefined ? { vehicleType: input.vehicleType } : {}),
+          ...(input.vehicleMake !== undefined ? { vehicleMake: input.vehicleMake } : {}),
           ...(input.capacity !== undefined ? { capacity: input.capacity } : {}),
-          ...(input.driverId !== undefined ? { driverId: input.driverId.trim() } : {}),
+          ...(driverId !== undefined ? { driverId } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
-          ...(input.latitude !== undefined
-            ? { latitude: parseOptionalCoordinate(input.latitude, "latitude") }
-            : {}),
-          ...(input.longitude !== undefined
-            ? { longitude: parseOptionalCoordinate(input.longitude, "longitude") }
-            : {}),
           ...(input.remarks !== undefined ? { remarks: trimRemarks(input.remarks) } : {}),
           ...(input.userId !== undefined
             ? { userId: input.userId === null ? null : input.userId.trim() || null }
@@ -266,6 +259,9 @@ export class VehicleService {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") {
         throw new Error("Vehicle not found");
       }
+      if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
+        throw new Error("Vehicle number already exists");
+      }
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2003") {
         throw new Error("Invalid driverId or userId");
       }
@@ -277,10 +273,13 @@ export class VehicleService {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Vehicle not found");
 
-    const assignmentCount = await this.prisma.vehicleRoute.count({ where: { vehicleId: id } });
-    if (assignmentCount > 0) {
+    const [assignmentCount, tripCount] = await Promise.all([
+      this.prisma.vehicleRoute.count({ where: { vehicleId: id } }),
+      this.prisma.vehicleTrip.count({ where: { vehicleId: id } }),
+    ]);
+    if (assignmentCount > 0 || tripCount > 0) {
       throw new Error(
-        `Cannot delete vehicle because it is assigned to routes (${assignmentCount})`
+        `Cannot delete vehicle because it is assigned to routes (${assignmentCount}) or has trips (${tripCount})`
       );
     }
 

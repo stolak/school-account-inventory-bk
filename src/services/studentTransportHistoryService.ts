@@ -1,6 +1,6 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
-import { Prisma } from "@prisma/client";
+import { Direction, Prisma } from "@prisma/client";
 
 const include = {
   student: {
@@ -12,12 +12,24 @@ const include = {
       status: true,
     },
   },
-  route: { select: { id: true, name: true } },
-  bustop: { select: { id: true, name: true } },
-  driver: { select: { id: true, StaffNumber: true, name: true, email: true } },
-  vehicle: {
-    select: { id: true, vehicleNumber: true, vehicleType: true, status: true },
+  bustop: { select: { id: true, name: true, latitude: true, longitude: true } },
+  vehicleTrip: {
+    select: {
+      id: true,
+      vehicleId: true,
+      routeId: true,
+      driverId: true,
+      startTime: true,
+      endTime: true,
+      status: true,
+      vehicle: {
+        select: { id: true, vehicleNumber: true, vehicleType: true, vehicleMake: true, status: true },
+      },
+      route: { select: { id: true, name: true } },
+      driver: { select: { id: true, StaffNumber: true, name: true, email: true } },
+    },
   },
+  staff: { select: { id: true, StaffNumber: true, name: true, email: true } },
 } satisfies Prisma.StudentTransportHistoryInclude;
 
 export type StudentTransportHistoryData = Prisma.StudentTransportHistoryGetPayload<{
@@ -39,48 +51,66 @@ export class StudentTransportHistoryService {
 
   private async assertRefs(input: {
     studentId: string;
-    routeId: string;
     bustopId: string;
-    driverId: string;
-    vehicleId: string;
+    vehicleTripId: string;
+    staffId?: string | null;
   }): Promise<void> {
-    const [student, route, bustop, driver, vehicle] = await Promise.all([
+    const [student, bustop, vehicleTrip] = await Promise.all([
       this.prisma.student.findUnique({ where: { id: input.studentId }, select: { id: true } }),
-      this.prisma.route.findUnique({ where: { id: input.routeId }, select: { id: true } }),
       this.prisma.bustop.findUnique({ where: { id: input.bustopId }, select: { id: true } }),
-      this.prisma.staff.findUnique({ where: { id: input.driverId }, select: { id: true } }),
-      this.prisma.vehicle.findUnique({ where: { id: input.vehicleId }, select: { id: true } }),
+      this.prisma.vehicleTrip.findUnique({
+        where: { id: input.vehicleTripId },
+        select: { id: true, routeId: true },
+      }),
     ]);
     if (!student) throw new Error("Invalid studentId");
-    if (!route) throw new Error("Invalid routeId");
     if (!bustop) throw new Error("Invalid bustopId");
-    if (!driver) throw new Error("Invalid driverId");
-    if (!vehicle) throw new Error("Invalid vehicleId");
+    if (!vehicleTrip) throw new Error("Invalid vehicleTripId");
+
+    const routeBustop = await this.prisma.routeBustop.findUnique({
+      where: {
+        routeId_bustopId: { routeId: vehicleTrip.routeId, bustopId: input.bustopId },
+      },
+      select: { id: true },
+    });
+    if (!routeBustop) {
+      throw new Error("bustopId is not assigned to the vehicle trip route");
+    }
+
+    if (input.staffId) {
+      const staff = await this.prisma.staff.findUnique({
+        where: { id: input.staffId },
+        select: { id: true },
+      });
+      if (!staff) throw new Error("Invalid staffId");
+    }
   }
 
   async create(input: {
     studentId: string;
-    routeId: string;
     bustopId: string;
-    driverId: string;
-    vehicleId: string;
+    vehicleTripId: string;
     startTime: Date | string;
     endTime?: Date | string | null;
+    direction?: Direction;
+    staffId?: string | null;
   }): Promise<StudentTransportHistoryData> {
     const studentId = input.studentId.trim();
-    const routeId = input.routeId.trim();
     const bustopId = input.bustopId.trim();
-    const driverId = input.driverId.trim();
-    const vehicleId = input.vehicleId.trim();
+    const vehicleTripId = input.vehicleTripId.trim();
+    const staffId =
+      input.staffId === undefined || input.staffId === null
+        ? null
+        : String(input.staffId).trim() || null;
 
-    if (!studentId || !routeId || !bustopId || !driverId || !vehicleId) {
-      throw new Error("studentId, routeId, bustopId, driverId, and vehicleId are required");
+    if (!studentId || !bustopId || !vehicleTripId) {
+      throw new Error("studentId, bustopId, and vehicleTripId are required");
     }
     if (input.startTime === undefined || input.startTime === null) {
       throw new Error("startTime is required");
     }
 
-    await this.assertRefs({ studentId, routeId, bustopId, driverId, vehicleId });
+    await this.assertRefs({ studentId, bustopId, vehicleTripId, staffId });
 
     const startTime = parseDateTime(input.startTime, "startTime");
     const endTime =
@@ -94,12 +124,12 @@ export class StudentTransportHistoryService {
     return this.prisma.studentTransportHistory.create({
       data: {
         studentId,
-        routeId,
         bustopId,
-        driverId,
-        vehicleId,
+        vehicleTripId,
         startTime,
         endTime,
+        ...(input.direction !== undefined ? { direction: input.direction } : {}),
+        staffId,
       },
       include,
     });
@@ -107,10 +137,10 @@ export class StudentTransportHistoryService {
 
   async list(params: {
     studentId?: string;
-    routeId?: string;
     bustopId?: string;
-    driverId?: string;
-    vehicleId?: string;
+    vehicleTripId?: string;
+    staffId?: string;
+    direction?: Direction;
     fromDate?: string;
     toDate?: string;
     page?: number;
@@ -122,10 +152,10 @@ export class StudentTransportHistoryService {
 
     const where: Prisma.StudentTransportHistoryWhereInput = {};
     if (params.studentId?.trim()) where.studentId = params.studentId.trim();
-    if (params.routeId?.trim()) where.routeId = params.routeId.trim();
     if (params.bustopId?.trim()) where.bustopId = params.bustopId.trim();
-    if (params.driverId?.trim()) where.driverId = params.driverId.trim();
-    if (params.vehicleId?.trim()) where.vehicleId = params.vehicleId.trim();
+    if (params.vehicleTripId?.trim()) where.vehicleTripId = params.vehicleTripId.trim();
+    if (params.staffId?.trim()) where.staffId = params.staffId.trim();
+    if (params.direction !== undefined) where.direction = params.direction;
 
     const startTime: Prisma.DateTimeFilter = {};
     if (params.fromDate?.trim()) startTime.gte = parseDateTime(params.fromDate.trim(), "fromDate");
@@ -155,25 +185,54 @@ export class StudentTransportHistoryService {
 
   async update(
     id: string,
-    input: { endTime?: Date | string | null }
+    input: {
+      endTime?: Date | string | null;
+      direction?: Direction;
+      staffId?: string | null;
+    }
   ): Promise<StudentTransportHistoryData> {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Student transport history not found");
 
-    if (input.endTime === undefined) {
-      throw new Error("endTime is required for update");
+    if (
+      input.endTime === undefined &&
+      input.direction === undefined &&
+      input.staffId === undefined
+    ) {
+      throw new Error("At least one of endTime, direction, or staffId must be provided");
     }
 
     const endTime =
-      input.endTime === null ? null : parseDateTime(input.endTime, "endTime");
+      input.endTime === undefined
+        ? undefined
+        : input.endTime === null
+          ? null
+          : parseDateTime(input.endTime, "endTime");
     if (endTime && endTime < existing.startTime) {
       throw new Error("endTime must be greater than or equal to startTime");
+    }
+
+    let staffId: string | null | undefined = undefined;
+    if (input.staffId !== undefined) {
+      staffId =
+        input.staffId === null ? null : String(input.staffId).trim() || null;
+      if (staffId) {
+        const staff = await this.prisma.staff.findUnique({
+          where: { id: staffId },
+          select: { id: true },
+        });
+        if (!staff) throw new Error("Invalid staffId");
+      }
     }
 
     try {
       return await this.prisma.studentTransportHistory.update({
         where: { id },
-        data: { endTime },
+        data: {
+          ...(endTime !== undefined ? { endTime } : {}),
+          ...(input.direction !== undefined ? { direction: input.direction } : {}),
+          ...(staffId !== undefined ? { staffId } : {}),
+        },
         include,
       });
     } catch (e) {

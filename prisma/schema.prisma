@@ -1960,26 +1960,36 @@ enum VehicleType {
   Bus
 }
 
+enum VehicleMake {
+  Toyota
+  Honda
+  Nissan
+  Suzuki
+  Hyundai
+  Kia
+}
+
 model Vehicle {
   id            String         @id @default(uuid()) @db.Char(36)
   vehicleNumber String         @map("vehicle_number") @db.VarChar(20)
   vehicleType   VehicleType    @default(Bus) @map("vehicle_type")
+  vehicleMake   VehicleMake?   @map("vehicle_make")
   capacity      Int            @default(50) @map("capacity")
-  driverId      String         @map("driver_id") @db.Char(36)
-  driver        Staff          @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  driverId      String?        @map("driver_id") @db.Char(36)
+  driver        Staff?         @relation(fields: [driverId], references: [id], onDelete: SetNull)
   createdAt     DateTime       @default(now()) @map("created_at")
   updatedAt     DateTime       @updatedAt @map("updated_at")
   status        Status         @default(Active) @map("status")
-  latitude      Decimal?       @db.Decimal(10, 8)
-  longitude     Decimal?       @db.Decimal(11, 8)
   remarks       String?        @db.Text
   createdById   String         @map("created_by") @db.Char(36)
   user          User?          @relation(fields: [userId], references: [id])
   userId        String?        @db.Char(36)
-  vehicleRoutes             VehicleRoute[]
-  vehicleTrips              VehicleTrip[]
-  studentTransportHistories StudentTransportHistory[]
+  vehicleRoutes VehicleRoute[]
+  vehicleTrips  VehicleTrip[]
 
+  @@unique([vehicleNumber])
+  @@index([vehicleNumber])
+  @@index([vehicleType])
   @@map("vehicles")
 }
 
@@ -1999,16 +2009,15 @@ model VehicleRoute {
 }
 
 model Route {
-  id                        String                     @id @default(uuid()) @db.Char(36)
-  name                      String                     @map("name") @db.VarChar(50)
-  description               String?                    @map("description") @db.Text
-  createdAt                 DateTime                   @default(now()) @map("created_at")
-  updatedAt                 DateTime                   @updatedAt @map("updated_at")
-  vehicleRoutes             VehicleRoute[]
-  routeBustops              RouteBustop[]
-  vehicleTrips              VehicleTrip[]
-  studentTransports         StudentTransport[]
-  studentTransportHistories StudentTransportHistory[]
+  id                String             @id @default(uuid()) @db.Char(36)
+  name              String             @map("name") @db.VarChar(50)
+  description       String?            @map("description") @db.Text
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  vehicleRoutes     VehicleRoute[]
+  routeBustops      RouteBustop[]
+  vehicleTrips      VehicleTrip[]
+  studentTransports StudentTransport[]
 
   @@unique([name])
   @@index([name])
@@ -2016,14 +2025,14 @@ model Route {
 }
 
 model Bustop {
-  id                        String                     @id @default(uuid()) @db.Char(36)
-  name                      String                     @map("name") @db.VarChar(100)
-  description               String?                    @map("description") @db.Text
-  latitude                  Decimal?                   @db.Decimal(10, 8)
-  longitude                 Decimal?                   @db.Decimal(11, 8)
-  status                    Status                     @default(Active)
-  createdAt                 DateTime                   @default(now()) @map("created_at")
-  updatedAt                 DateTime                   @updatedAt @map("updated_at")
+  id                        String                    @id @default(uuid()) @db.Char(36)
+  name                      String                    @map("name") @db.VarChar(100)
+  description               String?                   @map("description") @db.Text
+  latitude                  Decimal?                  @db.Decimal(10, 8)
+  longitude                 Decimal?                  @db.Decimal(11, 8)
+  status                    Status                    @default(Active)
+  createdAt                 DateTime                  @default(now()) @map("created_at")
+  updatedAt                 DateTime                  @updatedAt @map("updated_at")
   routeBustops              RouteBustop[]
   studentTransports         StudentTransport[]
   studentTransportHistories StudentTransportHistory[]
@@ -2051,38 +2060,55 @@ model RouteBustop {
 }
 
 model VehicleTrip {
-  id        String    @id @default(uuid()) @db.Char(36)
-  vehicleId String    @map("vehicle_id") @db.Char(36)
-  vehicle   Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
-  routeId   String    @map("route_id") @db.Char(36)
-  route     Route     @relation(fields: [routeId], references: [id], onDelete: Restrict)
-  driverId  String    @map("driver_id") @db.Char(36)
-  driver    Staff     @relation(fields: [driverId], references: [id], onDelete: Restrict)
-  startTime DateTime  @map("start_time")
-  endTime   DateTime? @map("end_time")
-  latitude  Decimal?  @db.Decimal(10, 8)
-  longitude Decimal?  @db.Decimal(11, 8)
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  id                        String                    @id @default(uuid()) @db.Char(36)
+  vehicleId                 String                    @map("vehicle_id") @db.Char(36)
+  vehicle                   Vehicle                   @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  routeId                   String                    @map("route_id") @db.Char(36)
+  route                     Route                     @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  driverId                  String                    @map("driver_id") @db.Char(36)
+  driver                    Staff                     @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  startTime                 DateTime                  @map("start_time")
+  endTime                   DateTime?                 @map("end_time")
+  latitude                  Decimal?                  @db.Decimal(10, 8)
+  longitude                 Decimal?                  @db.Decimal(11, 8)
+  createdAt                 DateTime                  @default(now()) @map("created_at")
+  updatedAt                 DateTime                  @updatedAt @map("updated_at")
+  studentTransportHistories StudentTransportHistory[]
+  status                    VehicleTripStatus         @default(Pending) @map("status")
 
   @@index([vehicleId])
   @@index([routeId])
   @@index([driverId])
   @@index([startTime])
+  @@index([status])
   @@map("vehicle_trips")
 }
 
+enum VehicleTripStatus {
+  Pending
+  InProgress
+  Completed
+  Cancelled
+}
+
+enum TransportSubscriptionType {
+  RoundTrip
+  OneWaySchool
+  OneWayHome
+}
+
 model StudentTransport {
-  id        String   @id @default(uuid()) @db.Char(36)
-  studentId String   @map("student_id") @db.Char(36)
-  student   Student  @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  routeId   String   @map("route_id") @db.Char(36)
-  route     Route    @relation(fields: [routeId], references: [id], onDelete: Restrict)
-  bustopId  String   @map("bustop_id") @db.Char(36)
-  bustop    Bustop   @relation(fields: [bustopId], references: [id], onDelete: Restrict)
-  status    Status   @default(Active)
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id               String                    @id @default(uuid()) @db.Char(36)
+  studentId        String                    @map("student_id") @db.Char(36)
+  student          Student                   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  routeId          String                    @map("route_id") @db.Char(36)
+  route            Route                     @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  bustopId         String                    @map("bustop_id") @db.Char(36)
+  bustop           Bustop                    @relation(fields: [bustopId], references: [id], onDelete: Restrict)
+  status           Status                    @default(Active)
+  subscriptionType TransportSubscriptionType @default(RoundTrip) @map("subscription_type")
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  updatedAt        DateTime                  @updatedAt @map("updated_at")
 
   @@unique([studentId])
   @@index([routeId])
@@ -2091,28 +2117,30 @@ model StudentTransport {
   @@map("student_transports")
 }
 
+enum Direction {
+  HomeToSchool
+  SchoolToHome
+}
+
 model StudentTransportHistory {
-  id        String    @id @default(uuid()) @db.Char(36)
-  studentId String    @map("student_id") @db.Char(36)
-  student   Student   @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  routeId   String    @map("route_id") @db.Char(36)
-  route     Route     @relation(fields: [routeId], references: [id], onDelete: Restrict)
-  bustopId  String    @map("bustop_id") @db.Char(36)
-  bustop    Bustop    @relation(fields: [bustopId], references: [id], onDelete: Restrict)
-  driverId  String    @map("driver_id") @db.Char(36)
-  driver    Staff     @relation(fields: [driverId], references: [id], onDelete: Restrict)
-  vehicleId String    @map("vehicle_id") @db.Char(36)
-  vehicle   Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
-  startTime DateTime  @map("start_time")
-  endTime   DateTime? @map("end_time")
-  createdAt DateTime  @default(now()) @map("created_at")
-  updatedAt DateTime  @updatedAt @map("updated_at")
+  id            String      @id @default(uuid()) @db.Char(36)
+  studentId     String      @map("student_id") @db.Char(36)
+  student       Student     @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  bustopId      String      @map("bustop_id") @db.Char(36)
+  bustop        Bustop      @relation(fields: [bustopId], references: [id], onDelete: Restrict)
+  vehicleTripId String      @map("vehicle_trip_id") @db.Char(36)
+  vehicleTrip   VehicleTrip @relation(fields: [vehicleTripId], references: [id], onDelete: Restrict)
+  startTime     DateTime    @map("start_time")
+  endTime       DateTime?   @map("end_time")
+  direction     Direction   @default(HomeToSchool) @map("direction")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  staff         Staff?      @relation(fields: [staffId], references: [id])
+  staffId       String?     @db.Char(36)
 
   @@index([studentId])
-  @@index([routeId])
   @@index([bustopId])
-  @@index([driverId])
-  @@index([vehicleId])
+  @@index([vehicleTripId])
   @@index([startTime])
   @@map("student_transport_histories")
 }

@@ -91,6 +91,74 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *       201:
  *         description: Route bustops assigned
  */
+/**
+ * @openapi
+ * /api/v1/route-bustops/{id}:
+ *   get:
+ *     summary: Get a route-bustop assignment by ID
+ *     tags: [RouteBustops]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Route bustop assignment
+ *       404:
+ *         description: Not found
+ *   put:
+ *     summary: Update a route-bustop assignment
+ *     tags: [RouteBustops]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [stopOrder]
+ *             properties:
+ *               stopOrder:
+ *                 type: integer
+ *                 minimum: 0
+ *     responses:
+ *       200:
+ *         description: Route bustop updated
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Not found
+ *   delete:
+ *     summary: Remove a route-bustop assignment
+ *     tags: [RouteBustops]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Route bustop assignment removed
+ *       404:
+ *         description: Not found
+ */
 export const routeBustopController = {
   create: async (req: Request, res: Response) => {
     try {

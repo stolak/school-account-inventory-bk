@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { VehicleTripStatus } from "@prisma/client";
 import { vehicleTripService } from "../services/vehicleTripService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
 import { parseIntOrUndefined } from "../utils/request";
@@ -6,6 +7,21 @@ import { parseIntOrUndefined } from "../utils/request";
 function queryString(query: Request["query"], key: string): string | undefined {
   const raw = query[key];
   return typeof raw === "string" ? raw : undefined;
+}
+
+function parseVehicleTripStatus(
+  raw: unknown
+): VehicleTripStatus | undefined | "invalid" {
+  if (raw === undefined) return undefined;
+  if (
+    raw === VehicleTripStatus.Pending ||
+    raw === VehicleTripStatus.InProgress ||
+    raw === VehicleTripStatus.Completed ||
+    raw === VehicleTripStatus.Cancelled
+  ) {
+    return raw;
+  }
+  return "invalid";
 }
 
 /**
@@ -43,6 +59,9 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *               longitude:
  *                 type: number
  *                 nullable: true
+ *               status:
+ *                 type: string
+ *                 enum: [Pending, InProgress, Completed, Cancelled]
  *     responses:
  *       201:
  *         description: Vehicle trip created
@@ -65,6 +84,11 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         schema:
  *           type: string
  *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Pending, InProgress, Completed, Cancelled]
+ *       - in: query
  *         name: fromDate
  *         schema:
  *           type: string
@@ -86,10 +110,93 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *       200:
  *         description: Vehicle trips list
  */
+/**
+ * @openapi
+ * /api/v1/vehicle-trips/{id}:
+ *   get:
+ *     summary: Get a vehicle trip by ID
+ *     tags: [VehicleTrips]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Vehicle trip details
+ *       404:
+ *         description: Not found
+ *   put:
+ *     summary: Update a vehicle trip
+ *     tags: [VehicleTrips]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               endTime:
+ *                 type: string
+ *                 format: date-time
+ *                 nullable: true
+ *               latitude:
+ *                 type: number
+ *                 nullable: true
+ *               longitude:
+ *                 type: number
+ *                 nullable: true
+ *               driverId:
+ *                 type: string
+ *               routeId:
+ *                 type: string
+ *               status:
+ *                 type: string
+ *                 enum: [Pending, InProgress, Completed, Cancelled]
+ *     responses:
+ *       200:
+ *         description: Vehicle trip updated
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Not found
+ *   delete:
+ *     summary: Delete a vehicle trip
+ *     tags: [VehicleTrips]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Vehicle trip deleted
+ *       400:
+ *         description: Cannot delete because histories exist
+ *       404:
+ *         description: Not found
+ */
 export const vehicleTripController = {
   create: async (req: Request, res: Response) => {
     try {
-      const { vehicleId, routeId, driverId, startTime, endTime, latitude, longitude } =
+      const { vehicleId, routeId, driverId, startTime, endTime, latitude, longitude, status } =
         req.body ?? {};
       if (!vehicleId || typeof vehicleId !== "string" || !vehicleId.trim()) {
         return res.status(400).json({ success: false, message: "vehicleId is required" });
@@ -104,6 +211,14 @@ export const vehicleTripController = {
         return res.status(400).json({ success: false, message: "startTime is required" });
       }
 
+      const parsedStatus = parseVehicleTripStatus(status);
+      if (parsedStatus === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "status must be one of Pending, InProgress, Completed, Cancelled",
+        });
+      }
+
       const created = await vehicleTripService.create({
         vehicleId: vehicleId.trim(),
         routeId: routeId.trim(),
@@ -112,6 +227,7 @@ export const vehicleTripController = {
         ...(endTime !== undefined ? { endTime } : {}),
         ...(latitude !== undefined ? { latitude } : {}),
         ...(longitude !== undefined ? { longitude } : {}),
+        ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
       });
 
       return res.status(201).json({
@@ -126,10 +242,19 @@ export const vehicleTripController = {
 
   list: async (req: Request, res: Response) => {
     try {
+      const status = parseVehicleTripStatus(queryString(req.query, "status"));
+      if (status === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "status must be one of Pending, InProgress, Completed, Cancelled",
+        });
+      }
+
       const result = await vehicleTripService.list({
         vehicleId: queryString(req.query, "vehicleId"),
         routeId: queryString(req.query, "routeId"),
         driverId: queryString(req.query, "driverId"),
+        ...(status !== undefined ? { status } : {}),
         fromDate: queryString(req.query, "fromDate"),
         toDate: queryString(req.query, "toDate"),
         page: parseIntOrUndefined(req.query.page),
@@ -171,17 +296,26 @@ export const vehicleTripController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { endTime, latitude, longitude, driverId, routeId } = req.body ?? {};
+      const { endTime, latitude, longitude, driverId, routeId, status } = req.body ?? {};
       if (
         endTime === undefined &&
         latitude === undefined &&
         longitude === undefined &&
         driverId === undefined &&
-        routeId === undefined
+        routeId === undefined &&
+        status === undefined
       ) {
         return res.status(400).json({
           success: false,
           message: "At least one field must be provided",
+        });
+      }
+
+      const parsedStatus = parseVehicleTripStatus(status);
+      if (parsedStatus === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "status must be one of Pending, InProgress, Completed, Cancelled",
         });
       }
 
@@ -191,6 +325,7 @@ export const vehicleTripController = {
         ...(longitude !== undefined ? { longitude } : {}),
         ...(driverId !== undefined ? { driverId: String(driverId) } : {}),
         ...(routeId !== undefined ? { routeId: String(routeId) } : {}),
+        ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
       });
 
       return res.json({

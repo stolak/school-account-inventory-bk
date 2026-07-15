@@ -76,6 +76,88 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  *       200:
  *         description: Bustops list
  */
+/**
+ * @openapi
+ * /api/v1/bustops/{id}:
+ *   get:
+ *     summary: Get a bustop by ID
+ *     tags: [Bustops]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Bustop details
+ *       404:
+ *         description: Not found
+ *   put:
+ *     summary: Update a bustop
+ *     tags: [Bustops]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *                 nullable: true
+ *               latitude:
+ *                 type: number
+ *                 nullable: true
+ *               longitude:
+ *                 type: number
+ *                 nullable: true
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive, Archived]
+ *     responses:
+ *       200:
+ *         description: Bustop updated
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Not found
+ *       409:
+ *         description: Duplicate bustop name
+ *   delete:
+ *     summary: Delete a bustop
+ *     tags: [Bustops]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Bustop deleted
+ *       400:
+ *         description: Cannot delete because it is referenced
+ *       404:
+ *         description: Not found
+ */
 export const bustopController = {
   create: async (req: Request, res: Response) => {
     try {

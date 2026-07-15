@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { Status, VehicleType } from "@prisma/client";
+import { Status, VehicleMake, VehicleType } from "@prisma/client";
 import { vehicleService } from "../services/vehicleService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
 import { getAuthenticatedUserId } from "../middlewares/auth";
@@ -13,6 +13,22 @@ function queryString(query: Request["query"], key: string): string | undefined {
 function parseVehicleType(raw: unknown): VehicleType | undefined | "invalid" {
   if (raw === undefined) return undefined;
   if (raw === VehicleType.Car || raw === VehicleType.Bus) return raw;
+  return "invalid";
+}
+
+function parseVehicleMake(raw: unknown): VehicleMake | null | undefined | "invalid" {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  if (
+    raw === VehicleMake.Toyota ||
+    raw === VehicleMake.Honda ||
+    raw === VehicleMake.Nissan ||
+    raw === VehicleMake.Suzuki ||
+    raw === VehicleMake.Hyundai ||
+    raw === VehicleMake.Kia
+  ) {
+    return raw;
+  }
   return "invalid";
 }
 
@@ -37,26 +53,25 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [vehicleNumber, driverId]
+ *             required: [vehicleNumber]
  *             properties:
  *               vehicleNumber:
  *                 type: string
  *               vehicleType:
  *                 type: string
  *                 enum: [Car, Bus]
+ *               vehicleMake:
+ *                 type: string
+ *                 nullable: true
+ *                 enum: [Toyota, Honda, Nissan, Suzuki, Hyundai, Kia]
  *               capacity:
  *                 type: integer
  *               driverId:
  *                 type: string
+ *                 nullable: true
  *               status:
  *                 type: string
  *                 enum: [Active, Inactive, Archived]
- *               latitude:
- *                 type: number
- *                 nullable: true
- *               longitude:
- *                 type: number
- *                 nullable: true
  *               remarks:
  *                 type: string
  *                 nullable: true
@@ -68,6 +83,8 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  *         description: Vehicle created
  *       400:
  *         description: Validation error
+ *       409:
+ *         description: Duplicate vehicle number
  *   get:
  *     summary: List vehicles
  *     tags: [Vehicles]
@@ -89,6 +106,11 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  *           type: string
  *           enum: [Car, Bus]
  *       - in: query
+ *         name: vehicleMake
+ *         schema:
+ *           type: string
+ *           enum: [Toyota, Honda, Nissan, Suzuki, Hyundai, Kia]
+ *       - in: query
  *         name: driverId
  *         schema:
  *           type: string
@@ -104,6 +126,97 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  *       200:
  *         description: Vehicles list
  */
+/**
+ * @openapi
+ * /api/v1/vehicles/{id}:
+ *   get:
+ *     summary: Get a vehicle by ID
+ *     tags: [Vehicles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Vehicle details
+ *       404:
+ *         description: Not found
+ *   put:
+ *     summary: Update a vehicle
+ *     tags: [Vehicles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               vehicleNumber:
+ *                 type: string
+ *               vehicleType:
+ *                 type: string
+ *                 enum: [Car, Bus]
+ *               vehicleMake:
+ *                 type: string
+ *                 nullable: true
+ *                 enum: [Toyota, Honda, Nissan, Suzuki, Hyundai, Kia]
+ *               capacity:
+ *                 type: integer
+ *               driverId:
+ *                 type: string
+ *                 nullable: true
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive, Archived]
+ *               remarks:
+ *                 type: string
+ *                 nullable: true
+ *               userId:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       200:
+ *         description: Vehicle updated
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Not found
+ *       409:
+ *         description: Duplicate vehicle number
+ *   delete:
+ *     summary: Delete a vehicle
+ *     tags: [Vehicles]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Vehicle deleted
+ *       400:
+ *         description: Cannot delete because it is referenced
+ *       404:
+ *         description: Not found
+ */
 export const vehicleController = {
   create: async (req: Request, res: Response) => {
     try {
@@ -115,11 +228,10 @@ export const vehicleController = {
       const {
         vehicleNumber,
         vehicleType,
+        vehicleMake,
         capacity,
         driverId,
         status,
-        latitude,
-        longitude,
         remarks,
         userId,
       } = req.body ?? {};
@@ -127,14 +239,20 @@ export const vehicleController = {
       if (!vehicleNumber || typeof vehicleNumber !== "string" || !vehicleNumber.trim()) {
         return res.status(400).json({ success: false, message: "vehicleNumber is required" });
       }
-      if (!driverId || typeof driverId !== "string" || !driverId.trim()) {
-        return res.status(400).json({ success: false, message: "driverId is required" });
-      }
 
       const parsedType = parseVehicleType(vehicleType);
       if (parsedType === "invalid") {
         return res.status(400).json({ success: false, message: "vehicleType must be Car or Bus" });
       }
+
+      const parsedMake = parseVehicleMake(vehicleMake);
+      if (parsedMake === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "vehicleMake must be one of Toyota, Honda, Nissan, Suzuki, Hyundai, Kia",
+        });
+      }
+
       const parsedStatus = parseStatus(status);
       if (parsedStatus === "invalid" || parsedStatus === "All") {
         return res.status(400).json({
@@ -151,16 +269,25 @@ export const vehicleController = {
           message: "capacity must be a positive integer",
         });
       }
+      if (
+        driverId !== undefined &&
+        driverId !== null &&
+        (typeof driverId !== "string" || !driverId.trim())
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "driverId must be a non-empty string or null",
+        });
+      }
 
       const created = await vehicleService.create({
         vehicleNumber: vehicleNumber.trim(),
-        driverId: driverId.trim(),
         createdById,
         ...(parsedType !== undefined ? { vehicleType: parsedType } : {}),
+        ...(parsedMake !== undefined ? { vehicleMake: parsedMake } : {}),
         ...(capacity !== undefined ? { capacity } : {}),
+        ...(driverId !== undefined ? { driverId } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
-        ...(latitude !== undefined ? { latitude } : {}),
-        ...(longitude !== undefined ? { longitude } : {}),
         ...(remarks !== undefined
           ? { remarks: remarks === null ? null : String(remarks) }
           : {}),
@@ -193,10 +320,21 @@ export const vehicleController = {
         return res.status(400).json({ success: false, message: "vehicleType must be Car or Bus" });
       }
 
+      const vehicleMake = parseVehicleMake(queryString(req.query, "vehicleMake"));
+      if (vehicleMake === "invalid" || vehicleMake === null) {
+        if (vehicleMake === "invalid") {
+          return res.status(400).json({
+            success: false,
+            message: "vehicleMake must be one of Toyota, Honda, Nissan, Suzuki, Hyundai, Kia",
+          });
+        }
+      }
+
       const result = await vehicleService.list({
         q: queryString(req.query, "q"),
         status,
         vehicleType,
+        ...(vehicleMake !== undefined && vehicleMake !== null ? { vehicleMake } : {}),
         driverId: queryString(req.query, "driverId"),
         page: parseIntOrUndefined(req.query.page),
         limit: parseIntOrUndefined(req.query.limit),
@@ -240,11 +378,10 @@ export const vehicleController = {
       const {
         vehicleNumber,
         vehicleType,
+        vehicleMake,
         capacity,
         driverId,
         status,
-        latitude,
-        longitude,
         remarks,
         userId,
       } = req.body ?? {};
@@ -252,11 +389,10 @@ export const vehicleController = {
       if (
         vehicleNumber === undefined &&
         vehicleType === undefined &&
+        vehicleMake === undefined &&
         capacity === undefined &&
         driverId === undefined &&
         status === undefined &&
-        latitude === undefined &&
-        longitude === undefined &&
         remarks === undefined &&
         userId === undefined
       ) {
@@ -270,6 +406,15 @@ export const vehicleController = {
       if (parsedType === "invalid") {
         return res.status(400).json({ success: false, message: "vehicleType must be Car or Bus" });
       }
+
+      const parsedMake = parseVehicleMake(vehicleMake);
+      if (parsedMake === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "vehicleMake must be one of Toyota, Honda, Nissan, Suzuki, Hyundai, Kia",
+        });
+      }
+
       const parsedStatus = parseStatus(status);
       if (parsedStatus === "invalid" || parsedStatus === "All") {
         return res.status(400).json({
@@ -289,18 +434,24 @@ export const vehicleController = {
       if (vehicleNumber !== undefined && (typeof vehicleNumber !== "string" || !vehicleNumber.trim())) {
         return res.status(400).json({ success: false, message: "vehicleNumber cannot be empty" });
       }
-      if (driverId !== undefined && (typeof driverId !== "string" || !driverId.trim())) {
-        return res.status(400).json({ success: false, message: "driverId cannot be empty" });
+      if (
+        driverId !== undefined &&
+        driverId !== null &&
+        (typeof driverId !== "string" || !driverId.trim())
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "driverId must be a non-empty string or null",
+        });
       }
 
       const updated = await vehicleService.update(id, {
         ...(vehicleNumber !== undefined ? { vehicleNumber: vehicleNumber.trim() } : {}),
         ...(parsedType !== undefined ? { vehicleType: parsedType } : {}),
+        ...(parsedMake !== undefined ? { vehicleMake: parsedMake } : {}),
         ...(capacity !== undefined ? { capacity } : {}),
-        ...(driverId !== undefined ? { driverId: driverId.trim() } : {}),
+        ...(driverId !== undefined ? { driverId } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
-        ...(latitude !== undefined ? { latitude } : {}),
-        ...(longitude !== undefined ? { longitude } : {}),
         ...(remarks !== undefined
           ? { remarks: remarks === null ? null : String(remarks) }
           : {}),

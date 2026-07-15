@@ -12,6 +12,7 @@ const include = {
           id: true,
           vehicleNumber: true,
           vehicleType: true,
+          vehicleMake: true,
           status: true,
         },
       },

@@ -58,6 +58,79 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *       200:
  *         description: Routes list
  */
+/**
+ * @openapi
+ * /api/v1/routes/{id}:
+ *   get:
+ *     summary: Get a transport route by ID
+ *     tags: [Routes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Route details
+ *       404:
+ *         description: Not found
+ *   put:
+ *     summary: Update a transport route
+ *     tags: [Routes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *                 nullable: true
+ *     responses:
+ *       200:
+ *         description: Route updated
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Not found
+ *       409:
+ *         description: Duplicate route name
+ *   delete:
+ *     summary: Delete a transport route
+ *     tags: [Routes]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Route deleted
+ *       400:
+ *         description: Cannot delete because it is assigned to vehicles
+ *       404:
+ *         description: Not found
+ */
 export const routeController = {
   create: async (req: Request, res: Response) => {
     try {

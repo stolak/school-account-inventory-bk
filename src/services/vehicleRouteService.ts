@@ -8,6 +8,7 @@ const include = {
       id: true,
       vehicleNumber: true,
       vehicleType: true,
+      vehicleMake: true,
       status: true,
       driver: { select: { id: true, name: true, StaffNumber: true } },
     },

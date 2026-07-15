@@ -1,13 +1,14 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode, parseDecimalNonNegative } from "../utils/assessmentHttp";
-import { Prisma } from "@prisma/client";
+import { Prisma, VehicleTripStatus } from "@prisma/client";
 
 const include = {
   vehicle: {
-    select: { id: true, vehicleNumber: true, vehicleType: true, status: true },
+    select: { id: true, vehicleNumber: true, vehicleType: true, vehicleMake: true, status: true },
   },
   route: { select: { id: true, name: true } },
   driver: { select: { id: true, StaffNumber: true, name: true, email: true } },
+  _count: { select: { studentTransportHistories: true } },
 } satisfies Prisma.VehicleTripInclude;
 
 type Row = Prisma.VehicleTripGetPayload<{ include: typeof include }>;
@@ -24,8 +25,10 @@ export interface VehicleTripData {
   endTime: Date | null;
   latitude: string | null;
   longitude: string | null;
+  status: VehicleTripStatus;
   createdAt: Date;
   updatedAt: Date;
+  _count: Row["_count"];
 }
 
 function mapRow(row: Row): VehicleTripData {
@@ -41,8 +44,10 @@ function mapRow(row: Row): VehicleTripData {
     endTime: row.endTime,
     latitude: row.latitude?.toString() ?? null,
     longitude: row.longitude?.toString() ?? null,
+    status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    _count: row._count,
   };
 }
 
@@ -90,6 +95,7 @@ export class VehicleTripService {
     endTime?: Date | string | null;
     latitude?: string | number | null;
     longitude?: string | number | null;
+    status?: VehicleTripStatus;
   }): Promise<VehicleTripData> {
     const vehicleId = input.vehicleId.trim();
     const routeId = input.routeId.trim();
@@ -121,6 +127,7 @@ export class VehicleTripService {
         endTime,
         latitude: parseOptionalCoordinate(input.latitude, "latitude"),
         longitude: parseOptionalCoordinate(input.longitude, "longitude"),
+        ...(input.status !== undefined ? { status: input.status } : {}),
       },
       include,
     });
@@ -131,6 +138,7 @@ export class VehicleTripService {
     vehicleId?: string;
     routeId?: string;
     driverId?: string;
+    status?: VehicleTripStatus;
     fromDate?: string;
     toDate?: string;
     page?: number;
@@ -144,6 +152,7 @@ export class VehicleTripService {
     if (params.vehicleId?.trim()) where.vehicleId = params.vehicleId.trim();
     if (params.routeId?.trim()) where.routeId = params.routeId.trim();
     if (params.driverId?.trim()) where.driverId = params.driverId.trim();
+    if (params.status !== undefined) where.status = params.status;
 
     const startTime: Prisma.DateTimeFilter = {};
     if (params.fromDate?.trim()) startTime.gte = parseDateTime(params.fromDate.trim(), "fromDate");
@@ -180,6 +189,7 @@ export class VehicleTripService {
       longitude?: string | number | null;
       driverId?: string;
       routeId?: string;
+      status?: VehicleTripStatus;
     }
   ): Promise<VehicleTripData> {
     const existing = await this.getById(id);
@@ -225,6 +235,7 @@ export class VehicleTripService {
             : {}),
           ...(input.driverId !== undefined ? { driverId: input.driverId.trim() } : {}),
           ...(input.routeId !== undefined ? { routeId: input.routeId.trim() } : {}),
+          ...(input.status !== undefined ? { status: input.status } : {}),
         },
         include,
       });
@@ -240,6 +251,15 @@ export class VehicleTripService {
   async delete(id: string): Promise<VehicleTripData> {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Vehicle trip not found");
+
+    const historyCount = await this.prisma.studentTransportHistory.count({
+      where: { vehicleTripId: id },
+    });
+    if (historyCount > 0) {
+      throw new Error(
+        `Cannot delete vehicle trip because it has student transport histories (${historyCount})`
+      );
+    }
 
     try {
       const row = await this.prisma.vehicleTrip.delete({ where: { id }, include });
