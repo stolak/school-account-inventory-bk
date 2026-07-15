@@ -35,6 +35,13 @@ function parseSubscriptionType(
  * /api/v1/student-transports:
  *   post:
  *     summary: Assign transport to a student
+ *     description: |
+ *       Unique per student + session + term.
+ *       A student may have only one Active subscription.
+ *       If session/term matches the current active period, any other Active
+ *       subscription is auto-deactivated; otherwise Inactivate the existing
+ *       Active subscription first. Existing (student, session, term) rows are
+ *       updated instead of duplicated.
  *     tags: [StudentTransports]
  *     security:
  *       - bearerAuth: []
@@ -51,6 +58,12 @@ function parseSubscriptionType(
  *               routeId:
  *                 type: string
  *               bustopId:
+ *                 type: string
+ *               sessionId:
+ *                 type: string
+ *               termId:
+ *                 type: string
+ *               classId:
  *                 type: string
  *               status:
  *                 type: string
@@ -80,6 +93,18 @@ function parseSubscriptionType(
  *         schema:
  *           type: string
  *       - in: query
+ *         name: sessionId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: termId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: classId
+ *         schema:
+ *           type: string
+ *       - in: query
  *         name: status
  *         schema:
  *           type: string
@@ -106,6 +131,10 @@ function parseSubscriptionType(
  * /api/v1/student-transports/upsert:
  *   post:
  *     summary: Create or update a student transport assignment
+ *     description: |
+ *       Upserts by unique (studentId, sessionId, termId). Enforces at most one
+ *       Active subscription per student (auto-deactivates when targeting the
+ *       current active period).
  *     tags: [StudentTransports]
  *     security:
  *       - bearerAuth: []
@@ -123,6 +152,12 @@ function parseSubscriptionType(
  *                 type: string
  *               bustopId:
  *                 type: string
+ *               sessionId:
+ *                 type: string
+ *               termId:
+ *                 type: string
+ *               classId:
+ *                 type: string
  *               status:
  *                 type: string
  *                 enum: [Active, Inactive, Archived]
@@ -138,6 +173,7 @@ function parseSubscriptionType(
  * /api/v1/student-transports/by-student/{studentId}:
  *   get:
  *     summary: Get transport assignment by student id
+ *     description: Returns the student's current Active transport subscription.
  *     tags: [StudentTransports]
  *     security:
  *       - bearerAuth: []
@@ -196,6 +232,12 @@ function parseSubscriptionType(
  *                 type: string
  *               bustopId:
  *                 type: string
+ *               sessionId:
+ *                 type: string
+ *               termId:
+ *                 type: string
+ *               classId:
+ *                 type: string
  *               status:
  *                 type: string
  *                 enum: [Active, Inactive, Archived]
@@ -230,7 +272,16 @@ function parseSubscriptionType(
 export const studentTransportController = {
   create: async (req: Request, res: Response) => {
     try {
-      const { studentId, routeId, bustopId, status, subscriptionType } = req.body ?? {};
+      const {
+        studentId,
+        routeId,
+        bustopId,
+        status,
+        subscriptionType,
+        sessionId,
+        termId,
+        classId,
+      } = req.body ?? {};
       if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
         return res.status(400).json({ success: false, message: "studentId is required" });
       }
@@ -265,6 +316,11 @@ export const studentTransportController = {
         ...(parsedSubscriptionType !== undefined
           ? { subscriptionType: parsedSubscriptionType }
           : {}),
+        ...(typeof sessionId === "string" && sessionId.trim()
+          ? { sessionId: sessionId.trim() }
+          : {}),
+        ...(typeof termId === "string" && termId.trim() ? { termId: termId.trim() } : {}),
+        ...(typeof classId === "string" && classId.trim() ? { classId: classId.trim() } : {}),
       });
 
       return res.status(201).json({
@@ -279,7 +335,16 @@ export const studentTransportController = {
 
   upsert: async (req: Request, res: Response) => {
     try {
-      const { studentId, routeId, bustopId, status, subscriptionType } = req.body ?? {};
+      const {
+        studentId,
+        routeId,
+        bustopId,
+        status,
+        subscriptionType,
+        sessionId,
+        termId,
+        classId,
+      } = req.body ?? {};
       if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
         return res.status(400).json({ success: false, message: "studentId is required" });
       }
@@ -314,6 +379,11 @@ export const studentTransportController = {
         ...(parsedSubscriptionType !== undefined
           ? { subscriptionType: parsedSubscriptionType }
           : {}),
+        ...(typeof sessionId === "string" && sessionId.trim()
+          ? { sessionId: sessionId.trim() }
+          : {}),
+        ...(typeof termId === "string" && termId.trim() ? { termId: termId.trim() } : {}),
+        ...(typeof classId === "string" && classId.trim() ? { classId: classId.trim() } : {}),
       });
 
       return res.json({
@@ -350,6 +420,9 @@ export const studentTransportController = {
         studentId: queryString(req.query, "studentId"),
         routeId: queryString(req.query, "routeId"),
         bustopId: queryString(req.query, "bustopId"),
+        sessionId: queryString(req.query, "sessionId"),
+        termId: queryString(req.query, "termId"),
+        classId: queryString(req.query, "classId"),
         status,
         ...(subscriptionType !== undefined ? { subscriptionType } : {}),
         page: parseIntOrUndefined(req.query.page),
@@ -417,17 +490,27 @@ export const studentTransportController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { routeId, bustopId, status, subscriptionType } = req.body ?? {};
+      const {
+        routeId,
+        bustopId,
+        status,
+        subscriptionType,
+        sessionId,
+        termId,
+        classId,
+      } = req.body ?? {};
       if (
         routeId === undefined &&
         bustopId === undefined &&
         status === undefined &&
-        subscriptionType === undefined
+        subscriptionType === undefined &&
+        sessionId === undefined &&
+        termId === undefined &&
+        classId === undefined
       ) {
         return res.status(400).json({
           success: false,
-          message:
-            "At least one of routeId, bustopId, status, or subscriptionType must be provided",
+          message: "At least one updatable field must be provided",
         });
       }
 
@@ -450,6 +533,9 @@ export const studentTransportController = {
       const updated = await studentTransportService.update(id, {
         ...(routeId !== undefined ? { routeId: String(routeId) } : {}),
         ...(bustopId !== undefined ? { bustopId: String(bustopId) } : {}),
+        ...(sessionId !== undefined ? { sessionId: String(sessionId) } : {}),
+        ...(termId !== undefined ? { termId: String(termId) } : {}),
+        ...(classId !== undefined ? { classId: String(classId) } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
         ...(parsedSubscriptionType !== undefined
           ? { subscriptionType: parsedSubscriptionType }

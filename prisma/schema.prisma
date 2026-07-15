@@ -451,6 +451,7 @@ model SchoolClass {
   assignments                        Assignment[]
   studentAssignments                 StudentAssignment[]
   teacherSubjects                    TeacherSubjects[]
+  studentTransports                  StudentTransport[]
 
   @@index([createdById])
   @@map("school_classes")
@@ -568,6 +569,7 @@ model Term {
   studentAssignments                 StudentAssignment[]
   teacherSubjects                    TeacherSubjects[]
   attendanceRecords                  AttendanceRecord[]
+  studentTransports                  StudentTransport[]
 
   @@unique([name])
   @@map("terms")
@@ -591,6 +593,7 @@ model Session {
   studentAssignments                 StudentAssignment[]
   teacherSubjects                    TeacherSubjects[]
   attendanceRecords                  AttendanceRecord[]
+  studentTransports                  StudentTransport[]
 
   @@map("sessions")
 }
@@ -2108,10 +2111,16 @@ model StudentTransport {
   bustop           Bustop                    @relation(fields: [bustopId], references: [id], onDelete: Restrict)
   status           Status                    @default(Active)
   subscriptionType TransportSubscriptionType @default(RoundTrip) @map("subscription_type")
+  sessionId        String                    @map("session_id") @db.Char(36)
+  session          Session                   @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  termId           String                    @map("term_id") @db.Char(36)
+  term             Term                      @relation(fields: [termId], references: [id], onDelete: Restrict)
+  classId          String                    @map("class_id") @db.Char(36)
+  class            SchoolClass               @relation(fields: [classId], references: [id], onDelete: Restrict)
   createdAt        DateTime                  @default(now()) @map("created_at")
   updatedAt        DateTime                  @updatedAt @map("updated_at")
 
-  @@unique([studentId])
+  @@unique([studentId, sessionId, termId])
   @@index([routeId])
   @@index([bustopId])
   @@index([status])

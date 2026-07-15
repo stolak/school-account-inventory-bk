@@ -6494,6 +6494,9 @@ async function main() {
         bustopId: TRANSPORT.bustops.admiralty,
         status: "Active",
         subscriptionType: "RoundTrip",
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        classId: classIds.jss1,
       },
       {
         id: "f7a8b9c0-d1e2-4345-f012-34567890a002",
@@ -6502,6 +6505,9 @@ async function main() {
         bustopId: TRANSPORT.bustops.alausa,
         status: "Active",
         subscriptionType: "OneWaySchool",
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        classId: classIds.jss1,
       },
       {
         id: "f7a8b9c0-d1e2-4345-f012-34567890a003",
@@ -6510,6 +6516,9 @@ async function main() {
         bustopId: TRANSPORT.bustops.jakande,
         status: "Active",
         subscriptionType: "OneWayHome",
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        classId: classIds.jss2,
       },
     ];
 
@@ -6522,6 +6531,9 @@ async function main() {
           bustopId: row.bustopId,
           status: row.status,
           subscriptionType: row.subscriptionType,
+          sessionId: row.sessionId,
+          termId: row.termId,
+          classId: row.classId,
         },
         create: row,
       });
