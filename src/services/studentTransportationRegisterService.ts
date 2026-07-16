@@ -281,6 +281,131 @@ export class StudentTransportationRegisterService {
     }
   }
 
+  /**
+   * Bulk registration for SchoolToHome trips only.
+   * Shared optional startTime/coords apply to every student in the batch.
+   */
+  async createMany(input: {
+    vehicleTripId: string;
+    studentIds: string[];
+    startTime?: Date | string | null;
+    endTime?: Date | string | null;
+    pickUpLatitude?: string | number | null;
+    pickUpLongitude?: string | number | null;
+    dropOffLatitude?: string | number | null;
+    dropOffLongitude?: string | number | null;
+  }): Promise<{ studentTransportationRegisters: StudentTransportationRegisterData[]; count: number }> {
+    const vehicleTripId = input.vehicleTripId.trim();
+    if (!vehicleTripId) throw new Error("vehicleTripId is required");
+    if (!Array.isArray(input.studentIds) || input.studentIds.length === 0) {
+      throw new Error("studentIds must be a non-empty array");
+    }
+
+    const studentIds = input.studentIds.map((id, index) => {
+      if (typeof id !== "string" || !id.trim()) {
+        throw new Error(`studentIds[${index}] must be a non-empty string`);
+      }
+      return id.trim();
+    });
+    const uniqueStudentIds = [...new Set(studentIds)];
+    if (uniqueStudentIds.length !== studentIds.length) {
+      throw new Error("Duplicate studentId in studentIds");
+    }
+
+    const trip = await this.prisma.vehicleTrip.findUnique({
+      where: { id: vehicleTripId },
+      select: { id: true, tripDirection: true, status: true },
+    });
+    if (!trip) throw new Error("Invalid vehicleTripId");
+
+    if (trip.tripDirection !== Direction.SchoolToHome) {
+      throw new Error("Bulk registration is only allowed for SchoolToHome trips");
+    }
+
+    if (
+      trip.status === VehicleTripStatus.Completed ||
+      trip.status === VehicleTripStatus.Cancelled
+    ) {
+      throw new Error("Cannot register for a trip that is Completed or Cancelled");
+    }
+
+    if (
+      trip.status === VehicleTripStatus.InProgress &&
+      (input.startTime === undefined || input.startTime === null)
+    ) {
+      throw new Error("startTime is required because the vehicle trip has already started");
+    }
+
+    const startTime =
+      input.startTime === undefined || input.startTime === null
+        ? null
+        : parseDateTime(input.startTime, "startTime");
+    const endTime =
+      input.endTime === undefined || input.endTime === null
+        ? null
+        : parseDateTime(input.endTime, "endTime");
+    if (startTime && endTime && endTime < startTime) {
+      throw new Error("endTime must be greater than or equal to startTime");
+    }
+
+    const pickUpLatitude = parseOptionalCoordinate(input.pickUpLatitude, "pickUpLatitude");
+    const pickUpLongitude = parseOptionalCoordinate(input.pickUpLongitude, "pickUpLongitude");
+    const dropOffLatitude = parseOptionalCoordinate(input.dropOffLatitude, "dropOffLatitude");
+    const dropOffLongitude = parseOptionalCoordinate(input.dropOffLongitude, "dropOffLongitude");
+
+    const existing = await this.prisma.studentTransportationRegister.findMany({
+      where: {
+        vehicleTripId,
+        studentId: { in: uniqueStudentIds },
+      },
+      select: { studentId: true },
+    });
+    if (existing.length > 0) {
+      throw new Error(
+        `Student is already registered for this vehicle trip (${existing.map((r) => r.studentId).join(", ")})`
+      );
+    }
+
+    const contexts = await Promise.all(
+      uniqueStudentIds.map(async (studentId) => {
+        const ctx = await this.resolveRegistrationContext({ studentId, vehicleTripId });
+        return { studentId, ...ctx };
+      })
+    );
+
+    try {
+      const rows = await this.prisma.$transaction(
+        contexts.map((ctx) =>
+          this.prisma.studentTransportationRegister.create({
+            data: {
+              studentId: ctx.studentId,
+              nearestBustopId: ctx.nearestBustopId,
+              vehicleTripId,
+              startTime,
+              endTime,
+              direction: Direction.SchoolToHome,
+              pickUpLatitude,
+              pickUpLongitude,
+              dropOffLatitude,
+              dropOffLongitude,
+            },
+            include,
+          })
+        )
+      );
+
+      return {
+        studentTransportationRegisters: rows.map(mapRow),
+        count: rows.length,
+      };
+    } catch (e) {
+      if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
+        throw new Error("Student is already registered for this vehicle trip");
+      }
+      throw e;
+    }
+  }
+
   async list(
     params: {
       studentId?: string;

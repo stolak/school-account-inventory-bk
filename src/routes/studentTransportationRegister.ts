@@ -4,6 +4,7 @@ import { studentTransportationRegisterController } from "../controllers/studentT
 const router = Router();
 
 router.post("/", studentTransportationRegisterController.create);
+router.post("/bulk", studentTransportationRegisterController.createMany);
 router.get("/", studentTransportationRegisterController.list);
 router.get("/:id", studentTransportationRegisterController.getById);
 router.put("/:id", studentTransportationRegisterController.update);

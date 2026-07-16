@@ -17,6 +17,62 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
 
 /**
  * @openapi
+ * /api/v1/student-transportation-registers/bulk:
+ *   post:
+ *     summary: Bulk-register students for a SchoolToHome trip
+ *     description: |
+ *       Registers multiple students on one trip in a single request.
+ *       Only allowed when the trip direction is SchoolToHome.
+ *       HomeToSchool bulk registration is rejected.
+ *     tags: [StudentTransportationRegisters]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [vehicleTripId, studentIds]
+ *             properties:
+ *               vehicleTripId:
+ *                 type: string
+ *               studentIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 minItems: 1
+ *               startTime:
+ *                 type: string
+ *                 format: date-time
+ *                 nullable: true
+ *                 description: Optional while Pending; required when the trip is InProgress
+ *               endTime:
+ *                 type: string
+ *                 format: date-time
+ *                 nullable: true
+ *               pickUpLatitude:
+ *                 type: number
+ *                 nullable: true
+ *               pickUpLongitude:
+ *                 type: number
+ *                 nullable: true
+ *               dropOffLatitude:
+ *                 type: number
+ *                 nullable: true
+ *               dropOffLongitude:
+ *                 type: number
+ *                 nullable: true
+ *     responses:
+ *       201:
+ *         description: Students registered
+ *       400:
+ *         description: Validation error or HomeToSchool trip
+ *       409:
+ *         description: One or more students already registered for this trip
+ */
+/**
+ * @openapi
  * /api/v1/student-transportation-registers:
  *   post:
  *     summary: Record a student transportation register entry
@@ -235,6 +291,52 @@ export const studentTransportationRegisterController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to create student transportation register");
+    }
+  },
+
+  createMany: async (req: Request, res: Response) => {
+    try {
+      const {
+        vehicleTripId,
+        studentIds,
+        startTime,
+        endTime,
+        pickUpLatitude,
+        pickUpLongitude,
+        dropOffLatitude,
+        dropOffLongitude,
+      } = req.body ?? {};
+      if (!vehicleTripId || typeof vehicleTripId !== "string" || !vehicleTripId.trim()) {
+        return res.status(400).json({ success: false, message: "vehicleTripId is required" });
+      }
+      if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        return res
+          .status(400)
+          .json({ success: false, message: "studentIds must be a non-empty array" });
+      }
+
+      const result = await studentTransportationRegisterService.createMany({
+        vehicleTripId: vehicleTripId.trim(),
+        studentIds,
+        ...(startTime !== undefined ? { startTime } : {}),
+        ...(endTime !== undefined ? { endTime } : {}),
+        ...(pickUpLatitude !== undefined ? { pickUpLatitude } : {}),
+        ...(pickUpLongitude !== undefined ? { pickUpLongitude } : {}),
+        ...(dropOffLatitude !== undefined ? { dropOffLatitude } : {}),
+        ...(dropOffLongitude !== undefined ? { dropOffLongitude } : {}),
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: "Student transportation registers created successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(
+        res,
+        error,
+        "Failed to bulk create student transportation registers"
+      );
     }
   },
 
