@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { Direction } from "@prisma/client";
+import { Direction, StudentTransportationRegisterStatus } from "@prisma/client";
 import { studentTransportationRegisterService } from "../services/studentTransportationRegisterService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
 import { parseIntOrUndefined } from "../utils/request";
@@ -15,6 +15,20 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
   return "invalid";
 }
 
+function parseRegisterStatus(
+  raw: unknown
+): StudentTransportationRegisterStatus | undefined | "invalid" {
+  if (raw === undefined) return undefined;
+  if (
+    raw === StudentTransportationRegisterStatus.Boarding ||
+    raw === StudentTransportationRegisterStatus.OnTransit ||
+    raw === StudentTransportationRegisterStatus.DroppedOff
+  ) {
+    return raw;
+  }
+  return "invalid";
+}
+
 /**
  * @openapi
  * /api/v1/student-transportation-registers/bulk:
@@ -24,6 +38,7 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *       Registers multiple students on one trip in a single request.
  *       Only allowed when the trip direction is SchoolToHome.
  *       HomeToSchool bulk registration is rejected.
+ *       Status is derived automatically: Boarding (trip not started), OnTransit (trip InProgress), DroppedOff (endTime set).
  *     tags: [StudentTransportationRegisters]
  *     security:
  *       - bearerAuth: []
@@ -82,6 +97,7 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *       HomeToSchool requires the trip to be InProgress.
  *       SchoolToHome allows Pending or InProgress.
  *       Completed or Cancelled trips cannot accept registrations.
+ *       Status is derived automatically: Boarding (trip not started), OnTransit (trip InProgress), DroppedOff (endTime set).
  *     tags: [StudentTransportationRegisters]
  *     security:
  *       - bearerAuth: []
@@ -146,6 +162,11 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *         schema:
  *           type: string
  *           enum: [HomeToSchool, SchoolToHome]
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [Boarding, OnTransit, DroppedOff]
  *       - in: query
  *         name: fromDate
  *         description: Inclusive lower bound matched against startTime or createdAt
@@ -213,6 +234,7 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *                 type: string
  *                 format: date-time
  *                 nullable: true
+ *                 description: When set, status becomes DroppedOff
  *               direction:
  *                 type: string
  *                 enum: [HomeToSchool, SchoolToHome]
@@ -350,11 +372,20 @@ export const studentTransportationRegisterController = {
         });
       }
 
+      const status = parseRegisterStatus(queryString(req.query, "status"));
+      if (status === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "status must be one of Boarding, OnTransit, DroppedOff",
+        });
+      }
+
       const result = await studentTransportationRegisterService.list({
         studentId: queryString(req.query, "studentId"),
         nearestBustopId: queryString(req.query, "nearestBustopId"),
         vehicleTripId: queryString(req.query, "vehicleTripId"),
         ...(direction !== undefined ? { direction } : {}),
+        ...(status !== undefined ? { status } : {}),
         fromDate: queryString(req.query, "fromDate"),
         toDate: queryString(req.query, "toDate"),
         page: parseIntOrUndefined(req.query.page),

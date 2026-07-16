@@ -54,10 +54,10 @@ enum InventoryCategoryType {
 }
 
 model Privilege {
-  id          String    @id @default(uuid()) @db.Char(36)
-  name        String    @unique
-  description String?
-  userLinks   PrivilegeToUser[]
+  id           String               @id @default(uuid()) @db.Char(36)
+  name         String               @unique
+  description  String?
+  userLinks    PrivilegeToUser[]
   appRoleLinks AppRoleToPrivilege[]
 
   @@map("privileges")
@@ -1058,17 +1058,17 @@ enum BillingItemCategory {
 }
 
 model BillingItem {
-  id                   Int                   @id @default(autoincrement())
-  code                 String                @unique
+  id                   Int                               @id @default(autoincrement())
+  code                 String                            @unique
   name                 String
   category             BillingItemCategory
-  optional             Boolean               @default(false)
-  status               Status                @default(Active)
-  createdAt            DateTime              @default(now()) @map("created_at")
-  updatedAt            DateTime              @updatedAt @map("updated_at")
+  optional             Boolean                           @default(false)
+  status               Status                            @default(Active)
+  createdAt            DateTime                          @default(now()) @map("created_at")
+  updatedAt            DateTime                          @updatedAt @map("updated_at")
   concessionLinks      BillingItemToConcessionDiscount[]
-  accountId            Int?                  @map("account_id")
-  account              AccountChart?         @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  accountId            Int?                              @map("account_id")
+  account              AccountChart?                     @relation(fields: [accountId], references: [id], onDelete: Restrict)
   studentBillings      StudentBilling[]
   classDefaultBillings ClassDefaultBilling[]
 
@@ -1111,10 +1111,10 @@ model ConcessionDiscount {
 
 /// Explicit join table (replaces Prisma implicit `_BillingItemToConcessionDiscount`).
 model BillingItemToConcessionDiscount {
-  billingItemId          Int                 @map("billing_item_id")
-  billingItem            BillingItem         @relation(fields: [billingItemId], references: [id], onDelete: Cascade)
-  concessionDiscountId   Int                 @map("concession_discount_id")
-  concessionDiscount     ConcessionDiscount  @relation(fields: [concessionDiscountId], references: [id], onDelete: Cascade)
+  billingItemId        Int                @map("billing_item_id")
+  billingItem          BillingItem        @relation(fields: [billingItemId], references: [id], onDelete: Cascade)
+  concessionDiscountId Int                @map("concession_discount_id")
+  concessionDiscount   ConcessionDiscount @relation(fields: [concessionDiscountId], references: [id], onDelete: Cascade)
 
   @@id([billingItemId, concessionDiscountId])
   @@index([concessionDiscountId])
@@ -2064,16 +2064,16 @@ model Route {
 }
 
 model Bustop {
-  id                        String                    @id @default(uuid()) @db.Char(36)
-  name                      String                    @map("name") @db.VarChar(100)
-  description               String?                   @map("description") @db.Text
-  latitude                  Decimal?                  @db.Decimal(10, 8)
-  longitude                 Decimal?                  @db.Decimal(11, 8)
-  status                    Status                    @default(Active)
-  createdAt                 DateTime                  @default(now()) @map("created_at")
-  updatedAt                 DateTime                  @updatedAt @map("updated_at")
-  routeBustops              RouteBustop[]
-  studentTransports         StudentTransport[]
+  id                             String                          @id @default(uuid()) @db.Char(36)
+  name                           String                          @map("name") @db.VarChar(100)
+  description                    String?                         @map("description") @db.Text
+  latitude                       Decimal?                        @db.Decimal(10, 8)
+  longitude                      Decimal?                        @db.Decimal(11, 8)
+  status                         Status                          @default(Active)
+  createdAt                      DateTime                        @default(now()) @map("created_at")
+  updatedAt                      DateTime                        @updatedAt @map("updated_at")
+  routeBustops                   RouteBustop[]
+  studentTransports              StudentTransport[]
   studentTransportationRegisters StudentTransportationRegister[]
 
   @@unique([name])
@@ -2181,19 +2181,26 @@ enum Direction {
   SchoolToHome
 }
 
+enum StudentTransportationRegisterStatus {
+  Boarding
+  OnTransit
+  DroppedOff
+}
+
 model StudentTransportationRegister {
-  id              String      @id @default(uuid()) @db.Char(36)
-  studentId       String      @map("student_id") @db.Char(36)
-  student         Student     @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  nearestBustopId String      @map("nearest_bustop_id") @db.Char(36)
-  bustop          Bustop      @relation(fields: [nearestBustopId], references: [id], onDelete: Restrict)
-  vehicleTripId   String      @map("vehicle_trip_id") @db.Char(36)
-  vehicleTrip     VehicleTrip @relation(fields: [vehicleTripId], references: [id], onDelete: Restrict)
-  startTime       DateTime?   @map("start_time")
-  endTime         DateTime?   @map("end_time")
-  direction       Direction   @default(HomeToSchool) @map("direction")
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
+  id              String                              @id @default(uuid()) @db.Char(36)
+  studentId       String                              @map("student_id") @db.Char(36)
+  student         Student                             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  nearestBustopId String                              @map("nearest_bustop_id") @db.Char(36)
+  bustop          Bustop                              @relation(fields: [nearestBustopId], references: [id], onDelete: Restrict)
+  vehicleTripId   String                              @map("vehicle_trip_id") @db.Char(36)
+  vehicleTrip     VehicleTrip                         @relation(fields: [vehicleTripId], references: [id], onDelete: Restrict)
+  startTime       DateTime?                           @map("start_time")
+  endTime         DateTime?                           @map("end_time")
+  direction       Direction                           @default(HomeToSchool) @map("direction")
+  status          StudentTransportationRegisterStatus @default(Boarding) @map("status")
+  createdAt       DateTime                            @default(now()) @map("created_at")
+  updatedAt       DateTime                            @updatedAt @map("updated_at")
 
   pickUpLatitude   Decimal? @map("pick_up_latitude") @db.Decimal(10, 8)
   pickUpLongitude  Decimal? @map("pick_up_longitude") @db.Decimal(11, 8)

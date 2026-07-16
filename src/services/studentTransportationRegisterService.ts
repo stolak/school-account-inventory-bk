@@ -4,6 +4,7 @@ import {
   Direction,
   Prisma,
   Status,
+  StudentTransportationRegisterStatus,
   TransportSubscriptionType,
   VehicleTripStatus,
 } from "@prisma/client";
@@ -65,6 +66,7 @@ export interface StudentTransportationRegisterData {
   startTime: Date | null;
   endTime: Date | null;
   direction: Direction;
+  status: StudentTransportationRegisterStatus;
   pickUpLatitude: string | null;
   pickUpLongitude: string | null;
   dropOffLatitude: string | null;
@@ -85,6 +87,7 @@ function mapRow(row: Row): StudentTransportationRegisterData {
     startTime: row.startTime,
     endTime: row.endTime,
     direction: row.direction,
+    status: row.status,
     pickUpLatitude: row.pickUpLatitude?.toString() ?? null,
     pickUpLongitude: row.pickUpLongitude?.toString() ?? null,
     dropOffLatitude: row.dropOffLatitude?.toString() ?? null,
@@ -110,6 +113,17 @@ function parseOptionalCoordinate(
 ): Prisma.Decimal | null {
   if (value === undefined || value === null || value === "") return null;
   return parseDecimalNonNegative(value, fieldName);
+}
+
+function deriveRegisterStatus(input: {
+  tripStatus: VehicleTripStatus;
+  endTime: Date | null;
+}): StudentTransportationRegisterStatus {
+  if (input.endTime) return StudentTransportationRegisterStatus.DroppedOff;
+  if (input.tripStatus === VehicleTripStatus.InProgress) {
+    return StudentTransportationRegisterStatus.OnTransit;
+  }
+  return StudentTransportationRegisterStatus.Boarding;
 }
 
 function assertSubscriptionAllowsDirection(
@@ -265,6 +279,7 @@ export class StudentTransportationRegisterService {
           startTime,
           endTime,
           direction,
+          status: deriveRegisterStatus({ tripStatus, endTime }),
           pickUpLatitude: parseOptionalCoordinate(input.pickUpLatitude, "pickUpLatitude"),
           pickUpLongitude: parseOptionalCoordinate(input.pickUpLongitude, "pickUpLongitude"),
           dropOffLatitude: parseOptionalCoordinate(input.dropOffLatitude, "dropOffLatitude"),
@@ -384,6 +399,7 @@ export class StudentTransportationRegisterService {
               startTime,
               endTime,
               direction: Direction.SchoolToHome,
+              status: deriveRegisterStatus({ tripStatus: trip.status, endTime }),
               pickUpLatitude,
               pickUpLongitude,
               dropOffLatitude,
@@ -412,6 +428,7 @@ export class StudentTransportationRegisterService {
       nearestBustopId?: string;
       vehicleTripId?: string;
       direction?: Direction;
+      status?: StudentTransportationRegisterStatus;
       fromDate?: string;
       toDate?: string;
       page?: number;
@@ -427,6 +444,7 @@ export class StudentTransportationRegisterService {
     if (params.nearestBustopId?.trim()) where.nearestBustopId = params.nearestBustopId.trim();
     if (params.vehicleTripId?.trim()) where.vehicleTripId = params.vehicleTripId.trim();
     if (params.direction !== undefined) where.direction = params.direction;
+    if (params.status !== undefined) where.status = params.status;
 
     const dateFilter: Prisma.DateTimeFilter = {};
     if (params.fromDate?.trim()) dateFilter.gte = parseDateTime(params.fromDate.trim(), "fromDate");
@@ -497,11 +515,18 @@ export class StudentTransportationRegisterService {
       throw new Error("endTime must be greater than or equal to startTime");
     }
 
+    const nextEndTime = endTime !== undefined ? endTime : existing.endTime;
+    const nextStatus = deriveRegisterStatus({
+      tripStatus: existing.vehicleTrip.status,
+      endTime: nextEndTime,
+    });
+
     try {
       const row = await this.prisma.studentTransportationRegister.update({
         where: { id },
         data: {
           ...(endTime !== undefined ? { endTime } : {}),
+          status: nextStatus,
           ...(input.direction !== undefined ? { direction: input.direction } : {}),
           ...(input.pickUpLatitude !== undefined
             ? { pickUpLatitude: parseOptionalCoordinate(input.pickUpLatitude, "pickUpLatitude") }

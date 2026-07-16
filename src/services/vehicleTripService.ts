@@ -1,6 +1,13 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode, parseDecimalNonNegative } from "../utils/assessmentHttp";
-import { Direction, Prisma, Status, TransportSubscriptionType, VehicleTripStatus } from "@prisma/client";
+import {
+  Direction,
+  Prisma,
+  Status,
+  StudentTransportationRegisterStatus,
+  TransportSubscriptionType,
+  VehicleTripStatus,
+} from "@prisma/client";
 import { resolveStaffId } from "../utils/staffContext";
 
 const include = {
@@ -427,8 +434,19 @@ export class VehicleTripService {
           where: { vehicleTripId: id },
           data: {
             startTime: effectiveStart,
+            status: StudentTransportationRegisterStatus.OnTransit,
             ...(pickUpLatitude !== null ? { pickUpLatitude } : {}),
             ...(pickUpLongitude !== null ? { pickUpLongitude } : {}),
+          },
+        });
+      }
+
+      if (effectiveEnd) {
+        await this.prisma.studentTransportationRegister.updateMany({
+          where: { vehicleTripId: id },
+          data: {
+            endTime: effectiveEnd,
+            status: StudentTransportationRegisterStatus.DroppedOff,
           },
         });
       }
