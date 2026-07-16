@@ -1,6 +1,12 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode, parseDecimalNonNegative } from "../utils/assessmentHttp";
-import { Direction, Prisma, Status, TransportSubscriptionType, VehicleTripStatus } from "@prisma/client";
+import {
+  Direction,
+  Prisma,
+  Status,
+  TransportSubscriptionType,
+  VehicleTripStatus,
+} from "@prisma/client";
 
 const include = {
   student: {
@@ -17,12 +23,13 @@ const include = {
     select: {
       id: true,
       vehicleId: true,
-      routeId: true,
       driverId: true,
       startTime: true,
       endTime: true,
       status: true,
       tripDirection: true,
+      latitude: true,
+      longitude: true,
       vehicle: {
         select: {
           id: true,
@@ -32,7 +39,14 @@ const include = {
           status: true,
         },
       },
-      route: { select: { id: true, name: true, status: true } },
+      vehicleTripRoutes: {
+        select: {
+          id: true,
+          routeId: true,
+          route: { select: { id: true, name: true, status: true } },
+        },
+        orderBy: { createdAt: "asc" as const },
+      },
       driver: { select: { id: true, StaffNumber: true, name: true, email: true } },
     },
   },
@@ -136,7 +150,12 @@ export class StudentTransportationRegisterService {
       this.prisma.student.findUnique({ where: { id: input.studentId }, select: { id: true } }),
       this.prisma.vehicleTrip.findUnique({
         where: { id: input.vehicleTripId },
-        select: { id: true, routeId: true, tripDirection: true, status: true },
+        select: {
+          id: true,
+          tripDirection: true,
+          status: true,
+          vehicleTripRoutes: { select: { routeId: true } },
+        },
       }),
       this.prisma.studentTransport.findFirst({
         where: { studentId: input.studentId, status: Status.Active },
@@ -151,13 +170,14 @@ export class StudentTransportationRegisterService {
 
     assertSubscriptionAllowsDirection(subscription.subscriptionType, vehicleTrip.tripDirection);
 
-    if (subscription.routeId !== vehicleTrip.routeId) {
-      throw new Error("Student transport route does not match the vehicle trip route");
+    const tripRouteIds = vehicleTrip.vehicleTripRoutes.map((tripRoute) => tripRoute.routeId);
+    if (!tripRouteIds.includes(subscription.routeId)) {
+      throw new Error("Student transport route does not match any vehicle trip route");
     }
 
     const routeBustop = await this.prisma.routeBustop.findUnique({
       where: {
-        routeId_bustopId: { routeId: vehicleTrip.routeId, bustopId: subscription.bustopId },
+        routeId_bustopId: { routeId: subscription.routeId, bustopId: subscription.bustopId },
       },
       select: { id: true },
     });
@@ -250,17 +270,19 @@ export class StudentTransportationRegisterService {
     if (params.vehicleTripId?.trim()) where.vehicleTripId = params.vehicleTripId.trim();
     if (params.direction !== undefined) where.direction = params.direction;
 
-    const startTime: Prisma.DateTimeFilter = {};
-    if (params.fromDate?.trim()) startTime.gte = parseDateTime(params.fromDate.trim(), "fromDate");
-    if (params.toDate?.trim()) startTime.lte = parseDateTime(params.toDate.trim(), "toDate");
-    if (Object.keys(startTime).length > 0) where.startTime = startTime;
+    const dateFilter: Prisma.DateTimeFilter = {};
+    if (params.fromDate?.trim()) dateFilter.gte = parseDateTime(params.fromDate.trim(), "fromDate");
+    if (params.toDate?.trim()) dateFilter.lte = parseDateTime(params.toDate.trim(), "toDate");
+    if (Object.keys(dateFilter).length > 0) {
+      where.OR = [{ startTime: dateFilter }, { createdAt: dateFilter }];
+    }
 
     const [total, rows] = await Promise.all([
       this.prisma.studentTransportationRegister.count({ where }),
       this.prisma.studentTransportationRegister.findMany({
         where,
         include,
-        orderBy: { startTime: "desc" },
+        orderBy: [{ startTime: "desc" }, { createdAt: "desc" }],
         skip,
         take: limit,
       }),

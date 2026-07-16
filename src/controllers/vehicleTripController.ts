@@ -10,9 +10,7 @@ function queryString(query: Request["query"], key: string): string | undefined {
   return typeof raw === "string" ? raw : undefined;
 }
 
-function parseVehicleTripStatus(
-  raw: unknown
-): VehicleTripStatus | undefined | "invalid" {
+function parseVehicleTripStatus(raw: unknown): VehicleTripStatus | undefined | "invalid" {
   if (raw === undefined) return undefined;
   if (
     raw === VehicleTripStatus.Pending ||
@@ -48,12 +46,15 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [vehicleId, routeId]
+ *             required: [vehicleId, routeIds]
  *             properties:
  *               vehicleId:
  *                 type: string
- *               routeId:
- *                 type: string
+ *               routeIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 minItems: 1
  *               driverId:
  *                 type: string
  *                 description: Optional; defaults to authenticated staff id when omitted
@@ -194,8 +195,11 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *                 nullable: true
  *               driverId:
  *                 type: string
- *               routeId:
- *                 type: string
+ *               routeIds:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 minItems: 1
  *               tripDirection:
  *                 type: string
  *                 enum: [HomeToSchool, SchoolToHome]
@@ -237,7 +241,7 @@ export const vehicleTripController = {
     try {
       const {
         vehicleId,
-        routeId,
+        routeIds,
         driverId,
         startTime,
         endTime,
@@ -249,8 +253,10 @@ export const vehicleTripController = {
       if (!vehicleId || typeof vehicleId !== "string" || !vehicleId.trim()) {
         return res.status(400).json({ success: false, message: "vehicleId is required" });
       }
-      if (!routeId || typeof routeId !== "string" || !routeId.trim()) {
-        return res.status(400).json({ success: false, message: "routeId is required" });
+      if (!Array.isArray(routeIds) || routeIds.length === 0) {
+        return res
+          .status(400)
+          .json({ success: false, message: "routeIds must be a non-empty array" });
       }
       if (
         driverId !== undefined &&
@@ -285,7 +291,7 @@ export const vehicleTripController = {
 
       const created = await vehicleTripService.create({
         vehicleId: vehicleId.trim(),
-        routeId: routeId.trim(),
+        routeIds,
         ...(providedDriverId ? { driverId: providedDriverId } : {}),
         authenticatedUserId,
         ...(startTime !== undefined ? { startTime } : {}),
@@ -378,6 +384,7 @@ export const vehicleTripController = {
         longitude,
         driverId,
         routeId,
+        routeIds,
         tripDirection,
         status,
       } = req.body ?? {};
@@ -388,6 +395,7 @@ export const vehicleTripController = {
         longitude === undefined &&
         driverId === undefined &&
         routeId === undefined &&
+        routeIds === undefined &&
         tripDirection === undefined &&
         status === undefined
       ) {
@@ -413,13 +421,24 @@ export const vehicleTripController = {
         });
       }
 
+      if (routeId !== undefined && routeIds !== undefined) {
+        return res.status(400).json({
+          success: false,
+          message: "Provide routeIds only, not both routeId and routeIds",
+        });
+      }
+
       const updated = await vehicleTripService.update(id, {
         ...(startTime !== undefined ? { startTime } : {}),
         ...(endTime !== undefined ? { endTime } : {}),
         ...(latitude !== undefined ? { latitude } : {}),
         ...(longitude !== undefined ? { longitude } : {}),
         ...(driverId !== undefined ? { driverId: String(driverId) } : {}),
-        ...(routeId !== undefined ? { routeId: String(routeId) } : {}),
+        ...(routeIds !== undefined
+          ? { routeIds: Array.isArray(routeIds) ? routeIds : [] }
+          : routeId !== undefined
+            ? { routeIds: [String(routeId)] }
+            : {}),
         ...(parsedTripDirection !== undefined ? { tripDirection: parsedTripDirection } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
       });

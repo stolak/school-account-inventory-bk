@@ -7,19 +7,32 @@ const include = {
   vehicle: {
     select: { id: true, vehicleNumber: true, vehicleType: true, vehicleMake: true, status: true },
   },
-  route: { select: { id: true, name: true, status: true } },
+  vehicleTripRoutes: {
+    select: {
+      id: true,
+      routeId: true,
+      route: { select: { id: true, name: true, status: true } },
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
   driver: { select: { id: true, StaffNumber: true, name: true, email: true } },
   _count: { select: { studentTransportationRegisters: true } },
 } satisfies Prisma.VehicleTripInclude;
 
 type Row = Prisma.VehicleTripGetPayload<{ include: typeof include }>;
 
+export interface VehicleTripRouteData {
+  id: string;
+  routeId: string;
+  route: Row["vehicleTripRoutes"][number]["route"];
+}
+
 export interface VehicleTripData {
   id: string;
   vehicleId: string;
   vehicle: Row["vehicle"];
-  routeId: string;
-  route: Row["route"];
+  routeIds: string[];
+  routes: VehicleTripRouteData[];
   driverId: string;
   driver: Row["driver"];
   startTime: Date | null;
@@ -38,8 +51,12 @@ function mapRow(row: Row): VehicleTripData {
     id: row.id,
     vehicleId: row.vehicleId,
     vehicle: row.vehicle,
-    routeId: row.routeId,
-    route: row.route,
+    routeIds: row.vehicleTripRoutes.map((tripRoute) => tripRoute.routeId),
+    routes: row.vehicleTripRoutes.map((tripRoute) => ({
+      id: tripRoute.id,
+      routeId: tripRoute.routeId,
+      route: tripRoute.route,
+    })),
     driverId: row.driverId,
     driver: row.driver,
     startTime: row.startTime,
@@ -72,6 +89,26 @@ function parseOptionalCoordinate(
   return parseDecimalNonNegative(value, fieldName);
 }
 
+function parseRouteIds(routeIds: string[]): string[] {
+  if (!Array.isArray(routeIds) || routeIds.length === 0) {
+    throw new Error("routeIds must be a non-empty array");
+  }
+
+  const normalized = routeIds.map((id, index) => {
+    if (typeof id !== "string" || !id.trim()) {
+      throw new Error(`routeIds[${index}] must be a non-empty string`);
+    }
+    return id.trim();
+  });
+
+  const uniqueRouteIds = [...new Set(normalized)];
+  if (uniqueRouteIds.length !== normalized.length) {
+    throw new Error("Duplicate routeId in routeIds");
+  }
+
+  return uniqueRouteIds;
+}
+
 const ACTIVE_TRIP_STATUSES: VehicleTripStatus[] = [
   VehicleTripStatus.Pending,
   VehicleTripStatus.InProgress,
@@ -86,17 +123,22 @@ export class VehicleTripService {
 
   private async assertRefs(input: {
     vehicleId: string;
-    routeId: string;
+    routeIds: string[];
     driverId: string;
   }): Promise<void> {
-    const [vehicle, route, driver] = await Promise.all([
+    const [vehicle, driver, routes] = await Promise.all([
       this.prisma.vehicle.findUnique({ where: { id: input.vehicleId }, select: { id: true } }),
-      this.prisma.route.findUnique({ where: { id: input.routeId }, select: { id: true } }),
       this.prisma.staff.findUnique({ where: { id: input.driverId }, select: { id: true } }),
+      this.prisma.route.findMany({
+        where: { id: { in: input.routeIds } },
+        select: { id: true },
+      }),
     ]);
     if (!vehicle) throw new Error("Invalid vehicleId");
-    if (!route) throw new Error("Invalid routeId");
     if (!driver) throw new Error("Invalid driverId");
+    if (routes.length !== input.routeIds.length) {
+      throw new Error("Invalid routeId in routeIds");
+    }
   }
 
   /** Pending and InProgress count as active; a vehicle may have only one. */
@@ -119,9 +161,20 @@ export class VehicleTripService {
     }
   }
 
+  private async replaceTripRoutes(vehicleTripId: string, routeIds: string[]): Promise<void> {
+    await this.prisma.$transaction([
+      this.prisma.vehicleTripRoute.deleteMany({ where: { vehicleTripId } }),
+      ...routeIds.map((routeId) =>
+        this.prisma.vehicleTripRoute.create({
+          data: { vehicleTripId, routeId },
+        })
+      ),
+    ]);
+  }
+
   async create(input: {
     vehicleId: string;
-    routeId: string;
+    routeIds: string[];
     driverId?: string | null;
     authenticatedUserId?: string | null;
     startTime?: Date | string | null;
@@ -132,9 +185,9 @@ export class VehicleTripService {
     status?: VehicleTripStatus;
   }): Promise<VehicleTripData> {
     const vehicleId = input.vehicleId.trim();
-    const routeId = input.routeId.trim();
-    if (!vehicleId || !routeId) {
-      throw new Error("vehicleId and routeId are required");
+    const routeIds = parseRouteIds(input.routeIds);
+    if (!vehicleId) {
+      throw new Error("vehicleId and routeIds are required");
     }
 
     let driverId =
@@ -145,11 +198,10 @@ export class VehicleTripService {
       if (!userId) {
         throw new Error("Unauthorized");
       }
-      // Non-staff users are denied by resolveStaffId
       driverId = await resolveStaffId(userId);
     }
 
-    await this.assertRefs({ vehicleId, routeId, driverId });
+    await this.assertRefs({ vehicleId, routeIds, driverId });
 
     const status = input.status ?? VehicleTripStatus.Pending;
     if (isActiveTripStatus(status)) {
@@ -171,7 +223,6 @@ export class VehicleTripService {
     const row = await this.prisma.vehicleTrip.create({
       data: {
         vehicleId,
-        routeId,
         driverId,
         startTime,
         endTime,
@@ -179,6 +230,9 @@ export class VehicleTripService {
         longitude: parseOptionalCoordinate(input.longitude, "longitude"),
         ...(input.tripDirection !== undefined ? { tripDirection: input.tripDirection } : {}),
         status,
+        vehicleTripRoutes: {
+          create: routeIds.map((routeId) => ({ routeId })),
+        },
       },
       include,
     });
@@ -204,7 +258,9 @@ export class VehicleTripService {
 
     const where: Prisma.VehicleTripWhereInput = {};
     if (params.vehicleId?.trim()) where.vehicleId = params.vehicleId.trim();
-    if (params.routeId?.trim()) where.routeId = params.routeId.trim();
+    if (params.routeId?.trim()) {
+      where.vehicleTripRoutes = { some: { routeId: params.routeId.trim() } };
+    }
     if (params.driverId?.trim()) where.driverId = params.driverId.trim();
     if (params.status !== undefined) where.status = params.status;
     if (params.tripDirection !== undefined) where.tripDirection = params.tripDirection;
@@ -246,7 +302,7 @@ export class VehicleTripService {
       latitude?: string | number | null;
       longitude?: string | number | null;
       driverId?: string;
-      routeId?: string;
+      routeIds?: string[];
       tripDirection?: Direction;
       status?: VehicleTripStatus;
     }
@@ -262,13 +318,17 @@ export class VehicleTripService {
       });
       if (!driver) throw new Error("Invalid driverId");
     }
-    if (input.routeId !== undefined) {
-      if (!input.routeId.trim()) throw new Error("routeId cannot be empty");
-      const route = await this.prisma.route.findUnique({
-        where: { id: input.routeId.trim() },
+
+    let nextRouteIds: string[] | undefined;
+    if (input.routeIds !== undefined) {
+      nextRouteIds = parseRouteIds(input.routeIds);
+      const routes = await this.prisma.route.findMany({
+        where: { id: { in: nextRouteIds } },
         select: { id: true },
       });
-      if (!route) throw new Error("Invalid routeId");
+      if (routes.length !== nextRouteIds.length) {
+        throw new Error("Invalid routeId in routeIds");
+      }
     }
 
     const startTime =
@@ -291,7 +351,6 @@ export class VehicleTripService {
     }
 
     let nextStatus = input.status ?? existing.status;
-    // A trip with endTime is finished: Completed if students boarded, otherwise Cancelled
     if (effectiveEnd !== null) {
       nextStatus =
         existing._count.studentTransportationRegisters > 0
@@ -304,6 +363,10 @@ export class VehicleTripService {
     }
 
     try {
+      if (nextRouteIds !== undefined) {
+        await this.replaceTripRoutes(id, nextRouteIds);
+      }
+
       const row = await this.prisma.vehicleTrip.update({
         where: { id },
         data: {
@@ -316,7 +379,6 @@ export class VehicleTripService {
             ? { longitude: parseOptionalCoordinate(input.longitude, "longitude") }
             : {}),
           ...(input.driverId !== undefined ? { driverId: input.driverId.trim() } : {}),
-          ...(input.routeId !== undefined ? { routeId: input.routeId.trim() } : {}),
           ...(input.tripDirection !== undefined ? { tripDirection: input.tripDirection } : {}),
           ...(input.status !== undefined || effectiveEnd !== null ? { status: nextStatus } : {}),
         },

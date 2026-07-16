@@ -40,7 +40,7 @@ const include = {
       vehicleRoutes: true,
       routeBustops: true,
       studentTransports: true,
-      vehicleTrips: true,
+      vehicleTripRoutes: true,
     },
   },
 } satisfies Prisma.RouteInclude;
@@ -203,7 +203,7 @@ export class RouteService {
       this.prisma.vehicleRoute.count({ where: { routeId: id } }),
       this.prisma.routeBustop.count({ where: { routeId: id } }),
       this.prisma.studentTransport.count({ where: { routeId: id } }),
-      this.prisma.vehicleTrip.count({ where: { routeId: id } }),
+      this.prisma.vehicleTripRoute.count({ where: { routeId: id } }),
     ]);
     if (assignmentCount > 0 || bustopCount > 0 || transportCount > 0 || tripCount > 0) {
       throw new Error(
