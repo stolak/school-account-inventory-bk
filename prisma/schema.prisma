@@ -671,7 +671,6 @@ model Staff {
   teacherSubjects               TeacherSubjects[]
   vehicles                      Vehicle[]
   vehicleTrips                  VehicleTrip[]
-  studentTransportHistories     StudentTransportHistory[]
 
   @@index([userId])
   @@index([StaffNumber])
@@ -2134,23 +2133,26 @@ enum Direction {
 }
 
 model StudentTransportHistory {
-  id            String      @id @default(uuid()) @db.Char(36)
-  studentId     String      @map("student_id") @db.Char(36)
-  student       Student     @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  bustopId      String      @map("bustop_id") @db.Char(36)
-  bustop        Bustop      @relation(fields: [bustopId], references: [id], onDelete: Restrict)
-  vehicleTripId String      @map("vehicle_trip_id") @db.Char(36)
-  vehicleTrip   VehicleTrip @relation(fields: [vehicleTripId], references: [id], onDelete: Restrict)
-  startTime     DateTime    @map("start_time")
-  endTime       DateTime?   @map("end_time")
-  direction     Direction   @default(HomeToSchool) @map("direction")
-  createdAt     DateTime    @default(now()) @map("created_at")
-  updatedAt     DateTime    @updatedAt @map("updated_at")
-  staff         Staff?      @relation(fields: [staffId], references: [id])
-  staffId       String?     @db.Char(36)
+  id              String      @id @default(uuid()) @db.Char(36)
+  studentId       String      @map("student_id") @db.Char(36)
+  student         Student     @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  nearestBustopId String      @map("nearest_bustop_id") @db.Char(36)
+  bustop          Bustop      @relation(fields: [nearestBustopId], references: [id], onDelete: Restrict)
+  vehicleTripId   String      @map("vehicle_trip_id") @db.Char(36)
+  vehicleTrip     VehicleTrip @relation(fields: [vehicleTripId], references: [id], onDelete: Restrict)
+  startTime       DateTime    @map("start_time")
+  endTime         DateTime?   @map("end_time")
+  direction       Direction   @default(HomeToSchool) @map("direction")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  pickUpLatitude   Decimal? @map("pick_up_latitude") @db.Decimal(10, 8)
+  pickUpLongitude  Decimal? @map("pick_up_longitude") @db.Decimal(11, 8)
+  dropOffLatitude  Decimal? @map("drop_off_latitude") @db.Decimal(10, 8)
+  dropOffLongitude Decimal? @map("drop_off_longitude") @db.Decimal(11, 8)
 
   @@index([studentId])
-  @@index([bustopId])
+  @@index([nearestBustopId])
   @@index([vehicleTripId])
   @@index([startTime])
   @@map("student_transport_histories")

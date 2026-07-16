@@ -29,11 +29,11 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [studentId, bustopId, vehicleTripId, startTime]
+ *             required: [studentId, nearestBustopId, vehicleTripId, startTime]
  *             properties:
  *               studentId:
  *                 type: string
- *               bustopId:
+ *               nearestBustopId:
  *                 type: string
  *               vehicleTripId:
  *                 type: string
@@ -47,8 +47,17 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *               direction:
  *                 type: string
  *                 enum: [HomeToSchool, SchoolToHome]
- *               staffId:
- *                 type: string
+ *               pickUpLatitude:
+ *                 type: number
+ *                 nullable: true
+ *               pickUpLongitude:
+ *                 type: number
+ *                 nullable: true
+ *               dropOffLatitude:
+ *                 type: number
+ *                 nullable: true
+ *               dropOffLongitude:
+ *                 type: number
  *                 nullable: true
  *     responses:
  *       201:
@@ -64,15 +73,11 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *         schema:
  *           type: string
  *       - in: query
- *         name: bustopId
+ *         name: nearestBustopId
  *         schema:
  *           type: string
  *       - in: query
  *         name: vehicleTripId
- *         schema:
- *           type: string
- *       - in: query
- *         name: staffId
  *         schema:
  *           type: string
  *       - in: query
@@ -148,8 +153,17 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *               direction:
  *                 type: string
  *                 enum: [HomeToSchool, SchoolToHome]
- *               staffId:
- *                 type: string
+ *               pickUpLatitude:
+ *                 type: number
+ *                 nullable: true
+ *               pickUpLongitude:
+ *                 type: number
+ *                 nullable: true
+ *               dropOffLatitude:
+ *                 type: number
+ *                 nullable: true
+ *               dropOffLongitude:
+ *                 type: number
  *                 nullable: true
  *     responses:
  *       200:
@@ -179,13 +193,23 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
 export const studentTransportHistoryController = {
   create: async (req: Request, res: Response) => {
     try {
-      const { studentId, bustopId, vehicleTripId, startTime, endTime, direction, staffId } =
-        req.body ?? {};
+      const {
+        studentId,
+        nearestBustopId,
+        vehicleTripId,
+        startTime,
+        endTime,
+        direction,
+        pickUpLatitude,
+        pickUpLongitude,
+        dropOffLatitude,
+        dropOffLongitude,
+      } = req.body ?? {};
       if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
         return res.status(400).json({ success: false, message: "studentId is required" });
       }
-      if (!bustopId || typeof bustopId !== "string" || !bustopId.trim()) {
-        return res.status(400).json({ success: false, message: "bustopId is required" });
+      if (!nearestBustopId || typeof nearestBustopId !== "string" || !nearestBustopId.trim()) {
+        return res.status(400).json({ success: false, message: "nearestBustopId is required" });
       }
       if (!vehicleTripId || typeof vehicleTripId !== "string" || !vehicleTripId.trim()) {
         return res.status(400).json({ success: false, message: "vehicleTripId is required" });
@@ -204,12 +228,15 @@ export const studentTransportHistoryController = {
 
       const created = await studentTransportHistoryService.create({
         studentId: studentId.trim(),
-        bustopId: bustopId.trim(),
+        nearestBustopId: nearestBustopId.trim(),
         vehicleTripId: vehicleTripId.trim(),
         startTime,
         ...(endTime !== undefined ? { endTime } : {}),
         ...(parsedDirection !== undefined ? { direction: parsedDirection } : {}),
-        ...(staffId !== undefined ? { staffId } : {}),
+        ...(pickUpLatitude !== undefined ? { pickUpLatitude } : {}),
+        ...(pickUpLongitude !== undefined ? { pickUpLongitude } : {}),
+        ...(dropOffLatitude !== undefined ? { dropOffLatitude } : {}),
+        ...(dropOffLongitude !== undefined ? { dropOffLongitude } : {}),
       });
 
       return res.status(201).json({
@@ -234,9 +261,8 @@ export const studentTransportHistoryController = {
 
       const result = await studentTransportHistoryService.list({
         studentId: queryString(req.query, "studentId"),
-        bustopId: queryString(req.query, "bustopId"),
+        nearestBustopId: queryString(req.query, "nearestBustopId"),
         vehicleTripId: queryString(req.query, "vehicleTripId"),
-        staffId: queryString(req.query, "staffId"),
         ...(direction !== undefined ? { direction } : {}),
         fromDate: queryString(req.query, "fromDate"),
         toDate: queryString(req.query, "toDate"),
@@ -281,11 +307,26 @@ export const studentTransportHistoryController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { endTime, direction, staffId } = req.body ?? {};
-      if (endTime === undefined && direction === undefined && staffId === undefined) {
+      const {
+        endTime,
+        direction,
+        pickUpLatitude,
+        pickUpLongitude,
+        dropOffLatitude,
+        dropOffLongitude,
+      } = req.body ?? {};
+      if (
+        endTime === undefined &&
+        direction === undefined &&
+        pickUpLatitude === undefined &&
+        pickUpLongitude === undefined &&
+        dropOffLatitude === undefined &&
+        dropOffLongitude === undefined
+      ) {
         return res.status(400).json({
           success: false,
-          message: "At least one of endTime, direction, or staffId must be provided",
+          message:
+            "At least one of endTime, direction, pickUpLatitude, pickUpLongitude, dropOffLatitude, or dropOffLongitude must be provided",
         });
       }
 
@@ -300,7 +341,10 @@ export const studentTransportHistoryController = {
       const updated = await studentTransportHistoryService.update(id, {
         ...(endTime !== undefined ? { endTime } : {}),
         ...(parsedDirection !== undefined ? { direction: parsedDirection } : {}),
-        ...(staffId !== undefined ? { staffId } : {}),
+        ...(pickUpLatitude !== undefined ? { pickUpLatitude } : {}),
+        ...(pickUpLongitude !== undefined ? { pickUpLongitude } : {}),
+        ...(dropOffLatitude !== undefined ? { dropOffLatitude } : {}),
+        ...(dropOffLongitude !== undefined ? { dropOffLongitude } : {}),
       });
 
       return res.json({
