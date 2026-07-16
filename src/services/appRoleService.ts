@@ -51,8 +51,12 @@ const privilegeSelect = {
   description: true,
 } satisfies Prisma.PrivilegeSelect;
 
+const rolePrivilegeLinkSelect = {
+  privilege: { select: privilegeSelect },
+} satisfies Prisma.AppRoleToPrivilegeSelect;
+
 const roleWithPrivilegesInclude = {
-  privileges: { select: privilegeSelect },
+  privilegeLinks: { select: rolePrivilegeLinkSelect },
 } satisfies Prisma.AppRoleInclude;
 
 const roleMenuChildInclude = {
@@ -75,7 +79,7 @@ const roleMenuInclude = {
 } satisfies Prisma.RoleMenuInclude;
 
 const appRoleDetailInclude = {
-  privileges: { select: privilegeSelect },
+  privilegeLinks: { select: rolePrivilegeLinkSelect },
   roleMenus: {
     include: roleMenuInclude,
     orderBy: { menu: { route: "asc" } },
@@ -84,6 +88,12 @@ const appRoleDetailInclude = {
 
 function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
   return typeof e === "object" && e !== null && "code" in e && typeof (e as any).code === "string";
+}
+
+function mapPrivilegesFromRoleLinks(
+  links: { privilege: { id: string; name: string; description: string | null } }[]
+) {
+  return links.map((link) => link.privilege);
 }
 
 type RoleMenuRow = Prisma.RoleMenuGetPayload<{ include: typeof roleMenuInclude }>;
@@ -169,7 +179,7 @@ export class AppRoleService {
     const rows = await this.prisma.appRole.findMany({
       where: finalWhere,
       include: {
-        privileges: { select: privilegeSelect },
+        privilegeLinks: { select: rolePrivilegeLinkSelect },
         roleMenus: {
           include: roleMenuInclude,
           orderBy: { menu: { route: "asc" } },
@@ -192,7 +202,7 @@ export class AppRoleService {
       id: role.id,
       name: role.name,
       status: role.status,
-      privileges: role.privileges,
+      privileges: mapPrivilegesFromRoleLinks(role.privilegeLinks),
       roleMenus: role.roleMenus.map((roleMenu) => mappedRoleMenusById.get(roleMenu.id)!),
     }));
   }
@@ -208,7 +218,7 @@ export class AppRoleService {
       id: role.id,
       name: role.name,
       status: role.status,
-      privileges: role.privileges,
+      privileges: mapPrivilegesFromRoleLinks(role.privilegeLinks),
       roleMenus: mapRoleMenuRows(role.roleMenus, new Map(), { assignedChildrenOnly: true }),
     };
   }
@@ -228,8 +238,11 @@ export class AppRoleService {
   }
 
   async deleteAppRole(id: string): Promise<AppRoleData> {
+    const existing = await this.getAppRoleById(id);
+    if (!existing) throw new Error("Role not found");
     try {
-      return await this.prisma.appRole.delete({ where: { id } });
+      await this.prisma.appRole.delete({ where: { id } });
+      return existing;
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2003") {
         throw new Error("Cannot delete role: it is assigned to users or menus");
@@ -243,7 +256,7 @@ export class AppRoleService {
 
     const role = await this.prisma.appRole.findUnique({
       where: { id: roleId },
-      include: { privileges: { select: { id: true } } },
+      include: { privilegeLinks: { select: { privilegeId: true } } },
     });
 
     if (!role) {
@@ -259,17 +272,13 @@ export class AppRoleService {
       throw new Error("One or more privilege IDs were not found");
     }
 
-    const existingIds = new Set(role.privileges.map((p) => p.id));
+    const existingIds = new Set(role.privilegeLinks.map((link) => link.privilegeId));
     const toConnect = uniqueIds.filter((id) => !existingIds.has(id));
 
     if (toConnect.length > 0) {
-      await this.prisma.appRole.update({
-        where: { id: roleId },
-        data: {
-          privileges: {
-            connect: toConnect.map((id) => ({ id })),
-          },
-        },
+      await this.prisma.appRoleToPrivilege.createMany({
+        data: toConnect.map((privilegeId) => ({ appRoleId: roleId, privilegeId })),
+        skipDuplicates: true,
       });
     }
 
@@ -279,23 +288,25 @@ export class AppRoleService {
   async removePrivilegeFromRole(roleId: string, privilegeId: string): Promise<AppRoleData> {
     const role = await this.prisma.appRole.findUnique({
       where: { id: roleId },
-      include: { privileges: { where: { id: privilegeId }, select: { id: true } } },
+      include: {
+        privilegeLinks: {
+          where: { privilegeId },
+          select: { privilegeId: true },
+        },
+      },
     });
 
     if (!role) {
       throw new Error("Role not found");
     }
 
-    if (role.privileges.length === 0) {
+    if (role.privilegeLinks.length === 0) {
       throw new Error("Privilege is not assigned to this role");
     }
 
-    await this.prisma.appRole.update({
-      where: { id: roleId },
-      data: {
-        privileges: {
-          disconnect: { id: privilegeId },
-        },
+    await this.prisma.appRoleToPrivilege.delete({
+      where: {
+        appRoleId_privilegeId: { appRoleId: roleId, privilegeId },
       },
     });
 

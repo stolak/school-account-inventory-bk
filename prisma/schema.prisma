@@ -57,8 +57,8 @@ model Privilege {
   id          String    @id @default(uuid()) @db.Char(36)
   name        String    @unique
   description String?
-  user        User[]
-  appRole     AppRole[]
+  userLinks   PrivilegeToUser[]
+  appRoleLinks AppRoleToPrivilege[]
 
   @@map("privileges")
 }
@@ -119,7 +119,7 @@ model User {
   tempJournalTransfers          TempJournalTransfer[]
   studentJournalTransfers       StudentJournalTransfer[]
   inventoryTransactions         InventoryTransaction[]
-  privileges                    Privilege[]
+  privilegeLinks                PrivilegeToUser[]
   auditLogs                     AuditLog[]
   cashiers                      Cashier[]
   staffJournalTransfers         StaffJournalTransfer[]
@@ -250,11 +250,35 @@ model AppRole {
   name   String
   status String @default("active")
 
-  roleMenus  RoleMenu[]
-  userRoles  UserRole[]
-  privileges Privilege[]
+  roleMenus      RoleMenu[]
+  userRoles      UserRole[]
+  privilegeLinks AppRoleToPrivilege[]
 
   @@map("roles")
+}
+
+/// Explicit join table (replaces Prisma implicit `_PrivilegeToUser`).
+model PrivilegeToUser {
+  privilegeId String    @map("privilege_id") @db.Char(36)
+  privilege   Privilege @relation(fields: [privilegeId], references: [id], onDelete: Cascade)
+  userId      String    @map("user_id") @db.Char(36)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([privilegeId, userId])
+  @@index([userId])
+  @@map("_privilege_to_user")
+}
+
+/// Explicit join table (replaces Prisma implicit `_AppRoleToPrivilege`).
+model AppRoleToPrivilege {
+  appRoleId   String    @map("app_role_id") @db.Char(36)
+  appRole     AppRole   @relation(fields: [appRoleId], references: [id], onDelete: Cascade)
+  privilegeId String    @map("privilege_id") @db.Char(36)
+  privilege   Privilege @relation(fields: [privilegeId], references: [id], onDelete: Cascade)
+
+  @@id([appRoleId, privilegeId])
+  @@index([privilegeId])
+  @@map("_app_role_to_privilege")
 }
 
 model Menu {
@@ -1042,7 +1066,7 @@ model BillingItem {
   status               Status                @default(Active)
   createdAt            DateTime              @default(now()) @map("created_at")
   updatedAt            DateTime              @updatedAt @map("updated_at")
-  concessions          ConcessionDiscount[]
+  concessionLinks      BillingItemToConcessionDiscount[]
   accountId            Int?                  @map("account_id")
   account              AccountChart?         @relation(fields: [accountId], references: [id], onDelete: Restrict)
   studentBillings      StudentBilling[]
@@ -1071,7 +1095,7 @@ model ConcessionDiscount {
   type                       ConcessionDiscountType
   calculationType            ConcessionDiscountCalculationType @map("calculation_type")
   value                      Decimal                           @db.Decimal(14, 2)
-  appliesTo                  BillingItem[]
+  billingItemLinks           BillingItemToConcessionDiscount[]
   maxLimit                   Decimal?                          @map("max_limit") @db.Decimal(14, 2)
   status                     Status                            @default(Active)
   accountId                  Int?                              @map("account_id")
@@ -1083,6 +1107,18 @@ model ConcessionDiscount {
   @@index([calculationType])
   @@index([status])
   @@map("concession_discounts")
+}
+
+/// Explicit join table (replaces Prisma implicit `_BillingItemToConcessionDiscount`).
+model BillingItemToConcessionDiscount {
+  billingItemId          Int                 @map("billing_item_id")
+  billingItem            BillingItem         @relation(fields: [billingItemId], references: [id], onDelete: Cascade)
+  concessionDiscountId   Int                 @map("concession_discount_id")
+  concessionDiscount     ConcessionDiscount  @relation(fields: [concessionDiscountId], references: [id], onDelete: Cascade)
+
+  @@id([billingItemId, concessionDiscountId])
+  @@index([concessionDiscountId])
+  @@map("_billing_item_to_concession_discount")
 }
 
 enum StudentBillingStatus {

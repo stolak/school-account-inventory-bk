@@ -1,18 +1,26 @@
 import prisma from "../utils/prisma";
 import {
+  BillingItem,
   ConcessionDiscountCalculationType,
   ConcessionDiscountType,
   Prisma,
   Status,
 } from "@prisma/client";
+import { isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
 
 const concessionInclude = {
-  appliesTo: true,
+  billingItemLinks: {
+    include: { billingItem: true },
+  },
 } satisfies Prisma.ConcessionDiscountInclude;
 
-export type ConcessionDiscountRow = Prisma.ConcessionDiscountGetPayload<{
+type ConcessionDiscountWithLinks = Prisma.ConcessionDiscountGetPayload<{
   include: typeof concessionInclude;
 }>;
+
+export type ConcessionDiscountRow = Omit<ConcessionDiscountWithLinks, "billingItemLinks"> & {
+  appliesTo: BillingItem[];
+};
 
 export interface ListConcessionDiscountsParams {
   q?: string;
@@ -28,8 +36,12 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
-function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
-  return typeof e === "object" && e !== null && "code" in e && typeof (e as any).code === "string";
+function mapConcessionRow(row: ConcessionDiscountWithLinks): ConcessionDiscountRow {
+  const { billingItemLinks, ...rest } = row;
+  return {
+    ...rest,
+    appliesTo: billingItemLinks.map((link) => link.billingItem),
+  };
 }
 
 export class ConcessionDiscountService {
@@ -80,7 +92,7 @@ export class ConcessionDiscountService {
       const appliesToIds = await this.validateBillingItemIds(input.appliesToIds ?? []);
       await this.validateAccountId(input.accountId);
 
-      return await this.prisma.concessionDiscount.create({
+      const created = await this.prisma.concessionDiscount.create({
         data: {
           code: input.code,
           name: input.name,
@@ -91,11 +103,16 @@ export class ConcessionDiscountService {
           ...(input.maxLimit !== undefined ? { maxLimit: input.maxLimit } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
           ...(appliesToIds.length > 0
-            ? { appliesTo: { connect: appliesToIds.map((id) => ({ id })) } }
+            ? {
+                billingItemLinks: {
+                  create: appliesToIds.map((billingItemId) => ({ billingItemId })),
+                },
+              }
             : {}),
         },
         include: concessionInclude,
       });
+      return mapConcessionRow(created);
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
         throw new Error("Concession/discount code already exists");
@@ -151,16 +168,17 @@ export class ConcessionDiscountService {
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
     return {
-      concessionDiscounts: rows,
+      concessionDiscounts: rows.map(mapConcessionRow),
       pagination: { page, limit, total, totalPages },
     };
   }
 
   async getConcessionDiscountById(id: number): Promise<ConcessionDiscountRow | null> {
-    return this.prisma.concessionDiscount.findUnique({
+    const row = await this.prisma.concessionDiscount.findUnique({
       where: { id },
       include: concessionInclude,
     });
+    return row ? mapConcessionRow(row) : null;
   }
 
   async updateConcessionDiscount(
@@ -186,7 +204,25 @@ export class ConcessionDiscountService {
         await this.validateAccountId(input.accountId);
       }
 
-      return await this.prisma.concessionDiscount.update({
+      if (appliesToSet !== undefined) {
+        await this.prisma.$transaction([
+          this.prisma.billingItemToConcessionDiscount.deleteMany({
+            where: { concessionDiscountId: id },
+          }),
+          ...(appliesToSet.length > 0
+            ? [
+                this.prisma.billingItemToConcessionDiscount.createMany({
+                  data: appliesToSet.map((billingItemId) => ({
+                    billingItemId,
+                    concessionDiscountId: id,
+                  })),
+                }),
+              ]
+            : []),
+        ]);
+      }
+
+      const updated = await this.prisma.concessionDiscount.update({
         where: { id },
         data: {
           ...(input.code !== undefined ? { code: input.code } : {}),
@@ -199,12 +235,10 @@ export class ConcessionDiscountService {
           ...(input.accountId !== undefined ? { accountId: input.accountId } : {}),
           ...(input.maxLimit !== undefined ? { maxLimit: input.maxLimit } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
-          ...(appliesToSet !== undefined
-            ? { appliesTo: { set: appliesToSet.map((billingItemId) => ({ id: billingItemId })) } }
-            : {}),
         },
         include: concessionInclude,
       });
+      return mapConcessionRow(updated);
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
         throw new Error("Concession/discount code already exists");
@@ -214,10 +248,11 @@ export class ConcessionDiscountService {
   }
 
   async deleteConcessionDiscount(id: number): Promise<ConcessionDiscountRow> {
-    return this.prisma.concessionDiscount.delete({
+    const row = await this.prisma.concessionDiscount.delete({
       where: { id },
       include: concessionInclude,
     });
+    return mapConcessionRow(row);
   }
 }
 

@@ -897,13 +897,22 @@ async function main() {
         update: {
           name: roleData.name,
           status: roleData.status,
-          privileges: { set: privilegeIds.map((id) => ({ id })) },
         },
         create: {
           ...roleData,
-          privileges: { connect: privilegeIds.map((id) => ({ id })) },
         },
       });
+
+      await prisma.appRoleToPrivilege.deleteMany({ where: { appRoleId: role.id } });
+      if (privilegeIds.length > 0) {
+        await prisma.appRoleToPrivilege.createMany({
+          data: privilegeIds.map((privilegeId) => ({
+            appRoleId: role.id,
+            privilegeId,
+          })),
+          skipDuplicates: true,
+        });
+      }
     }
     console.log(`   ✓ ${appRoles.length} application roles`);
 
@@ -2697,8 +2706,7 @@ async function main() {
 
     for (const row of concessionDiscounts) {
       const { appliesToIds, ...data } = row;
-      const appliesToConnect = appliesToIds.map((id) => ({ id }));
-      await prisma.concessionDiscount.upsert({
+      const upserted = await prisma.concessionDiscount.upsert({
         where: { code: row.code },
         update: {
           name: data.name,
@@ -2708,13 +2716,24 @@ async function main() {
           maxLimit: data.maxLimit,
           status: data.status,
           accountId: data.accountId,
-          appliesTo: { set: appliesToConnect },
         },
         create: {
           ...data,
-          appliesTo: { connect: appliesToConnect },
         },
       });
+
+      await prisma.billingItemToConcessionDiscount.deleteMany({
+        where: { concessionDiscountId: upserted.id },
+      });
+      if (appliesToIds.length > 0) {
+        await prisma.billingItemToConcessionDiscount.createMany({
+          data: appliesToIds.map((billingItemId) => ({
+            billingItemId,
+            concessionDiscountId: upserted.id,
+          })),
+          skipDuplicates: true,
+        });
+      }
     }
     console.log(`   ✓ ${concessionDiscounts.length} concession discounts`);
 

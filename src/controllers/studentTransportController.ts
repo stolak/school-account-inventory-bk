@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { Status, TransportSubscriptionType } from "@prisma/client";
 import { studentTransportService } from "../services/studentTransportService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 function queryString(query: Request["query"], key: string): string | undefined {
   const raw = query[key];
@@ -463,8 +463,8 @@ export const studentTransportController = {
 
   getByStudentId: async (req: Request, res: Response) => {
     try {
-      const studentId = req.params.studentId;
-      if (!studentId || !studentId.trim()) {
+      const studentId = routeParam(req.params.studentId).trim();
+      if (!studentId) {
         return res.status(400).json({ success: false, message: "studentId is required" });
       }
 

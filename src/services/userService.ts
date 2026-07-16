@@ -109,13 +109,21 @@ const userRoleWithAppRoleSelect = {
   role: { select: appRoleSelect },
 } satisfies Prisma.UserRoleSelect;
 
+const privilegeLinkSelect = {
+  privilege: { select: privilegeSelect },
+} satisfies Prisma.PrivilegeToUserSelect;
+
+const rolePrivilegeLinkSelect = {
+  privilege: { select: privilegeSelect },
+} satisfies Prisma.AppRoleToPrivilegeSelect;
+
 const userAccessSelect = {
   id: true,
   email: true,
   firstName: true,
   lastName: true,
   phoneNumber: true,
-  privileges: { select: privilegeSelect },
+  privilegeLinks: { select: privilegeLinkSelect },
   userRoles: {
     select: userRoleWithAppRoleSelect,
   },
@@ -145,8 +153,8 @@ const userListSelect = {
   userRoles: {
     select: userRoleWithAppRoleSelect,
   },
-  privileges: {
-    select: privilegeSelect,
+  privilegeLinks: {
+    select: privilegeLinkSelect,
   },
 } satisfies Prisma.UserSelect;
 
@@ -157,6 +165,12 @@ function clampInt(n: number, min: number, max: number) {
 type UserWithRoles = Prisma.UserGetPayload<{
   select: typeof userListSelect | typeof getUserByIdSelect;
 }>;
+
+function mapPrivilegesFromLinks(
+  links: { privilege: PrivilegeSummary }[]
+): PrivilegeSummary[] {
+  return links.map((link) => link.privilege);
+}
 
 function mapAppRoleFromUser(user: UserWithRoles): AppRoleSummary | null {
   return user.userRoles[0]?.role ?? null;
@@ -173,13 +187,13 @@ function mapUserDetail(
     phoneNumber: user.phoneNumber,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
-    privileges: user.privileges,
+    privileges: mapPrivilegesFromLinks(user.privilegeLinks),
     appRole: mapAppRoleFromUser(user),
   };
 }
 
 function mapListedUser(user: Prisma.UserGetPayload<{ select: typeof userListSelect }>): ListedUser {
-  const { userRoles: _userRoles, ...rest } = user;
+  const { userRoles: _userRoles, privilegeLinks: _privilegeLinks, ...rest } = user;
   return {
     ...rest,
     appRole: mapAppRoleFromUser(user),
@@ -250,12 +264,12 @@ export class UserService {
       where: { id: userId },
       select: {
         userType: true,
-        privileges: { select: privilegeSelect },
+        privilegeLinks: { select: privilegeLinkSelect },
         userRoles: {
           select: {
             role: {
               select: {
-                privileges: { select: privilegeSelect },
+                privilegeLinks: { select: rolePrivilegeLinkSelect },
               },
             },
           },
@@ -274,8 +288,13 @@ export class UserService {
       });
     }
 
-    const rolePrivileges = user.userRoles.flatMap((ur) => ur.role.privileges);
-    return mergePrivilegesById([user.privileges, rolePrivileges]);
+    const rolePrivileges = user.userRoles.flatMap((ur) =>
+      mapPrivilegesFromLinks(ur.role.privilegeLinks)
+    );
+    return mergePrivilegesById([
+      mapPrivilegesFromLinks(user.privilegeLinks),
+      rolePrivileges,
+    ]);
   }
 
   /**
@@ -429,7 +448,7 @@ export class UserService {
     return {
       id: user.id,
       email: user.email,
-      privileges: user.privileges,
+      privileges: mapPrivilegesFromLinks(user.privilegeLinks),
       appRoles: user.userRoles.map((ur) => ur.role),
     };
   }
@@ -450,7 +469,7 @@ export class UserService {
 
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { privileges: { select: { id: true } } },
+      include: { privilegeLinks: { select: { privilegeId: true } } },
     });
 
     if (!user) {
@@ -466,51 +485,47 @@ export class UserService {
       throw new Error("One or more privilege IDs were not found");
     }
 
-    const existingIds = new Set(user.privileges.map((p) => p.id));
+    const existingIds = new Set(user.privilegeLinks.map((link) => link.privilegeId));
     const toConnect = uniqueIds.filter((id) => !existingIds.has(id));
 
     if (toConnect.length === 0) {
       return (await this.getUserAccessById(userId))!;
     }
 
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        privileges: {
-          connect: toConnect.map((id) => ({ id })),
-        },
-      },
-      select: userAccessSelect,
+    await prisma.privilegeToUser.createMany({
+      data: toConnect.map((privilegeId) => ({ userId, privilegeId })),
+      skipDuplicates: true,
     });
 
-    return this.mapUserAccess(updated);
+    return (await this.getUserAccessById(userId))!;
   }
 
   async removePrivilegeFromUser(userId: string, privilegeId: string): Promise<UserAccessData> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      include: { privileges: { where: { id: privilegeId }, select: { id: true } } },
+      include: {
+        privilegeLinks: {
+          where: { privilegeId },
+          select: { privilegeId: true },
+        },
+      },
     });
 
     if (!user) {
       throw new Error("User not found");
     }
 
-    if (user.privileges.length === 0) {
+    if (user.privilegeLinks.length === 0) {
       throw new Error("Privilege is not assigned to this user");
     }
 
-    const updated = await prisma.user.update({
-      where: { id: userId },
-      data: {
-        privileges: {
-          disconnect: { id: privilegeId },
-        },
+    await prisma.privilegeToUser.delete({
+      where: {
+        privilegeId_userId: { privilegeId, userId },
       },
-      select: userAccessSelect,
     });
 
-    return this.mapUserAccess(updated);
+    return (await this.getUserAccessById(userId))!;
   }
 
   /**
