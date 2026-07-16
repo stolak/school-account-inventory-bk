@@ -9,7 +9,7 @@ const include = {
   },
   route: { select: { id: true, name: true, status: true } },
   driver: { select: { id: true, StaffNumber: true, name: true, email: true } },
-  _count: { select: { studentTransportHistories: true } },
+  _count: { select: { studentTransportationRegisters: true } },
 } satisfies Prisma.VehicleTripInclude;
 
 type Row = Prisma.VehicleTripGetPayload<{ include: typeof include }>;
@@ -294,7 +294,7 @@ export class VehicleTripService {
     // A trip with endTime is finished: Completed if students boarded, otherwise Cancelled
     if (effectiveEnd !== null) {
       nextStatus =
-        existing._count.studentTransportHistories > 0
+        existing._count.studentTransportationRegisters > 0
           ? VehicleTripStatus.Completed
           : VehicleTripStatus.Cancelled;
     }
@@ -335,12 +335,12 @@ export class VehicleTripService {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Vehicle trip not found");
 
-    const historyCount = await this.prisma.studentTransportHistory.count({
+    const registerCount = await this.prisma.studentTransportationRegister.count({
       where: { vehicleTripId: id },
     });
-    if (historyCount > 0) {
+    if (registerCount > 0) {
       throw new Error(
-        `Cannot delete vehicle trip because it has student transport histories (${historyCount})`
+        `Cannot delete vehicle trip because it has student transportation registers (${registerCount})`
       );
     }
 

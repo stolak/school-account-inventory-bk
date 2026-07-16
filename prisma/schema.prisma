@@ -542,7 +542,7 @@ model Student {
   studentAssignments                 StudentAssignment[]
   attendanceRecords                  AttendanceRecord[]
   studentTransports                  StudentTransport[]
-  studentTransportHistories          StudentTransportHistory[]
+  studentTransportationRegisters     StudentTransportationRegister[]
 
   @@index([classId])
   @@index([createdById])
@@ -2038,7 +2038,7 @@ model Bustop {
   updatedAt                 DateTime                  @updatedAt @map("updated_at")
   routeBustops              RouteBustop[]
   studentTransports         StudentTransport[]
-  studentTransportHistories StudentTransportHistory[]
+  studentTransportationRegisters StudentTransportationRegister[]
 
   @@unique([name])
   @@index([name])
@@ -2077,8 +2077,8 @@ model VehicleTrip {
   tripDirection             Direction                 @default(HomeToSchool) @map("trip_direction")
   createdAt                 DateTime                  @default(now()) @map("created_at")
   updatedAt                 DateTime                  @updatedAt @map("updated_at")
-  studentTransportHistories StudentTransportHistory[]
-  status                    VehicleTripStatus         @default(Pending) @map("status")
+  studentTransportationRegisters StudentTransportationRegister[]
+  status                         VehicleTripStatus               @default(Pending) @map("status")
 
   @@index([vehicleId])
   @@index([routeId])
@@ -2132,7 +2132,7 @@ enum Direction {
   SchoolToHome
 }
 
-model StudentTransportHistory {
+model StudentTransportationRegister {
   id              String      @id @default(uuid()) @db.Char(36)
   studentId       String      @map("student_id") @db.Char(36)
   student         Student     @relation(fields: [studentId], references: [id], onDelete: Restrict)
@@ -2140,7 +2140,7 @@ model StudentTransportHistory {
   bustop          Bustop      @relation(fields: [nearestBustopId], references: [id], onDelete: Restrict)
   vehicleTripId   String      @map("vehicle_trip_id") @db.Char(36)
   vehicleTrip     VehicleTrip @relation(fields: [vehicleTripId], references: [id], onDelete: Restrict)
-  startTime       DateTime    @map("start_time")
+  startTime       DateTime?   @map("start_time")
   endTime         DateTime?   @map("end_time")
   direction       Direction   @default(HomeToSchool) @map("direction")
   createdAt       DateTime    @default(now()) @map("created_at")
@@ -2155,5 +2155,5 @@ model StudentTransportHistory {
   @@index([nearestBustopId])
   @@index([vehicleTripId])
   @@index([startTime])
-  @@map("student_transport_histories")
+  @@map("student_transportation_registers")
 }

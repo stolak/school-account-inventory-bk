@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Direction } from "@prisma/client";
-import { studentTransportHistoryService } from "../services/studentTransportHistoryService";
+import { studentTransportationRegisterService } from "../services/studentTransportationRegisterService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
 import { parseIntOrUndefined } from "../utils/request";
 
@@ -17,10 +17,11 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
 
 /**
  * @openapi
- * /api/v1/student-transport-histories:
+ * /api/v1/student-transportation-registers:
  *   post:
- *     summary: Record a student transport history entry
- *     tags: [StudentTransportHistories]
+ *     summary: Record a student transportation register entry
+ *     description: nearestBustopId is taken from the student's latest active transport subscription; direction is taken from the vehicle trip.
+ *     tags: [StudentTransportationRegisters]
  *     security:
  *       - bearerAuth: []
  *     requestBody:
@@ -29,24 +30,21 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *         application/json:
  *           schema:
  *             type: object
- *             required: [studentId, nearestBustopId, vehicleTripId, startTime]
+ *             required: [studentId, vehicleTripId]
  *             properties:
  *               studentId:
- *                 type: string
- *               nearestBustopId:
  *                 type: string
  *               vehicleTripId:
  *                 type: string
  *               startTime:
  *                 type: string
  *                 format: date-time
+ *                 nullable: true
+ *                 description: Optional when the trip is Pending; required once the trip has started
  *               endTime:
  *                 type: string
  *                 format: date-time
  *                 nullable: true
- *               direction:
- *                 type: string
- *                 enum: [HomeToSchool, SchoolToHome]
  *               pickUpLatitude:
  *                 type: number
  *                 nullable: true
@@ -61,10 +59,10 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *                 nullable: true
  *     responses:
  *       201:
- *         description: History created
+ *         description: Register created
  *   get:
- *     summary: List student transport histories
- *     tags: [StudentTransportHistories]
+ *     summary: List student transportation registers
+ *     tags: [StudentTransportationRegisters]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -105,14 +103,14 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *           type: integer
  *     responses:
  *       200:
- *         description: Histories list
+ *         description: Registers list
  */
 /**
  * @openapi
- * /api/v1/student-transport-histories/{id}:
+ * /api/v1/student-transportation-registers/{id}:
  *   get:
- *     summary: Get a student transport history by ID
- *     tags: [StudentTransportHistories]
+ *     summary: Get a student transportation register by ID
+ *     tags: [StudentTransportationRegisters]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -124,12 +122,12 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *           format: uuid
  *     responses:
  *       200:
- *         description: Student transport history
+ *         description: Student transportation register
  *       404:
  *         description: Not found
  *   put:
- *     summary: Update a student transport history
- *     tags: [StudentTransportHistories]
+ *     summary: Update a student transportation register
+ *     tags: [StudentTransportationRegisters]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -167,14 +165,14 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *                 nullable: true
  *     responses:
  *       200:
- *         description: History updated
+ *         description: Register updated
  *       400:
  *         description: Validation error
  *       404:
  *         description: Not found
  *   delete:
- *     summary: Delete a student transport history
- *     tags: [StudentTransportHistories]
+ *     summary: Delete a student transportation register
+ *     tags: [StudentTransportationRegisters]
  *     security:
  *       - bearerAuth: []
  *     parameters:
@@ -186,20 +184,18 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *           format: uuid
  *     responses:
  *       200:
- *         description: History deleted
+ *         description: Register deleted
  *       404:
  *         description: Not found
  */
-export const studentTransportHistoryController = {
+export const studentTransportationRegisterController = {
   create: async (req: Request, res: Response) => {
     try {
       const {
         studentId,
-        nearestBustopId,
         vehicleTripId,
         startTime,
         endTime,
-        direction,
         pickUpLatitude,
         pickUpLongitude,
         dropOffLatitude,
@@ -208,31 +204,15 @@ export const studentTransportHistoryController = {
       if (!studentId || typeof studentId !== "string" || !studentId.trim()) {
         return res.status(400).json({ success: false, message: "studentId is required" });
       }
-      if (!nearestBustopId || typeof nearestBustopId !== "string" || !nearestBustopId.trim()) {
-        return res.status(400).json({ success: false, message: "nearestBustopId is required" });
-      }
       if (!vehicleTripId || typeof vehicleTripId !== "string" || !vehicleTripId.trim()) {
         return res.status(400).json({ success: false, message: "vehicleTripId is required" });
       }
-      if (startTime === undefined || startTime === null) {
-        return res.status(400).json({ success: false, message: "startTime is required" });
-      }
 
-      const parsedDirection = parseDirection(direction);
-      if (parsedDirection === "invalid") {
-        return res.status(400).json({
-          success: false,
-          message: "direction must be one of HomeToSchool, SchoolToHome",
-        });
-      }
-
-      const created = await studentTransportHistoryService.create({
+      const created = await studentTransportationRegisterService.create({
         studentId: studentId.trim(),
-        nearestBustopId: nearestBustopId.trim(),
         vehicleTripId: vehicleTripId.trim(),
-        startTime,
+        ...(startTime !== undefined ? { startTime } : {}),
         ...(endTime !== undefined ? { endTime } : {}),
-        ...(parsedDirection !== undefined ? { direction: parsedDirection } : {}),
         ...(pickUpLatitude !== undefined ? { pickUpLatitude } : {}),
         ...(pickUpLongitude !== undefined ? { pickUpLongitude } : {}),
         ...(dropOffLatitude !== undefined ? { dropOffLatitude } : {}),
@@ -241,11 +221,11 @@ export const studentTransportHistoryController = {
 
       return res.status(201).json({
         success: true,
-        message: "Student transport history created successfully",
+        message: "Student transportation register created successfully",
         data: created,
       });
     } catch (error: unknown) {
-      return handleAssessmentError(res, error, "Failed to create student transport history");
+      return handleAssessmentError(res, error, "Failed to create student transportation register");
     }
   },
 
@@ -259,7 +239,7 @@ export const studentTransportHistoryController = {
         });
       }
 
-      const result = await studentTransportHistoryService.list({
+      const result = await studentTransportationRegisterService.list({
         studentId: queryString(req.query, "studentId"),
         nearestBustopId: queryString(req.query, "nearestBustopId"),
         vehicleTripId: queryString(req.query, "vehicleTripId"),
@@ -272,11 +252,15 @@ export const studentTransportHistoryController = {
 
       return res.json({
         success: true,
-        message: "Student transport histories retrieved successfully",
+        message: "Student transportation registers retrieved successfully",
         data: result,
       });
     } catch (error: unknown) {
-      return handleAssessmentError(res, error, "Failed to retrieve student transport histories");
+      return handleAssessmentError(
+        res,
+        error,
+        "Failed to retrieve student transportation registers"
+      );
     }
   },
 
@@ -285,20 +269,24 @@ export const studentTransportHistoryController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const row = await studentTransportHistoryService.getById(id);
+      const row = await studentTransportationRegisterService.getById(id);
       if (!row) {
         return res
           .status(404)
-          .json({ success: false, message: "Student transport history not found" });
+          .json({ success: false, message: "Student transportation register not found" });
       }
 
       return res.json({
         success: true,
-        message: "Student transport history retrieved successfully",
+        message: "Student transportation register retrieved successfully",
         data: row,
       });
     } catch (error: unknown) {
-      return handleAssessmentError(res, error, "Failed to retrieve student transport history");
+      return handleAssessmentError(
+        res,
+        error,
+        "Failed to retrieve student transportation register"
+      );
     }
   },
 
@@ -338,7 +326,7 @@ export const studentTransportHistoryController = {
         });
       }
 
-      const updated = await studentTransportHistoryService.update(id, {
+      const updated = await studentTransportationRegisterService.update(id, {
         ...(endTime !== undefined ? { endTime } : {}),
         ...(parsedDirection !== undefined ? { direction: parsedDirection } : {}),
         ...(pickUpLatitude !== undefined ? { pickUpLatitude } : {}),
@@ -349,11 +337,11 @@ export const studentTransportHistoryController = {
 
       return res.json({
         success: true,
-        message: "Student transport history updated successfully",
+        message: "Student transportation register updated successfully",
         data: updated,
       });
     } catch (error: unknown) {
-      return handleAssessmentError(res, error, "Failed to update student transport history");
+      return handleAssessmentError(res, error, "Failed to update student transportation register");
     }
   },
 
@@ -362,15 +350,15 @@ export const studentTransportHistoryController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const deleted = await studentTransportHistoryService.delete(id);
+      const deleted = await studentTransportationRegisterService.delete(id);
 
       return res.json({
         success: true,
-        message: "Student transport history deleted successfully",
+        message: "Student transportation register deleted successfully",
         data: deleted,
       });
     } catch (error: unknown) {
-      return handleAssessmentError(res, error, "Failed to delete student transport history");
+      return handleAssessmentError(res, error, "Failed to delete student transportation register");
     }
   },
 };

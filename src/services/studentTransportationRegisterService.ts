@@ -1,6 +1,6 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode, parseDecimalNonNegative } from "../utils/assessmentHttp";
-import { Direction, Prisma } from "@prisma/client";
+import { Direction, Prisma, Status, TransportSubscriptionType, VehicleTripStatus } from "@prisma/client";
 
 const include = {
   student: {
@@ -36,11 +36,11 @@ const include = {
       driver: { select: { id: true, StaffNumber: true, name: true, email: true } },
     },
   },
-} satisfies Prisma.StudentTransportHistoryInclude;
+} satisfies Prisma.StudentTransportationRegisterInclude;
 
-type Row = Prisma.StudentTransportHistoryGetPayload<{ include: typeof include }>;
+type Row = Prisma.StudentTransportationRegisterGetPayload<{ include: typeof include }>;
 
-export interface StudentTransportHistoryData {
+export interface StudentTransportationRegisterData {
   id: string;
   studentId: string;
   student: Row["student"];
@@ -48,7 +48,7 @@ export interface StudentTransportHistoryData {
   bustop: Row["bustop"];
   vehicleTripId: string;
   vehicleTrip: Row["vehicleTrip"];
-  startTime: Date;
+  startTime: Date | null;
   endTime: Date | null;
   direction: Direction;
   pickUpLatitude: string | null;
@@ -59,7 +59,7 @@ export interface StudentTransportHistoryData {
   updatedAt: Date;
 }
 
-function mapRow(row: Row): StudentTransportHistoryData {
+function mapRow(row: Row): StudentTransportationRegisterData {
   return {
     id: row.id,
     studentId: row.studentId,
@@ -98,79 +98,126 @@ function parseOptionalCoordinate(
   return parseDecimalNonNegative(value, fieldName);
 }
 
-export class StudentTransportHistoryService {
+function assertSubscriptionAllowsDirection(
+  subscriptionType: TransportSubscriptionType,
+  tripDirection: Direction
+): void {
+  if (tripDirection === Direction.HomeToSchool) {
+    if (
+      subscriptionType !== TransportSubscriptionType.RoundTrip &&
+      subscriptionType !== TransportSubscriptionType.OneWaySchool
+    ) {
+      throw new Error(
+        "Student cannot be registered for HomeToSchool trip (requires RoundTrip or OneWaySchool subscription)"
+      );
+    }
+    return;
+  }
+
+  if (
+    subscriptionType !== TransportSubscriptionType.RoundTrip &&
+    subscriptionType !== TransportSubscriptionType.OneWayHome
+  ) {
+    throw new Error(
+      "Student cannot be registered for SchoolToHome trip (requires RoundTrip or OneWayHome subscription)"
+    );
+  }
+}
+
+export class StudentTransportationRegisterService {
   private prisma = prisma;
 
-  private async assertRefs(input: {
+  /** Resolves bustop and direction from the student's latest active transport subscription and trip. */
+  private async resolveRegistrationContext(input: {
     studentId: string;
-    nearestBustopId: string;
     vehicleTripId: string;
-  }): Promise<void> {
-    const [student, bustop, vehicleTrip] = await Promise.all([
+  }): Promise<{ nearestBustopId: string; direction: Direction; tripStarted: boolean }> {
+    const [student, vehicleTrip, subscription] = await Promise.all([
       this.prisma.student.findUnique({ where: { id: input.studentId }, select: { id: true } }),
-      this.prisma.bustop.findUnique({ where: { id: input.nearestBustopId }, select: { id: true } }),
       this.prisma.vehicleTrip.findUnique({
         where: { id: input.vehicleTripId },
-        select: { id: true, routeId: true },
+        select: { id: true, routeId: true, tripDirection: true, status: true },
+      }),
+      this.prisma.studentTransport.findFirst({
+        where: { studentId: input.studentId, status: Status.Active },
+        orderBy: { updatedAt: "desc" },
+        select: { bustopId: true, routeId: true, subscriptionType: true },
       }),
     ]);
+
     if (!student) throw new Error("Invalid studentId");
-    if (!bustop) throw new Error("Invalid nearestBustopId");
     if (!vehicleTrip) throw new Error("Invalid vehicleTripId");
+    if (!subscription) throw new Error("Student has no active transport subscription");
+
+    assertSubscriptionAllowsDirection(subscription.subscriptionType, vehicleTrip.tripDirection);
+
+    if (subscription.routeId !== vehicleTrip.routeId) {
+      throw new Error("Student transport route does not match the vehicle trip route");
+    }
 
     const routeBustop = await this.prisma.routeBustop.findUnique({
       where: {
-        routeId_bustopId: { routeId: vehicleTrip.routeId, bustopId: input.nearestBustopId },
+        routeId_bustopId: { routeId: vehicleTrip.routeId, bustopId: subscription.bustopId },
       },
       select: { id: true },
     });
     if (!routeBustop) {
-      throw new Error("nearestBustopId is not assigned to the vehicle trip route");
+      throw new Error("Student bustop is not assigned to the vehicle trip route");
     }
+
+    return {
+      nearestBustopId: subscription.bustopId,
+      direction: vehicleTrip.tripDirection,
+      tripStarted: vehicleTrip.status !== VehicleTripStatus.Pending,
+    };
   }
 
   async create(input: {
     studentId: string;
-    nearestBustopId: string;
     vehicleTripId: string;
-    startTime: Date | string;
+    startTime?: Date | string | null;
     endTime?: Date | string | null;
-    direction?: Direction;
     pickUpLatitude?: string | number | null;
     pickUpLongitude?: string | number | null;
     dropOffLatitude?: string | number | null;
     dropOffLongitude?: string | number | null;
-  }): Promise<StudentTransportHistoryData> {
+  }): Promise<StudentTransportationRegisterData> {
     const studentId = input.studentId.trim();
-    const nearestBustopId = input.nearestBustopId.trim();
     const vehicleTripId = input.vehicleTripId.trim();
 
-    if (!studentId || !nearestBustopId || !vehicleTripId) {
-      throw new Error("studentId, nearestBustopId, and vehicleTripId are required");
-    }
-    if (input.startTime === undefined || input.startTime === null) {
-      throw new Error("startTime is required");
+    if (!studentId || !vehicleTripId) {
+      throw new Error("studentId and vehicleTripId are required");
     }
 
-    await this.assertRefs({ studentId, nearestBustopId, vehicleTripId });
+    const { nearestBustopId, direction, tripStarted } = await this.resolveRegistrationContext({
+      studentId,
+      vehicleTripId,
+    });
 
-    const startTime = parseDateTime(input.startTime, "startTime");
+    if (tripStarted && (input.startTime === undefined || input.startTime === null)) {
+      throw new Error("startTime is required because the vehicle trip has already started");
+    }
+
+    const startTime =
+      input.startTime === undefined || input.startTime === null
+        ? null
+        : parseDateTime(input.startTime, "startTime");
     const endTime =
       input.endTime === undefined || input.endTime === null
         ? null
         : parseDateTime(input.endTime, "endTime");
-    if (endTime && endTime < startTime) {
+    if (startTime && endTime && endTime < startTime) {
       throw new Error("endTime must be greater than or equal to startTime");
     }
 
-    const row = await this.prisma.studentTransportHistory.create({
+    const row = await this.prisma.studentTransportationRegister.create({
       data: {
         studentId,
         nearestBustopId,
         vehicleTripId,
         startTime,
         endTime,
-        ...(input.direction !== undefined ? { direction: input.direction } : {}),
+        direction,
         pickUpLatitude: parseOptionalCoordinate(input.pickUpLatitude, "pickUpLatitude"),
         pickUpLongitude: parseOptionalCoordinate(input.pickUpLongitude, "pickUpLongitude"),
         dropOffLatitude: parseOptionalCoordinate(input.dropOffLatitude, "dropOffLatitude"),
@@ -197,7 +244,7 @@ export class StudentTransportHistoryService {
     const limit = clampInt(params.limit ?? 20, 1, 100);
     const skip = (page - 1) * limit;
 
-    const where: Prisma.StudentTransportHistoryWhereInput = {};
+    const where: Prisma.StudentTransportationRegisterWhereInput = {};
     if (params.studentId?.trim()) where.studentId = params.studentId.trim();
     if (params.nearestBustopId?.trim()) where.nearestBustopId = params.nearestBustopId.trim();
     if (params.vehicleTripId?.trim()) where.vehicleTripId = params.vehicleTripId.trim();
@@ -209,8 +256,8 @@ export class StudentTransportHistoryService {
     if (Object.keys(startTime).length > 0) where.startTime = startTime;
 
     const [total, rows] = await Promise.all([
-      this.prisma.studentTransportHistory.count({ where }),
-      this.prisma.studentTransportHistory.findMany({
+      this.prisma.studentTransportationRegister.count({ where }),
+      this.prisma.studentTransportationRegister.findMany({
         where,
         include,
         orderBy: { startTime: "desc" },
@@ -220,13 +267,16 @@ export class StudentTransportHistoryService {
     ]);
 
     return {
-      studentTransportHistories: rows.map(mapRow),
+      studentTransportationRegisters: rows.map(mapRow),
       pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
     };
   }
 
-  async getById(id: string): Promise<StudentTransportHistoryData | null> {
-    const row = await this.prisma.studentTransportHistory.findUnique({ where: { id }, include });
+  async getById(id: string): Promise<StudentTransportationRegisterData | null> {
+    const row = await this.prisma.studentTransportationRegister.findUnique({
+      where: { id },
+      include,
+    });
     return row ? mapRow(row) : null;
   }
 
@@ -240,9 +290,9 @@ export class StudentTransportHistoryService {
       dropOffLatitude?: string | number | null;
       dropOffLongitude?: string | number | null;
     }
-  ): Promise<StudentTransportHistoryData> {
+  ): Promise<StudentTransportationRegisterData> {
     const existing = await this.getById(id);
-    if (!existing) throw new Error("Student transport history not found");
+    if (!existing) throw new Error("Student transportation register not found");
 
     if (
       input.endTime === undefined &&
@@ -263,12 +313,12 @@ export class StudentTransportHistoryService {
         : input.endTime === null
           ? null
           : parseDateTime(input.endTime, "endTime");
-    if (endTime && endTime < existing.startTime) {
+    if (endTime && existing.startTime && endTime < existing.startTime) {
       throw new Error("endTime must be greater than or equal to startTime");
     }
 
     try {
-      const row = await this.prisma.studentTransportHistory.update({
+      const row = await this.prisma.studentTransportationRegister.update({
         where: { id },
         data: {
           ...(endTime !== undefined ? { endTime } : {}),
@@ -296,26 +346,29 @@ export class StudentTransportHistoryService {
       return mapRow(row);
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") {
-        throw new Error("Student transport history not found");
+        throw new Error("Student transportation register not found");
       }
       throw e;
     }
   }
 
-  async delete(id: string): Promise<StudentTransportHistoryData> {
+  async delete(id: string): Promise<StudentTransportationRegisterData> {
     const existing = await this.getById(id);
-    if (!existing) throw new Error("Student transport history not found");
+    if (!existing) throw new Error("Student transportation register not found");
 
     try {
-      const row = await this.prisma.studentTransportHistory.delete({ where: { id }, include });
+      const row = await this.prisma.studentTransportationRegister.delete({
+        where: { id },
+        include,
+      });
       return mapRow(row);
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") {
-        throw new Error("Student transport history not found");
+        throw new Error("Student transportation register not found");
       }
       throw e;
     }
   }
 }
 
-export const studentTransportHistoryService = new StudentTransportHistoryService();
+export const studentTransportationRegisterService = new StudentTransportationRegisterService();

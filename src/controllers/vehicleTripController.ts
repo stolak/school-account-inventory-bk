@@ -228,7 +228,7 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *       200:
  *         description: Vehicle trip deleted
  *       400:
- *         description: Cannot delete because histories exist
+ *         description: Cannot delete because transportation registers exist
  *       404:
  *         description: Not found
  */

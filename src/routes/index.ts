@@ -89,7 +89,7 @@ import bustopRouter from "./bustop";
 import routeBustopRouter from "./routeBustop";
 import vehicleTripRouter from "./vehicleTrip";
 import studentTransportRouter from "./studentTransport";
-import studentTransportHistoryRouter from "./studentTransportHistory";
+import studentTransportationRegisterRouter from "./studentTransportationRegister";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -184,7 +184,7 @@ router.use("/bustops", bustopRouter);
 router.use("/route-bustops", routeBustopRouter);
 router.use("/vehicle-trips", vehicleTripRouter);
 router.use("/student-transports", studentTransportRouter);
-router.use("/student-transport-histories", studentTransportHistoryRouter);
+router.use("/student-transportation-registers", studentTransportationRegisterRouter);
 
 router.use("/upload", uploadRouter);
 
