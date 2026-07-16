@@ -141,6 +141,31 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  */
 /**
  * @openapi
+ * /api/v1/vehicle-trips/{id}/eligible-students:
+ *   get:
+ *     summary: List students whose nearest bustop is on the trip routes
+ *     description: |
+ *       Returns active student transports whose subscribed nearest bustop is on one of the
+ *       selected trip routes, and whose subscription type allows the trip direction.
+ *       Also indicates whether the student is already registered for this trip.
+ *     tags: [VehicleTrips]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Eligible students for the trip
+ *       404:
+ *         description: Vehicle trip not found
+ */
+/**
+ * @openapi
  * /api/v1/vehicle-trips/{id}:
  *   get:
  *     summary: Get a vehicle trip by ID
@@ -182,6 +207,7 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *                 type: string
  *                 format: date-time
  *                 nullable: true
+ *                 description: Required when changing status to InProgress; may be updated while already InProgress
  *               endTime:
  *                 type: string
  *                 format: date-time
@@ -206,12 +232,12 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *               status:
  *                 type: string
  *                 enum: [Pending, InProgress, Completed, Cancelled]
- *                 description: Overridden to Completed/Cancelled when endTime is present
+ *                 description: Changing to InProgress requires startTime and syncs startTime/pickup coords onto linked student transportation registers
  *     responses:
  *       200:
  *         description: Vehicle trip updated
  *       400:
- *         description: Validation error (e.g. startTime greater than endTime)
+ *         description: Validation error (e.g. startTime required with InProgress)
  *       409:
  *         description: Vehicle already has an active trip (Pending or InProgress)
  *       404:
@@ -369,6 +395,23 @@ export const vehicleTripController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to retrieve vehicle trip");
+    }
+  },
+
+  listEligibleStudents: async (req: Request, res: Response) => {
+    try {
+      const id = requireRouteId(req, res);
+      if (!id) return;
+
+      const result = await vehicleTripService.listEligibleStudents(id);
+
+      return res.json({
+        success: true,
+        message: "Eligible students retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve eligible students");
     }
   },
 

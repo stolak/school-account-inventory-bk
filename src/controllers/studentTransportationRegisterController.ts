@@ -20,7 +20,12 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  * /api/v1/student-transportation-registers:
  *   post:
  *     summary: Record a student transportation register entry
- *     description: nearestBustopId is taken from the student's latest active transport subscription; direction is taken from the vehicle trip.
+ *     description: |
+ *       nearestBustopId comes from the student's latest active transport subscription;
+ *       direction comes from the vehicle trip.
+ *       HomeToSchool requires the trip to be InProgress.
+ *       SchoolToHome allows Pending or InProgress.
+ *       Completed or Cancelled trips cannot accept registrations.
  *     tags: [StudentTransportationRegisters]
  *     security:
  *       - bearerAuth: []
@@ -40,7 +45,7 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *                 type: string
  *                 format: date-time
  *                 nullable: true
- *                 description: Optional when the trip is Pending; required once the trip has started
+ *                 description: Optional for SchoolToHome while Pending; required when the trip is InProgress
  *               endTime:
  *                 type: string
  *                 format: date-time
@@ -60,6 +65,8 @@ function parseDirection(raw: unknown): Direction | undefined | "invalid" {
  *     responses:
  *       201:
  *         description: Register created
+ *       409:
+ *         description: Student is already registered for this vehicle trip
  *   get:
  *     summary: List student transportation registers
  *     tags: [StudentTransportationRegisters]

@@ -2164,6 +2164,7 @@ model StudentTransportationRegister {
   dropOffLatitude  Decimal? @map("drop_off_latitude") @db.Decimal(10, 8)
   dropOffLongitude Decimal? @map("drop_off_longitude") @db.Decimal(11, 8)
 
+  @@unique([studentId, vehicleTripId])
   @@index([studentId])
   @@index([nearestBustopId])
   @@index([vehicleTripId])

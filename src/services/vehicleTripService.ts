@@ -1,6 +1,6 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode, parseDecimalNonNegative } from "../utils/assessmentHttp";
-import { Direction, Prisma, VehicleTripStatus } from "@prisma/client";
+import { Direction, Prisma, Status, TransportSubscriptionType, VehicleTripStatus } from "@prisma/client";
 import { resolveStaffId } from "../utils/staffContext";
 
 const include = {
@@ -331,6 +331,25 @@ export class VehicleTripService {
       }
     }
 
+    const transitioningToInProgress =
+      input.status === VehicleTripStatus.InProgress &&
+      existing.status !== VehicleTripStatus.InProgress;
+
+    if (transitioningToInProgress) {
+      if (input.startTime === undefined || input.startTime === null) {
+        throw new Error("startTime is required when status is changing to InProgress");
+      }
+    }
+
+    // startTime may be updated freely while already InProgress; null is only allowed otherwise
+    if (
+      input.startTime === null &&
+      (existing.status === VehicleTripStatus.InProgress ||
+        input.status === VehicleTripStatus.InProgress)
+    ) {
+      throw new Error("startTime cannot be null while status is InProgress");
+    }
+
     const startTime =
       input.startTime === undefined
         ? undefined
@@ -362,6 +381,15 @@ export class VehicleTripService {
       await this.assertNoActiveTripForVehicle(existing.vehicleId, id);
     }
 
+    const nextLatitude =
+      input.latitude !== undefined
+        ? parseOptionalCoordinate(input.latitude, "latitude")
+        : undefined;
+    const nextLongitude =
+      input.longitude !== undefined
+        ? parseOptionalCoordinate(input.longitude, "longitude")
+        : undefined;
+
     try {
       if (nextRouteIds !== undefined) {
         await this.replaceTripRoutes(id, nextRouteIds);
@@ -372,18 +400,39 @@ export class VehicleTripService {
         data: {
           ...(startTime !== undefined ? { startTime } : {}),
           ...(endTime !== undefined ? { endTime } : {}),
-          ...(input.latitude !== undefined
-            ? { latitude: parseOptionalCoordinate(input.latitude, "latitude") }
-            : {}),
-          ...(input.longitude !== undefined
-            ? { longitude: parseOptionalCoordinate(input.longitude, "longitude") }
-            : {}),
+          ...(nextLatitude !== undefined ? { latitude: nextLatitude } : {}),
+          ...(nextLongitude !== undefined ? { longitude: nextLongitude } : {}),
           ...(input.driverId !== undefined ? { driverId: input.driverId.trim() } : {}),
           ...(input.tripDirection !== undefined ? { tripDirection: input.tripDirection } : {}),
           ...(input.status !== undefined || effectiveEnd !== null ? { status: nextStatus } : {}),
         },
         include,
       });
+
+      if (transitioningToInProgress && effectiveStart) {
+        const pickUpLatitude =
+          nextLatitude !== undefined
+            ? nextLatitude
+            : existing.latitude !== null
+              ? new Prisma.Decimal(existing.latitude)
+              : null;
+        const pickUpLongitude =
+          nextLongitude !== undefined
+            ? nextLongitude
+            : existing.longitude !== null
+              ? new Prisma.Decimal(existing.longitude)
+              : null;
+
+        await this.prisma.studentTransportationRegister.updateMany({
+          where: { vehicleTripId: id },
+          data: {
+            startTime: effectiveStart,
+            ...(pickUpLatitude !== null ? { pickUpLatitude } : {}),
+            ...(pickUpLongitude !== null ? { pickUpLongitude } : {}),
+          },
+        });
+      }
+
       return mapRow(row);
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") {
@@ -391,6 +440,125 @@ export class VehicleTripService {
       }
       throw e;
     }
+  }
+
+  async listEligibleStudents(vehicleTripId: string) {
+    const tripId = vehicleTripId.trim();
+    if (!tripId) throw new Error("vehicleTripId is required");
+
+    const trip = await this.prisma.vehicleTrip.findUnique({
+      where: { id: tripId },
+      select: {
+        id: true,
+        tripDirection: true,
+        status: true,
+        vehicleTripRoutes: { select: { routeId: true } },
+      },
+    });
+    if (!trip) throw new Error("Vehicle trip not found");
+
+    const routeIds = trip.vehicleTripRoutes.map((tripRoute) => tripRoute.routeId);
+    if (routeIds.length === 0) {
+      return {
+        vehicleTripId: trip.id,
+        tripDirection: trip.tripDirection,
+        status: trip.status,
+        students: [],
+      };
+    }
+
+    const routeBustops = await this.prisma.routeBustop.findMany({
+      where: { routeId: { in: routeIds } },
+      select: { routeId: true, bustopId: true },
+    });
+    const bustopIds = [...new Set(routeBustops.map((row) => row.bustopId))];
+    if (bustopIds.length === 0) {
+      return {
+        vehicleTripId: trip.id,
+        tripDirection: trip.tripDirection,
+        status: trip.status,
+        students: [],
+      };
+    }
+
+    const allowedSubscriptionTypes =
+      trip.tripDirection === Direction.HomeToSchool
+        ? [TransportSubscriptionType.RoundTrip, TransportSubscriptionType.OneWaySchool]
+        : [TransportSubscriptionType.RoundTrip, TransportSubscriptionType.OneWayHome];
+
+    const [transports, registrations] = await Promise.all([
+      this.prisma.studentTransport.findMany({
+        where: {
+          status: Status.Active,
+          bustopId: { in: bustopIds },
+          routeId: { in: routeIds },
+          subscriptionType: { in: allowedSubscriptionTypes },
+        },
+        select: {
+          id: true,
+          studentId: true,
+          routeId: true,
+          bustopId: true,
+          subscriptionType: true,
+          status: true,
+          student: {
+            select: {
+              id: true,
+              admissionNumber: true,
+              firstName: true,
+              lastName: true,
+              status: true,
+              classId: true,
+            },
+          },
+          route: { select: { id: true, name: true, status: true } },
+          bustop: {
+            select: { id: true, name: true, latitude: true, longitude: true, status: true },
+          },
+        },
+        orderBy: [{ student: { lastName: "asc" } }, { student: { firstName: "asc" } }],
+      }),
+      this.prisma.studentTransportationRegister.findMany({
+        where: { vehicleTripId: tripId },
+        select: { studentId: true, id: true },
+      }),
+    ]);
+
+    // Keep only students whose bustop is actually on their subscribed route within the trip routes
+    const routeBustopKeys = new Set(
+      routeBustops.map((row) => `${row.routeId}:${row.bustopId}`)
+    );
+    const registeredByStudentId = new Map(
+      registrations.map((row) => [row.studentId, row.id] as const)
+    );
+
+    const students = transports
+      .filter((row) => routeBustopKeys.has(`${row.routeId}:${row.bustopId}`))
+      .map((row) => ({
+        studentId: row.studentId,
+        student: row.student,
+        studentTransportId: row.id,
+        subscriptionType: row.subscriptionType,
+        routeId: row.routeId,
+        route: row.route,
+        nearestBustopId: row.bustopId,
+        nearestBustop: {
+          id: row.bustop.id,
+          name: row.bustop.name,
+          latitude: row.bustop.latitude?.toString() ?? null,
+          longitude: row.bustop.longitude?.toString() ?? null,
+          status: row.bustop.status,
+        },
+        alreadyRegistered: registeredByStudentId.has(row.studentId),
+        registrationId: registeredByStudentId.get(row.studentId) ?? null,
+      }));
+
+    return {
+      vehicleTripId: trip.id,
+      tripDirection: trip.tripDirection,
+      status: trip.status,
+      students,
+    };
   }
 
   async delete(id: string): Promise<VehicleTripData> {
