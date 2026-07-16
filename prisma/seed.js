@@ -972,7 +972,10 @@ async function main() {
       { route: "/parent/assignments", caption: "Parent assignments" },
       // attendance
       { route: "/student-attendance", caption: "Attendance records" },
-      // { route: "/attendance/reports", caption: "Attendance reports" },
+      // transportation
+      { route: "/transportation-settings", caption: "Transportation settings" },
+      { route: "/student-transports", caption: "Student transports" },
+      { route: "/vehicle-trips", caption: "Vehicle trips" },
     ];
 
     for (const item of sidebarMenus) {
@@ -6235,6 +6238,316 @@ async function main() {
       });
     }
     console.log(`   ✓ ${donationTransactions.length} donation transactions (4 reference batches)`);
+
+    // -------------------------------------------------------------------------
+    // Transport: routes, bustops, vehicles, assignments, student transports
+    // -------------------------------------------------------------------------
+    console.log("🚌 Seeding transport data...");
+
+    const TRANSPORT = {
+      routes: {
+        lekki: "f7a8b9c0-d1e2-4345-f012-34567890b001",
+        ikeja: "f7a8b9c0-d1e2-4345-f012-34567890b002",
+      },
+      bustops: {
+        admiralty: "f7a8b9c0-d1e2-4345-f012-34567890c001",
+        jakande: "f7a8b9c0-d1e2-4345-f012-34567890c002",
+        schoolGate: "f7a8b9c0-d1e2-4345-f012-34567890c003",
+        alausa: "f7a8b9c0-d1e2-4345-f012-34567890c004",
+        ikejaMall: "f7a8b9c0-d1e2-4345-f012-34567890c005",
+      },
+      vehicles: {
+        bus001: "f7a8b9c0-d1e2-4345-f012-34567890e001",
+        bus002: "f7a8b9c0-d1e2-4345-f012-34567890e002",
+        car001: "f7a8b9c0-d1e2-4345-f012-34567890e003",
+      },
+      drivers: {
+        primary: "a8b9c0d1-e2f3-4234-a012-345678909003",
+        secondary: "a8b9c0d1-e2f3-4234-a012-345678909004",
+      },
+      students: {
+        chioma: "e6f7a8b9-c0d1-4234-e012-345678907001",
+        ibrahim: "e6f7a8b9-c0d1-4234-e012-345678907002",
+        david: "e6f7a8b9-c0d1-4234-e012-345678907004",
+      },
+    };
+
+    const transportRoutes = [
+      {
+        id: TRANSPORT.routes.lekki,
+        name: "Lekki Corridor",
+        description: "Admiralty Way through Jakande to school gate",
+        status: "Active",
+      },
+      {
+        id: TRANSPORT.routes.ikeja,
+        name: "Ikeja Express",
+        description: "Alausa and Ikeja City Mall to school gate",
+        status: "Active",
+      },
+    ];
+
+    for (const route of transportRoutes) {
+      await prisma.route.upsert({
+        where: { id: route.id },
+        update: {
+          name: route.name,
+          description: route.description,
+          status: route.status,
+        },
+        create: route,
+      });
+    }
+
+    const transportBustops = [
+      {
+        id: TRANSPORT.bustops.admiralty,
+        name: "Admiralty Way",
+        description: "Lekki Phase 1 pickup",
+        latitude: 6.4478,
+        longitude: 3.4721,
+        status: "Active",
+      },
+      {
+        id: TRANSPORT.bustops.jakande,
+        name: "Jakande Roundabout",
+        description: "Lekki-Epe expressway stop",
+        latitude: 6.4582,
+        longitude: 3.5086,
+        status: "Active",
+      },
+      {
+        id: TRANSPORT.bustops.schoolGate,
+        name: "School Gate",
+        description: "Main campus drop-off / pick-up",
+        latitude: 6.5244,
+        longitude: 3.3792,
+        status: "Active",
+      },
+      {
+        id: TRANSPORT.bustops.alausa,
+        name: "Alausa Secretariat",
+        description: "Ikeja local government area stop",
+        latitude: 6.6141,
+        longitude: 3.3569,
+        status: "Active",
+      },
+      {
+        id: TRANSPORT.bustops.ikejaMall,
+        name: "Ikeja City Mall",
+        description: "Mall frontage pickup",
+        latitude: 6.6195,
+        longitude: 3.3498,
+        status: "Active",
+      },
+    ];
+
+    for (const bustop of transportBustops) {
+      await prisma.bustop.upsert({
+        where: { id: bustop.id },
+        update: {
+          name: bustop.name,
+          description: bustop.description,
+          latitude: bustop.latitude,
+          longitude: bustop.longitude,
+          status: bustop.status,
+        },
+        create: bustop,
+      });
+    }
+
+    const transportRouteBustops = [
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890d001",
+        routeId: TRANSPORT.routes.lekki,
+        bustopId: TRANSPORT.bustops.admiralty,
+        stopOrder: 1,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890d002",
+        routeId: TRANSPORT.routes.lekki,
+        bustopId: TRANSPORT.bustops.jakande,
+        stopOrder: 2,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890d003",
+        routeId: TRANSPORT.routes.lekki,
+        bustopId: TRANSPORT.bustops.schoolGate,
+        stopOrder: 3,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890d004",
+        routeId: TRANSPORT.routes.ikeja,
+        bustopId: TRANSPORT.bustops.alausa,
+        stopOrder: 1,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890d005",
+        routeId: TRANSPORT.routes.ikeja,
+        bustopId: TRANSPORT.bustops.ikejaMall,
+        stopOrder: 2,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890d006",
+        routeId: TRANSPORT.routes.ikeja,
+        bustopId: TRANSPORT.bustops.schoolGate,
+        stopOrder: 3,
+      },
+    ];
+
+    for (const row of transportRouteBustops) {
+      await prisma.routeBustop.upsert({
+        where: { id: row.id },
+        update: {
+          routeId: row.routeId,
+          bustopId: row.bustopId,
+          stopOrder: row.stopOrder,
+        },
+        create: row,
+      });
+    }
+
+    const transportVehicles = [
+      {
+        id: TRANSPORT.vehicles.bus001,
+        vehicleNumber: "BUS-001",
+        vehicleType: "Bus",
+        vehicleMake: "Toyota",
+        capacity: 50,
+        driverId: TRANSPORT.drivers.primary,
+        status: "Active",
+        remarks: "Primary Lekki corridor bus",
+        createdById: adminUserId,
+      },
+      {
+        id: TRANSPORT.vehicles.bus002,
+        vehicleNumber: "BUS-002",
+        vehicleType: "Bus",
+        vehicleMake: "Honda",
+        capacity: 40,
+        driverId: TRANSPORT.drivers.secondary,
+        status: "Active",
+        remarks: "Ikeja express spare",
+        createdById: adminUserId,
+      },
+      {
+        id: TRANSPORT.vehicles.car001,
+        vehicleNumber: "CAR-001",
+        vehicleType: "Car",
+        vehicleMake: "Hyundai",
+        capacity: 5,
+        driverId: null,
+        status: "Active",
+        remarks: "Admin / staff shuttle",
+        createdById: adminUserId,
+      },
+    ];
+
+    for (const vehicle of transportVehicles) {
+      await prisma.vehicle.upsert({
+        where: { id: vehicle.id },
+        update: {
+          vehicleNumber: vehicle.vehicleNumber,
+          vehicleType: vehicle.vehicleType,
+          vehicleMake: vehicle.vehicleMake,
+          capacity: vehicle.capacity,
+          driverId: vehicle.driverId,
+          status: vehicle.status,
+          remarks: vehicle.remarks,
+          createdById: vehicle.createdById,
+        },
+        create: vehicle,
+      });
+    }
+
+    const transportVehicleRoutes = [
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890f001",
+        vehicleId: TRANSPORT.vehicles.bus001,
+        routeId: TRANSPORT.routes.lekki,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890f002",
+        vehicleId: TRANSPORT.vehicles.bus001,
+        routeId: TRANSPORT.routes.ikeja,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890f003",
+        vehicleId: TRANSPORT.vehicles.bus002,
+        routeId: TRANSPORT.routes.ikeja,
+      },
+    ];
+
+    for (const row of transportVehicleRoutes) {
+      await prisma.vehicleRoute.upsert({
+        where: { id: row.id },
+        update: {
+          vehicleId: row.vehicleId,
+          routeId: row.routeId,
+        },
+        create: row,
+      });
+    }
+
+    const studentTransports = [
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890a001",
+        studentId: TRANSPORT.students.chioma,
+        routeId: TRANSPORT.routes.lekki,
+        bustopId: TRANSPORT.bustops.admiralty,
+        status: "Active",
+        subscriptionType: "RoundTrip",
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        classId: classIds.jss1,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890a002",
+        studentId: TRANSPORT.students.ibrahim,
+        routeId: TRANSPORT.routes.ikeja,
+        bustopId: TRANSPORT.bustops.alausa,
+        status: "Active",
+        subscriptionType: "OneWaySchool",
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        classId: classIds.jss1,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4345-f012-34567890a003",
+        studentId: TRANSPORT.students.david,
+        routeId: TRANSPORT.routes.lekki,
+        bustopId: TRANSPORT.bustops.jakande,
+        status: "Active",
+        subscriptionType: "OneWayHome",
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        classId: classIds.jss2,
+      },
+    ];
+
+    for (const row of studentTransports) {
+      await prisma.studentTransport.upsert({
+        where: { id: row.id },
+        update: {
+          studentId: row.studentId,
+          routeId: row.routeId,
+          bustopId: row.bustopId,
+          status: row.status,
+          subscriptionType: row.subscriptionType,
+          sessionId: row.sessionId,
+          termId: row.termId,
+          classId: row.classId,
+        },
+        create: row,
+      });
+    }
+
+    console.log(
+      `   ✓ ${transportRoutes.length} routes, ${transportBustops.length} bustops, ${transportRouteBustops.length} route-bustops`
+    );
+    console.log(
+      `   ✓ ${transportVehicles.length} vehicles, ${transportVehicleRoutes.length} vehicle-routes, ${studentTransports.length} student transports`
+    );
 
     // Create merchant users for each merchant
   } catch (error) {

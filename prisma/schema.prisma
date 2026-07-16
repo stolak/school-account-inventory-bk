@@ -135,7 +135,8 @@ model User {
   studentAssignments            StudentAssignment[]
   students                      Student[]
   teacherSubjects               TeacherSubjects[]
-  attendanceRecordsMarked       AttendanceRecord[] @relation("AttendanceMarkedBy")
+  attendanceRecordsMarked       AttendanceRecord[]             @relation("AttendanceMarkedBy")
+  vehicles                      Vehicle[]
 
   @@map("users")
 }
@@ -450,6 +451,7 @@ model SchoolClass {
   assignments                        Assignment[]
   studentAssignments                 StudentAssignment[]
   teacherSubjects                    TeacherSubjects[]
+  studentTransports                  StudentTransport[]
 
   @@index([createdById])
   @@map("school_classes")
@@ -539,6 +541,8 @@ model Student {
   assessmentRemarks                  AssessmentRemarks[]
   studentAssignments                 StudentAssignment[]
   attendanceRecords                  AttendanceRecord[]
+  studentTransports                  StudentTransport[]
+  studentTransportationRegisters     StudentTransportationRegister[]
 
   @@index([classId])
   @@index([createdById])
@@ -565,6 +569,7 @@ model Term {
   studentAssignments                 StudentAssignment[]
   teacherSubjects                    TeacherSubjects[]
   attendanceRecords                  AttendanceRecord[]
+  studentTransports                  StudentTransport[]
 
   @@unique([name])
   @@map("terms")
@@ -588,6 +593,7 @@ model Session {
   studentAssignments                 StudentAssignment[]
   teacherSubjects                    TeacherSubjects[]
   attendanceRecords                  AttendanceRecord[]
+  studentTransports                  StudentTransport[]
 
   @@map("sessions")
 }
@@ -663,6 +669,8 @@ model Staff {
   staffSalaryOverrideComponents StaffSalaryOverrideComponent[]
   payrollProcesses              PayrollProcess[]
   teacherSubjects               TeacherSubjects[]
+  vehicles                      Vehicle[]
+  vehicleTrips                  VehicleTrip[]
 
   @@index([userId])
   @@index([StaffNumber])
@@ -1947,4 +1955,219 @@ model AttendanceRecord {
   @@index([markedById])
   @@index([attendanceDate])
   @@map("attendance_records")
+}
+
+enum VehicleType {
+  Car
+  Bus
+}
+
+enum VehicleMake {
+  Toyota
+  Honda
+  Nissan
+  Suzuki
+  Hyundai
+  Kia
+}
+
+model Vehicle {
+  id            String         @id @default(uuid()) @db.Char(36)
+  vehicleNumber String         @map("vehicle_number") @db.VarChar(20)
+  vehicleType   VehicleType    @default(Bus) @map("vehicle_type")
+  vehicleMake   VehicleMake?   @map("vehicle_make")
+  capacity      Int            @default(50) @map("capacity")
+  driverId      String?        @map("driver_id") @db.Char(36)
+  driver        Staff?         @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+  status        Status         @default(Active) @map("status")
+  remarks       String?        @db.Text
+  createdById   String         @map("created_by") @db.Char(36)
+  user          User?          @relation(fields: [userId], references: [id])
+  userId        String?        @db.Char(36)
+  vehicleRoutes VehicleRoute[]
+  vehicleTrips  VehicleTrip[]
+
+  @@unique([vehicleNumber])
+  @@index([vehicleNumber])
+  @@index([vehicleType])
+  @@map("vehicles")
+}
+
+model VehicleRoute {
+  id        String   @id @default(uuid()) @db.Char(36)
+  vehicleId String   @map("vehicle_id") @db.Char(36)
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  routeId   String   @map("route_id") @db.Char(36)
+  route     Route    @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([vehicleId, routeId])
+  @@index([vehicleId])
+  @@index([routeId])
+  @@map("vehicle_routes")
+}
+
+model Route {
+  id                String             @id @default(uuid()) @db.Char(36)
+  name              String             @map("name") @db.VarChar(50)
+  description       String?            @map("description") @db.Text
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  vehicleRoutes     VehicleRoute[]
+  routeBustops      RouteBustop[]
+  vehicleTripRoutes VehicleTripRoute[]
+  studentTransports StudentTransport[]
+  status            Status             @default(Active) @map("status")
+
+  @@unique([name])
+  @@index([name])
+  @@map("routes")
+}
+
+model Bustop {
+  id                        String                    @id @default(uuid()) @db.Char(36)
+  name                      String                    @map("name") @db.VarChar(100)
+  description               String?                   @map("description") @db.Text
+  latitude                  Decimal?                  @db.Decimal(10, 8)
+  longitude                 Decimal?                  @db.Decimal(11, 8)
+  status                    Status                    @default(Active)
+  createdAt                 DateTime                  @default(now()) @map("created_at")
+  updatedAt                 DateTime                  @updatedAt @map("updated_at")
+  routeBustops              RouteBustop[]
+  studentTransports         StudentTransport[]
+  studentTransportationRegisters StudentTransportationRegister[]
+
+  @@unique([name])
+  @@index([name])
+  @@index([status])
+  @@map("bustops")
+}
+
+model RouteBustop {
+  id        String   @id @default(uuid()) @db.Char(36)
+  routeId   String   @map("route_id") @db.Char(36)
+  route     Route    @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  bustopId  String   @map("bustop_id") @db.Char(36)
+  bustop    Bustop   @relation(fields: [bustopId], references: [id], onDelete: Restrict)
+  stopOrder Int      @default(0) @map("stop_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([routeId, bustopId])
+  @@index([routeId])
+  @@index([bustopId])
+  @@map("route_bustops")
+}
+
+model VehicleTrip {
+  id                             String                          @id @default(uuid()) @db.Char(36)
+  vehicleId                      String                          @map("vehicle_id") @db.Char(36)
+  vehicle                        Vehicle                         @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  driverId                       String                          @map("driver_id") @db.Char(36)
+  driver                         Staff                           @relation(fields: [driverId], references: [id], onDelete: Restrict)
+  startTime                      DateTime?                       @map("start_time")
+  endTime                        DateTime?                       @map("end_time")
+  latitude                       Decimal?                        @db.Decimal(10, 8)
+  longitude                      Decimal?                        @db.Decimal(11, 8)
+  tripDirection                  Direction                       @default(HomeToSchool) @map("trip_direction")
+  createdAt                      DateTime                        @default(now()) @map("created_at")
+  updatedAt                      DateTime                        @updatedAt @map("updated_at")
+  vehicleTripRoutes              VehicleTripRoute[]
+  studentTransportationRegisters StudentTransportationRegister[]
+  status                         VehicleTripStatus               @default(Pending) @map("status")
+
+  @@index([vehicleId])
+  @@index([driverId])
+  @@index([startTime])
+  @@index([status])
+  @@map("vehicle_trips")
+}
+
+model VehicleTripRoute {
+  id            String      @id @default(uuid()) @db.Char(36)
+  vehicleTripId String      @map("vehicle_trip_id") @db.Char(36)
+  vehicleTrip   VehicleTrip @relation(fields: [vehicleTripId], references: [id], onDelete: Cascade)
+  routeId       String      @map("route_id") @db.Char(36)
+  route         Route       @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  @@unique([vehicleTripId, routeId])
+  @@index([vehicleTripId])
+  @@index([routeId])
+  @@map("vehicle_trip_routes")
+}
+
+enum VehicleTripStatus {
+  Pending
+  InProgress
+  Completed
+  Cancelled
+}
+
+enum TransportSubscriptionType {
+  RoundTrip
+  OneWaySchool
+  OneWayHome
+}
+
+model StudentTransport {
+  id               String                    @id @default(uuid()) @db.Char(36)
+  studentId        String                    @map("student_id") @db.Char(36)
+  student          Student                   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  routeId          String                    @map("route_id") @db.Char(36)
+  route            Route                     @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  bustopId         String                    @map("bustop_id") @db.Char(36)
+  bustop           Bustop                    @relation(fields: [bustopId], references: [id], onDelete: Restrict)
+  status           Status                    @default(Active)
+  subscriptionType TransportSubscriptionType @default(RoundTrip) @map("subscription_type")
+  sessionId        String                    @map("session_id") @db.Char(36)
+  session          Session                   @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  termId           String                    @map("term_id") @db.Char(36)
+  term             Term                      @relation(fields: [termId], references: [id], onDelete: Restrict)
+  classId          String                    @map("class_id") @db.Char(36)
+  class            SchoolClass               @relation(fields: [classId], references: [id], onDelete: Restrict)
+  createdAt        DateTime                  @default(now()) @map("created_at")
+  updatedAt        DateTime                  @updatedAt @map("updated_at")
+
+  @@unique([studentId, sessionId, termId])
+  @@index([routeId])
+  @@index([bustopId])
+  @@index([status])
+  @@map("student_transports")
+}
+
+enum Direction {
+  HomeToSchool
+  SchoolToHome
+}
+
+model StudentTransportationRegister {
+  id              String      @id @default(uuid()) @db.Char(36)
+  studentId       String      @map("student_id") @db.Char(36)
+  student         Student     @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  nearestBustopId String      @map("nearest_bustop_id") @db.Char(36)
+  bustop          Bustop      @relation(fields: [nearestBustopId], references: [id], onDelete: Restrict)
+  vehicleTripId   String      @map("vehicle_trip_id") @db.Char(36)
+  vehicleTrip     VehicleTrip @relation(fields: [vehicleTripId], references: [id], onDelete: Restrict)
+  startTime       DateTime?   @map("start_time")
+  endTime         DateTime?   @map("end_time")
+  direction       Direction   @default(HomeToSchool) @map("direction")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  pickUpLatitude   Decimal? @map("pick_up_latitude") @db.Decimal(10, 8)
+  pickUpLongitude  Decimal? @map("pick_up_longitude") @db.Decimal(11, 8)
+  dropOffLatitude  Decimal? @map("drop_off_latitude") @db.Decimal(10, 8)
+  dropOffLongitude Decimal? @map("drop_off_longitude") @db.Decimal(11, 8)
+
+  @@unique([studentId, vehicleTripId])
+  @@index([studentId])
+  @@index([nearestBustopId])
+  @@index([vehicleTripId])
+  @@index([startTime])
+  @@map("student_transportation_registers")
 }

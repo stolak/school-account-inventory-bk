@@ -492,7 +492,6 @@ export class AttendanceRecordService {
         orderBy: [{ student: { lastName: "asc" } }, { student: { firstName: "asc" } }],
       }),
     ]);
-    console.log(rows);
     const schoolOpenedDays = openDateGroups.length;
     const summaryByStudentId = new Map<string, AttendanceStudentSummaryEntry>();
     const studentOrder: string[] = [];

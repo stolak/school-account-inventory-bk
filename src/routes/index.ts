@@ -82,6 +82,14 @@ import assignmentRouter from "./assignment";
 import studentAssignmentRouter from "./studentAssignment";
 import teacherSubjectRouter from "./teacherSubject";
 import attendanceRecordRouter from "./attendanceRecord";
+import routeRouter from "./route";
+import vehicleRouter from "./vehicle";
+import vehicleRouteRouter from "./vehicleRoute";
+import bustopRouter from "./bustop";
+import routeBustopRouter from "./routeBustop";
+import vehicleTripRouter from "./vehicleTrip";
+import studentTransportRouter from "./studentTransport";
+import studentTransportationRegisterRouter from "./studentTransportationRegister";
 import { authenticateJWT } from "../middlewares/auth";
 import { requirePrivilege } from "../middlewares/requirePrivilege";
 
@@ -169,6 +177,14 @@ router.use("/assignments", assignmentRouter);
 router.use("/student-assignments", studentAssignmentRouter);
 router.use("/teacher-subjects", teacherSubjectRouter);
 router.use("/attendance-records", attendanceRecordRouter);
+router.use("/routes", routeRouter);
+router.use("/vehicles", vehicleRouter);
+router.use("/vehicle-routes", vehicleRouteRouter);
+router.use("/bustops", bustopRouter);
+router.use("/route-bustops", routeBustopRouter);
+router.use("/vehicle-trips", vehicleTripRouter);
+router.use("/student-transports", studentTransportRouter);
+router.use("/student-transportation-registers", studentTransportationRegisterRouter);
 
 router.use("/upload", uploadRouter);
 
