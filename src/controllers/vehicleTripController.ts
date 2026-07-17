@@ -3,7 +3,7 @@ import { Direction, VehicleTripStatus } from "@prisma/client";
 import { vehicleTripService } from "../services/vehicleTripService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
 import { getAuthenticatedUserId } from "../middlewares/auth";
-import { parseIntOrUndefined } from "../utils/request";
+import { parseIntOrUndefined, routeParam } from "../utils/request";
 
 function queryString(query: Request["query"], key: string): string | undefined {
   const raw = query[key];
@@ -48,6 +48,10 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *             type: object
  *             required: [vehicleId, routeIds]
  *             properties:
+ *               label:
+ *                 type: string
+ *                 maxLength: 100
+ *                 nullable: true
  *               vehicleId:
  *                 type: string
  *               routeIds:
@@ -93,6 +97,11 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *     security:
  *       - bearerAuth: []
  *     parameters:
+ *       - in: query
+ *         name: label
+ *         description: Partial label match
+ *         schema:
+ *           type: string
  *       - in: query
  *         name: vehicleId
  *         schema:
@@ -141,6 +150,28 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  */
 /**
  * @openapi
+ * /api/v1/vehicle-trips/mine:
+ *   get:
+ *     summary: List trips involving the authenticated staff member
+ *     description: |
+ *       Returns trips where the authenticated staff member is either the driver
+ *       or assigned as support staff. Results are ordered Pending, InProgress,
+ *       Completed, then Cancelled.
+ *     tags: [VehicleTrips]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Staff vehicle trips retrieved successfully
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Authenticated user is not a staff user
+ *       404:
+ *         description: No staff profile is linked to the authenticated user
+ */
+/**
+ * @openapi
  * /api/v1/vehicle-trips/{id}/eligible-students:
  *   get:
  *     summary: List students whose nearest bustop is on the trip routes
@@ -163,6 +194,67 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *         description: Eligible students for the trip
  *       404:
  *         description: Vehicle trip not found
+ */
+/**
+ * @openapi
+ * /api/v1/vehicle-trips/{id}/support-staff:
+ *   post:
+ *     summary: Assign support staff to a vehicle trip
+ *     tags: [VehicleTrips]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [staffId]
+ *             properties:
+ *               staffId:
+ *                 type: string
+ *                 format: uuid
+ *     responses:
+ *       200:
+ *         description: Support staff assigned; returns the updated vehicle trip
+ *       404:
+ *         description: Vehicle trip or staff not found
+ *       409:
+ *         description: Staff is already assigned to the trip
+ */
+/**
+ * @openapi
+ * /api/v1/vehicle-trips/{id}/support-staff/{staffId}:
+ *   delete:
+ *     summary: Remove support staff from a vehicle trip
+ *     tags: [VehicleTrips]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: path
+ *         name: staffId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Support staff removed; returns the updated vehicle trip
+ *       404:
+ *         description: Vehicle trip or support staff assignment not found
  */
 /**
  * @openapi
@@ -203,6 +295,10 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *           schema:
  *             type: object
  *             properties:
+ *               label:
+ *                 type: string
+ *                 maxLength: 100
+ *                 nullable: true
  *               startTime:
  *                 type: string
  *                 format: date-time
@@ -266,6 +362,7 @@ export const vehicleTripController = {
   create: async (req: Request, res: Response) => {
     try {
       const {
+        label,
         vehicleId,
         routeIds,
         driverId,
@@ -316,6 +413,7 @@ export const vehicleTripController = {
         typeof driverId === "string" && driverId.trim() ? driverId.trim() : undefined;
 
       const created = await vehicleTripService.create({
+        ...(label !== undefined ? { label } : {}),
         vehicleId: vehicleId.trim(),
         routeIds,
         ...(providedDriverId ? { driverId: providedDriverId } : {}),
@@ -357,6 +455,7 @@ export const vehicleTripController = {
       }
 
       const result = await vehicleTripService.list({
+        label: queryString(req.query, "label"),
         vehicleId: queryString(req.query, "vehicleId"),
         routeId: queryString(req.query, "routeId"),
         driverId: queryString(req.query, "driverId"),
@@ -375,6 +474,24 @@ export const vehicleTripController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to retrieve vehicle trips");
+    }
+  },
+
+  listMine: async (req: Request, res: Response) => {
+    try {
+      const userId = getAuthenticatedUserId(req);
+      if (!userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const result = await vehicleTripService.listForAuthenticatedStaff(userId);
+      return res.json({
+        success: true,
+        message: "My vehicle trips retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve my vehicle trips");
     }
   },
 
@@ -415,12 +532,55 @@ export const vehicleTripController = {
     }
   },
 
+  addSupportStaff: async (req: Request, res: Response) => {
+    try {
+      const id = requireRouteId(req, res);
+      if (!id) return;
+
+      const { staffId } = req.body ?? {};
+      if (typeof staffId !== "string" || !staffId.trim()) {
+        return res.status(400).json({ success: false, message: "staffId is required" });
+      }
+
+      const updated = await vehicleTripService.addSupportStaff(id, staffId);
+      return res.json({
+        success: true,
+        message: "Support staff assigned successfully",
+        data: updated,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to assign support staff");
+    }
+  },
+
+  removeSupportStaff: async (req: Request, res: Response) => {
+    try {
+      const id = requireRouteId(req, res);
+      if (!id) return;
+
+      const staffId = routeParam(req.params.staffId).trim();
+      if (!staffId) {
+        return res.status(400).json({ success: false, message: "staffId is required" });
+      }
+
+      const updated = await vehicleTripService.removeSupportStaff(id, staffId);
+      return res.json({
+        success: true,
+        message: "Support staff removed successfully",
+        data: updated,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to remove support staff");
+    }
+  },
+
   update: async (req: Request, res: Response) => {
     try {
       const id = requireRouteId(req, res);
       if (!id) return;
 
       const {
+        label,
         startTime,
         endTime,
         latitude,
@@ -432,6 +592,7 @@ export const vehicleTripController = {
         status,
       } = req.body ?? {};
       if (
+        label === undefined &&
         startTime === undefined &&
         endTime === undefined &&
         latitude === undefined &&
@@ -472,6 +633,7 @@ export const vehicleTripController = {
       }
 
       const updated = await vehicleTripService.update(id, {
+        ...(label !== undefined ? { label } : {}),
         ...(startTime !== undefined ? { startTime } : {}),
         ...(endTime !== undefined ? { endTime } : {}),
         ...(latitude !== undefined ? { latitude } : {}),

@@ -23,7 +23,31 @@ const include = {
     orderBy: { createdAt: "asc" as const },
   },
   driver: { select: { id: true, StaffNumber: true, name: true, email: true } },
-  _count: { select: { studentTransportationRegisters: true } },
+  tripSupportStaffs: {
+    select: {
+      id: true,
+      staffId: true,
+      staff: {
+        select: {
+          id: true,
+          StaffNumber: true,
+          name: true,
+          email: true,
+          position: true,
+          status: true,
+        },
+      },
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: { createdAt: "asc" as const },
+  },
+  _count: {
+    select: {
+      studentTransportationRegisters: true,
+      tripSupportStaffs: true,
+    },
+  },
 } satisfies Prisma.VehicleTripInclude;
 
 type Row = Prisma.VehicleTripGetPayload<{ include: typeof include }>;
@@ -36,12 +60,14 @@ export interface VehicleTripRouteData {
 
 export interface VehicleTripData {
   id: string;
+  label: string | null;
   vehicleId: string;
   vehicle: Row["vehicle"];
   routeIds: string[];
   routes: VehicleTripRouteData[];
   driverId: string;
   driver: Row["driver"];
+  supportStaffs: Row["tripSupportStaffs"];
   startTime: Date | null;
   endTime: Date | null;
   latitude: string | null;
@@ -56,6 +82,7 @@ export interface VehicleTripData {
 function mapRow(row: Row): VehicleTripData {
   return {
     id: row.id,
+    label: row.label,
     vehicleId: row.vehicleId,
     vehicle: row.vehicle,
     routeIds: row.vehicleTripRoutes.map((tripRoute) => tripRoute.routeId),
@@ -66,6 +93,7 @@ function mapRow(row: Row): VehicleTripData {
     })),
     driverId: row.driverId,
     driver: row.driver,
+    supportStaffs: row.tripSupportStaffs,
     startTime: row.startTime,
     endTime: row.endTime,
     latitude: row.latitude?.toString() ?? null,
@@ -94,6 +122,19 @@ function parseOptionalCoordinate(
 ): Prisma.Decimal | null {
   if (value === undefined || value === null || value === "") return null;
   return parseDecimalNonNegative(value, fieldName);
+}
+
+function parseOptionalLabel(value: string | null | undefined): string | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  if (typeof value !== "string") {
+    throw new Error("label must be a string or null");
+  }
+
+  const label = value.trim();
+  if (!label) throw new Error("label must be a non-empty string when provided");
+  if (label.length > 100) throw new Error("label must not exceed 100 characters");
+  return label;
 }
 
 function parseRouteIds(routeIds: string[]): string[] {
@@ -180,6 +221,7 @@ export class VehicleTripService {
   }
 
   async create(input: {
+    label?: string | null;
     vehicleId: string;
     routeIds: string[];
     driverId?: string | null;
@@ -223,12 +265,14 @@ export class VehicleTripService {
       input.endTime === undefined || input.endTime === null
         ? null
         : parseDateTime(input.endTime, "endTime");
+    const label = parseOptionalLabel(input.label) ?? null;
     if (startTime && endTime && startTime > endTime) {
       throw new Error("startTime cannot be greater than endTime");
     }
 
     const row = await this.prisma.vehicleTrip.create({
       data: {
+        label,
         vehicleId,
         driverId,
         startTime,
@@ -248,6 +292,7 @@ export class VehicleTripService {
 
   async list(
     params: {
+      label?: string;
       vehicleId?: string;
       routeId?: string;
       driverId?: string;
@@ -264,6 +309,9 @@ export class VehicleTripService {
     const skip = (page - 1) * limit;
 
     const where: Prisma.VehicleTripWhereInput = {};
+    if (params.label?.trim()) {
+      where.label = { contains: params.label.trim() };
+    }
     if (params.vehicleId?.trim()) where.vehicleId = params.vehicleId.trim();
     if (params.routeId?.trim()) {
       where.vehicleTripRoutes = { some: { routeId: params.routeId.trim() } };
@@ -296,14 +344,100 @@ export class VehicleTripService {
     };
   }
 
+  async listForAuthenticatedStaff(
+    userId: string
+  ): Promise<{ staffId: string; vehicleTrips: VehicleTripData[] }> {
+    const staffId = await resolveStaffId(userId);
+    const rows = await this.prisma.vehicleTrip.findMany({
+      where: {
+        OR: [
+          { driverId: staffId },
+          { tripSupportStaffs: { some: { staffId } } },
+        ],
+      },
+      include,
+      orderBy: [{ startTime: "desc" }, { createdAt: "desc" }],
+    });
+
+    const statusOrder: Record<VehicleTripStatus, number> = {
+      [VehicleTripStatus.Pending]: 0,
+      [VehicleTripStatus.InProgress]: 1,
+      [VehicleTripStatus.Completed]: 2,
+      [VehicleTripStatus.Cancelled]: 3,
+    };
+    rows.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
+
+    return { staffId, vehicleTrips: rows.map(mapRow) };
+  }
+
   async getById(id: string): Promise<VehicleTripData | null> {
     const row = await this.prisma.vehicleTrip.findUnique({ where: { id }, include });
     return row ? mapRow(row) : null;
   }
 
+  async addSupportStaff(vehicleTripId: string, staffId: string): Promise<VehicleTripData> {
+    const tripId = vehicleTripId.trim();
+    const normalizedStaffId = staffId.trim();
+    if (!tripId) throw new Error("vehicleTripId is required");
+    if (!normalizedStaffId) throw new Error("staffId is required");
+
+    const [trip, staff] = await Promise.all([
+      this.prisma.vehicleTrip.findUnique({ where: { id: tripId }, select: { id: true } }),
+      this.prisma.staff.findUnique({ where: { id: normalizedStaffId }, select: { id: true } }),
+    ]);
+    if (!trip) throw new Error("Vehicle trip not found");
+    if (!staff) throw new Error("Staff not found");
+
+    try {
+      await this.prisma.tripSupportStaff.create({
+        data: { vehicleTripId: tripId, staffId: normalizedStaffId },
+      });
+    } catch (error) {
+      if (isPrismaKnownErrorWithCode(error) && error.code === "P2002") {
+        throw new Error("Staff is already assigned to this vehicle trip");
+      }
+      throw error;
+    }
+
+    const updated = await this.getById(tripId);
+    if (!updated) throw new Error("Vehicle trip not found");
+    return updated;
+  }
+
+  async removeSupportStaff(vehicleTripId: string, staffId: string): Promise<VehicleTripData> {
+    const tripId = vehicleTripId.trim();
+    const normalizedStaffId = staffId.trim();
+    if (!tripId) throw new Error("vehicleTripId is required");
+    if (!normalizedStaffId) throw new Error("staffId is required");
+
+    const trip = await this.prisma.vehicleTrip.findUnique({
+      where: { id: tripId },
+      select: { id: true },
+    });
+    if (!trip) throw new Error("Vehicle trip not found");
+
+    const assignment = await this.prisma.tripSupportStaff.findUnique({
+      where: {
+        staffId_vehicleTripId: {
+          staffId: normalizedStaffId,
+          vehicleTripId: tripId,
+        },
+      },
+      select: { id: true },
+    });
+    if (!assignment) throw new Error("Support staff assignment not found");
+
+    await this.prisma.tripSupportStaff.delete({ where: { id: assignment.id } });
+
+    const updated = await this.getById(tripId);
+    if (!updated) throw new Error("Vehicle trip not found");
+    return updated;
+  }
+
   async update(
     id: string,
     input: {
+      label?: string | null;
       startTime?: Date | string | null;
       endTime?: Date | string | null;
       latitude?: string | number | null;
@@ -316,6 +450,7 @@ export class VehicleTripService {
   ): Promise<VehicleTripData> {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Vehicle trip not found");
+    const label = parseOptionalLabel(input.label);
 
     if (input.driverId !== undefined) {
       if (!input.driverId.trim()) throw new Error("driverId cannot be empty");
@@ -405,6 +540,7 @@ export class VehicleTripService {
       const row = await this.prisma.vehicleTrip.update({
         where: { id },
         data: {
+          ...(label !== undefined ? { label } : {}),
           ...(startTime !== undefined ? { startTime } : {}),
           ...(endTime !== undefined ? { endTime } : {}),
           ...(nextLatitude !== undefined ? { latitude: nextLatitude } : {}),
@@ -468,6 +604,7 @@ export class VehicleTripService {
       where: { id: tripId },
       select: {
         id: true,
+        label: true,
         tripDirection: true,
         status: true,
         vehicleTripRoutes: { select: { routeId: true } },
@@ -479,6 +616,7 @@ export class VehicleTripService {
     if (routeIds.length === 0) {
       return {
         vehicleTripId: trip.id,
+        label: trip.label,
         tripDirection: trip.tripDirection,
         status: trip.status,
         students: [],
@@ -493,6 +631,7 @@ export class VehicleTripService {
     if (bustopIds.length === 0) {
       return {
         vehicleTripId: trip.id,
+        label: trip.label,
         tripDirection: trip.tripDirection,
         status: trip.status,
         students: [],
@@ -573,6 +712,7 @@ export class VehicleTripService {
 
     return {
       vehicleTripId: trip.id,
+      label: trip.label,
       tripDirection: trip.tripDirection,
       status: trip.status,
       students,
@@ -589,6 +729,11 @@ export class VehicleTripService {
     if (registerCount > 0) {
       throw new Error(
         `Cannot delete vehicle trip because it has student transportation registers (${registerCount})`
+      );
+    }
+    if (existing._count.tripSupportStaffs > 0) {
+      throw new Error(
+        `Cannot delete vehicle trip because it has support staff assignments (${existing._count.tripSupportStaffs})`
       );
     }
 

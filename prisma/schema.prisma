@@ -695,6 +695,7 @@ model Staff {
   teacherSubjects               TeacherSubjects[]
   vehicles                      Vehicle[]
   vehicleTrips                  VehicleTrip[]
+  tripSupportStaffs             TripSupportStaff[]
 
   @@index([userId])
   @@index([StaffNumber])
@@ -2100,6 +2101,7 @@ model RouteBustop {
 
 model VehicleTrip {
   id                             String                          @id @default(uuid()) @db.Char(36)
+  label                          String?                         @map("label") @db.VarChar(100)
   vehicleId                      String                          @map("vehicle_id") @db.Char(36)
   vehicle                        Vehicle                         @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
   driverId                       String                          @map("driver_id") @db.Char(36)
@@ -2114,6 +2116,7 @@ model VehicleTrip {
   vehicleTripRoutes              VehicleTripRoute[]
   studentTransportationRegisters StudentTransportationRegister[]
   status                         VehicleTripStatus               @default(Pending) @map("status")
+  tripSupportStaffs              TripSupportStaff[]
 
   @@index([vehicleId])
   @@index([driverId])
@@ -2213,4 +2216,17 @@ model StudentTransportationRegister {
   @@index([vehicleTripId])
   @@index([startTime])
   @@map("student_transportation_registers")
+}
+
+model TripSupportStaff {
+  id            String      @id @default(uuid()) @db.Char(36)
+  staffId       String      @map("staff_id") @db.Char(36)
+  staff         Staff       @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  vehicleTripId String      @map("vehicle_trip_id") @db.Char(36)
+  vehicleTrip   VehicleTrip @relation(fields: [vehicleTripId], references: [id], onDelete: Restrict)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  @@unique([staffId, vehicleTripId])
+  @@index([vehicleTripId])
 }

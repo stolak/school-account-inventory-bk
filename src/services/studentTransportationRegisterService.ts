@@ -23,6 +23,7 @@ const include = {
   vehicleTrip: {
     select: {
       id: true,
+      label: true,
       vehicleId: true,
       driverId: true,
       startTime: true,
