@@ -2229,4 +2229,5 @@ model TripSupportStaff {
 
   @@unique([staffId, vehicleTripId])
   @@index([vehicleTripId])
+  @@map("trip_support_staffs")
 }
