@@ -4,10 +4,12 @@ import {
   Direction,
   Prisma,
   Status,
+  StudentStatus,
   StudentTransportationRegisterStatus,
   TransportSubscriptionType,
   VehicleTripStatus,
 } from "@prisma/client";
+import { resolveParentGuardianEmail } from "../utils/studentContext";
 
 const include = {
   student: {
@@ -468,6 +470,72 @@ export class StudentTransportationRegisterService {
     return {
       studentTransportationRegisters: rows.map(mapRow),
       pagination: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+    };
+  }
+
+  /**
+   * Registers for children linked to the authenticated parent (guardianEmail).
+   * Ordered by trip status: Pending → InProgress → Completed → Cancelled,
+   * then by createdAt descending within each status.
+   * Date range filters by register createdAt; defaults to 7 days ago → 1 day ahead.
+   */
+  async listForAuthenticatedParent(
+    userId: string,
+    params: { fromDate?: string; toDate?: string } = {}
+  ): Promise<{
+    guardianEmail: string;
+    studentIds: string[];
+    studentTransportationRegisters: StudentTransportationRegisterData[];
+  }> {
+    const guardianEmail = await resolveParentGuardianEmail(userId);
+
+    const children = await this.prisma.student.findMany({
+      where: { guardianEmail, status: StudentStatus.Active },
+      select: { id: true },
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+    });
+    const studentIds = children.map((child) => child.id);
+    if (studentIds.length === 0) {
+      return { guardianEmail, studentIds, studentTransportationRegisters: [] };
+    }
+
+    const now = new Date();
+    const fromDate = params.fromDate?.trim()
+      ? parseDateTime(params.fromDate.trim(), "fromDate")
+      : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const toDate = params.toDate?.trim()
+      ? parseDateTime(params.toDate.trim(), "toDate")
+      : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    if (fromDate > toDate) {
+      throw new Error("fromDate cannot be greater than toDate");
+    }
+
+    const rows = await this.prisma.studentTransportationRegister.findMany({
+      where: {
+        studentId: { in: studentIds },
+        createdAt: { gte: fromDate, lte: toDate },
+      },
+      include,
+      orderBy: [{ createdAt: "desc" }],
+    });
+
+    const tripStatusOrder: Record<VehicleTripStatus, number> = {
+      [VehicleTripStatus.Pending]: 0,
+      [VehicleTripStatus.InProgress]: 1,
+      [VehicleTripStatus.Completed]: 2,
+      [VehicleTripStatus.Cancelled]: 3,
+    };
+    rows.sort((a, b) => {
+      const statusDiff =
+        tripStatusOrder[a.vehicleTrip.status] - tripStatusOrder[b.vehicleTrip.status];
+      if (statusDiff !== 0) return statusDiff;
+      return b.createdAt.getTime() - a.createdAt.getTime();
+    });
+
+    return {
+      guardianEmail,
+      studentIds,
+      studentTransportationRegisters: rows.map(mapRow),
     };
   }
 

@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { Direction, StudentTransportationRegisterStatus } from "@prisma/client";
 import { studentTransportationRegisterService } from "../services/studentTransportationRegisterService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
+import { getAuthenticatedUserId } from "../middlewares/auth";
 import { parseIntOrUndefined } from "../utils/request";
 
 function queryString(query: Request["query"], key: string): string | undefined {
@@ -190,6 +191,41 @@ function parseRegisterStatus(
  *     responses:
  *       200:
  *         description: Registers list
+ */
+/**
+ * @openapi
+ * /api/v1/student-transportation-registers/mine:
+ *   get:
+ *     summary: List registered trips for the authenticated parent's children
+ *     description: |
+ *       Uses the parent user's email to find students whose guardianEmail matches.
+ *       Results are ordered by vehicle trip status: Pending, InProgress, Completed,
+ *       then Cancelled; within each status by createdAt descending.
+ *       The date range filters by register createdAt and defaults to seven days ago
+ *       through one day ahead.
+ *     tags: [StudentTransportationRegisters]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: fromDate
+ *         description: Inclusive createdAt lower bound; defaults to seven days ago
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: toDate
+ *         description: Inclusive createdAt upper bound; defaults to one day ahead
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *     responses:
+ *       200:
+ *         description: Children's transportation registers
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Authenticated user is not a parent
  */
 /**
  * @openapi
@@ -402,6 +438,35 @@ export const studentTransportationRegisterController = {
         res,
         error,
         "Failed to retrieve student transportation registers"
+      );
+    }
+  },
+
+  listMine: async (req: Request, res: Response) => {
+    try {
+      const userId = getAuthenticatedUserId(req);
+      if (!userId) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const result = await studentTransportationRegisterService.listForAuthenticatedParent(
+        userId,
+        {
+          fromDate: queryString(req.query, "fromDate"),
+          toDate: queryString(req.query, "toDate"),
+        }
+      );
+
+      return res.json({
+        success: true,
+        message: "Children transportation registers retrieved successfully",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(
+        res,
+        error,
+        "Failed to retrieve children transportation registers"
       );
     }
   },
