@@ -345,11 +345,24 @@ export class VehicleTripService {
   }
 
   async listForAuthenticatedStaff(
-    userId: string
+    userId: string,
+    params: { fromDate?: string; toDate?: string } = {}
   ): Promise<{ staffId: string; vehicleTrips: VehicleTripData[] }> {
     const staffId = await resolveStaffId(userId);
+    const now = new Date();
+    const fromDate = params.fromDate?.trim()
+      ? parseDateTime(params.fromDate.trim(), "fromDate")
+      : new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const toDate = params.toDate?.trim()
+      ? parseDateTime(params.toDate.trim(), "toDate")
+      : new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    if (fromDate > toDate) {
+      throw new Error("fromDate cannot be greater than toDate");
+    }
+
     const rows = await this.prisma.vehicleTrip.findMany({
       where: {
+        createdAt: { gte: fromDate, lte: toDate },
         OR: [
           { driverId: staffId },
           { tripSupportStaffs: { some: { staffId } } },

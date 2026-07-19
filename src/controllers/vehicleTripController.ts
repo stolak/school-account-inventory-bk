@@ -156,10 +156,24 @@ function parseTripDirection(raw: unknown): Direction | undefined | "invalid" {
  *     description: |
  *       Returns trips where the authenticated staff member is either the driver
  *       or assigned as support staff. Results are ordered Pending, InProgress,
- *       Completed, then Cancelled.
+ *       Completed, then Cancelled. The range filters by createdAt and defaults
+ *       to seven days ago through one day ahead.
  *     tags: [VehicleTrips]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: fromDate
+ *         description: Inclusive createdAt lower bound; defaults to seven days ago
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: toDate
+ *         description: Inclusive createdAt upper bound; defaults to one day ahead
+ *         schema:
+ *           type: string
+ *           format: date-time
  *     responses:
  *       200:
  *         description: Staff vehicle trips retrieved successfully
@@ -484,7 +498,10 @@ export const vehicleTripController = {
         return res.status(401).json({ success: false, message: "Unauthorized" });
       }
 
-      const result = await vehicleTripService.listForAuthenticatedStaff(userId);
+      const result = await vehicleTripService.listForAuthenticatedStaff(userId, {
+        fromDate: queryString(req.query, "fromDate"),
+        toDate: queryString(req.query, "toDate"),
+      });
       return res.json({
         success: true,
         message: "My vehicle trips retrieved successfully",
