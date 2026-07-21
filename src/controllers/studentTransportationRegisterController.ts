@@ -194,7 +194,7 @@ function parseRegisterStatus(
  */
 /**
  * @openapi
- * /api/v1/student-transportation-registers/mine:
+ * /api/v1/student-transportation-registers/mine/parent:
  *   get:
  *     summary: List registered trips for the authenticated parent's children
  *     description: |
@@ -449,13 +449,10 @@ export const studentTransportationRegisterController = {
         return res.status(401).json({ success: false, message: "Unauthorized" });
       }
 
-      const result = await studentTransportationRegisterService.listForAuthenticatedParent(
-        userId,
-        {
-          fromDate: queryString(req.query, "fromDate"),
-          toDate: queryString(req.query, "toDate"),
-        }
-      );
+      const result = await studentTransportationRegisterService.listForAuthenticatedParent(userId, {
+        fromDate: queryString(req.query, "fromDate"),
+        toDate: queryString(req.query, "toDate"),
+      });
 
       return res.json({
         success: true,
