@@ -214,6 +214,77 @@ function getAuthenticatedUserId(req: Request): string | undefined {
  */
 /**
  * @openapi
+ * /api/v1/student-billings/students/{studentId}/periods:
+ *   get:
+ *     summary: List billing/discount periods for a student
+ *     description: |
+ *       Returns distinct session/term/class/subclass combinations where the student
+ *       has at least one billing or concession discount record.
+ *     tags: [StudentBillings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Student billing/discount periods
+ *       400:
+ *         description: studentId is required
+ *       404:
+ *         description: Student not found
+ *       500:
+ *         description: Server error
+ */
+/**
+ * @openapi
+ * /api/v1/student-billings/combined:
+ *   get:
+ *     summary: List student billings and concession discounts together
+ *     description: |
+ *       Returns all matching billing and concession discount rows for a student
+ *       without pagination. Optional filters: sessionId, termId, status.
+ *     tags: [StudentBillings]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: sessionId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: termId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [DRAFT, APPROVED]
+ *     responses:
+ *       200:
+ *         description: Combined billing and concession discount rows
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Student not found
+ *       500:
+ *         description: Server error
+ */
+/**
+ * @openapi
  * /api/v1/student-billings/notify/parent:
  *   post:
  *     summary: Send student period bill notification to parent email
@@ -616,6 +687,67 @@ export const studentBillingController = {
     }
   },
 
+  listCombined: async (req: Request, res: Response) => {
+    try {
+      const studentId =
+        typeof req.query.studentId === "string" ? req.query.studentId.trim() : "";
+      const sessionId =
+        typeof req.query.sessionId === "string"
+          ? req.query.sessionId.trim()
+          : typeof req.query.session === "string"
+            ? req.query.session.trim()
+            : undefined;
+      const termId =
+        typeof req.query.termId === "string"
+          ? req.query.termId.trim()
+          : typeof req.query.term === "string"
+            ? req.query.term.trim()
+            : undefined;
+
+      if (!studentId) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+
+      const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
+      const status =
+        statusRaw !== undefined &&
+        Object.values(StudentBillingStatus).includes(statusRaw as StudentBillingStatus)
+          ? (statusRaw as StudentBillingStatus)
+          : undefined;
+      if (statusRaw !== undefined && status === undefined) {
+        return res.status(400).json({ success: false, message: "status is invalid" });
+      }
+
+      const data = await studentBillingService.listCombinedWithConcessionDiscounts({
+        studentId,
+        ...(sessionId ? { sessionId } : {}),
+        ...(termId ? { termId } : {}),
+        ...(status !== undefined ? { status } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Student billings and concession discounts retrieved successfully",
+        data,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to retrieve student billings and concession discounts";
+      const code = message.includes("not found")
+        ? 404
+        : message.includes("required")
+          ? 400
+          : 500;
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
+      });
+    }
+  },
+
   reportSummary: async (req: Request, res: Response) => {
     try {
       const session = typeof req.query.session === "string" ? req.query.session : undefined;
@@ -650,6 +782,36 @@ export const studentBillingController = {
         success: false,
         message: "Failed to retrieve student billing/discount report",
         error: error?.message,
+      });
+    }
+  },
+
+  listStudentPeriods: async (req: Request, res: Response) => {
+    try {
+      const studentId =
+        typeof req.params.studentId === "string" ? req.params.studentId.trim() : "";
+      if (!studentId) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+
+      const periods = await studentBillingService.listStudentBillingDiscountPeriods(studentId);
+      return res.json({
+        success: true,
+        message: "Student billing/discount periods retrieved successfully",
+        data: periods,
+      });
+    } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Failed to retrieve student billing/discount periods";
+      const code = message.includes("not found")
+        ? 404
+        : message.includes("required")
+          ? 400
+          : 500;
+      return res.status(code).json({
+        success: false,
+        message,
+        ...(code === 500 && error instanceof Error ? { error: error.message } : {}),
       });
     }
   },

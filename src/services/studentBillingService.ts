@@ -21,6 +21,41 @@ export interface ListStudentBillingsParams {
   limit?: number;
 }
 
+export interface ListCombinedStudentBillingDiscountParams {
+  studentId: string;
+  sessionId?: string;
+  termId?: string;
+  status?: StudentBillingStatus;
+}
+
+const billingListInclude = {
+  billing: {
+    select: {
+      id: true,
+      name: true,
+      code: true,
+    },
+  },
+} satisfies Prisma.StudentBillingInclude;
+
+const concessionListInclude = {
+  concessionDiscount: {
+    select: {
+      id: true,
+      name: true,
+      code: true,
+    },
+  },
+} satisfies Prisma.StudentConcessionDiscountInclude;
+
+export type StudentBillingListRow = Prisma.StudentBillingGetPayload<{
+  include: typeof billingListInclude;
+}>;
+
+export type StudentConcessionDiscountListRow = Prisma.StudentConcessionDiscountGetPayload<{
+  include: typeof concessionListInclude;
+}>;
+
 export interface StudentBillingDiscountReportParams {
   session?: string;
   term?: string;
@@ -63,6 +98,17 @@ export interface StudentWithoutBillingReportRow {
   subclassInfo: { id: string; name: string } | null;
   session: string | null;
   term: string | null;
+}
+
+export interface StudentBillingDiscountPeriod {
+  sessionId: string;
+  session: string | null;
+  termId: string;
+  term: string | null;
+  classId: string | null;
+  class: string | null;
+  subclassId: string | null;
+  subclass: string | null;
 }
 
 type CreateStudentBillingInput = {
@@ -300,15 +346,7 @@ export class StudentBillingService {
       this.prisma.studentBilling.findMany({
         where: finalWhere,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        include: {
-          billing: {
-            select: {
-              id: true,
-              name: true,
-              code: true,
-            },
-          },
-        },
+        include: billingListInclude,
         skip,
         take: limit,
       }),
@@ -323,6 +361,55 @@ export class StudentBillingService {
         totalPages: Math.max(1, Math.ceil(total / limit)),
       },
     };
+  }
+
+  async listCombinedWithConcessionDiscounts(
+    params: ListCombinedStudentBillingDiscountParams
+  ): Promise<{
+    studentBillings: StudentBillingListRow[];
+    studentConcessionDiscounts: StudentConcessionDiscountListRow[];
+  }> {
+    const studentId = this.normalizeRequiredString(params.studentId, "studentId");
+    const sessionId = params.sessionId?.trim() || undefined;
+    const termId = params.termId?.trim() || undefined;
+
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      select: { id: true },
+    });
+    if (!student) {
+      throw new Error("Student not found");
+    }
+
+    const billingWhere: Prisma.StudentBillingWhereInput = { studentId };
+    const discountWhere: Prisma.StudentConcessionDiscountWhereInput = { studentId };
+    if (sessionId) {
+      billingWhere.session = sessionId;
+      discountWhere.session = sessionId;
+    }
+    if (termId) {
+      billingWhere.term = termId;
+      discountWhere.term = termId;
+    }
+    if (params.status !== undefined) {
+      billingWhere.status = params.status;
+      discountWhere.status = params.status;
+    }
+
+    const [studentBillings, studentConcessionDiscounts] = await Promise.all([
+      this.prisma.studentBilling.findMany({
+        where: billingWhere,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        include: billingListInclude,
+      }),
+      this.prisma.studentConcessionDiscount.findMany({
+        where: discountWhere,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        include: concessionListInclude,
+      }),
+    ]);
+
+    return { studentBillings, studentConcessionDiscounts };
   }
 
   async getById(id: number): Promise<StudentBillingRow | null> {
@@ -470,6 +557,71 @@ export class StudentBillingService {
       draftDiscountTotal: this.toNumber(r.draft_discount_total),
     }));
   }
+
+  async listStudentBillingDiscountPeriods(
+    studentId: string
+  ): Promise<StudentBillingDiscountPeriod[]> {
+    const normalizedStudentId = this.normalizeRequiredString(studentId, "studentId");
+
+    const student = await this.prisma.student.findUnique({
+      where: { id: normalizedStudentId },
+      select: { id: true },
+    });
+    if (!student) {
+      throw new Error("Student not found");
+    }
+
+    const rows = await this.prisma.$queryRaw<
+      Array<{
+        session_id: string;
+        session_name: string | null;
+        term_id: string;
+        term_name: string | null;
+        class_id: string | null;
+        class_name: string | null;
+        subclass_id: string | null;
+        subclass_name: string | null;
+      }>
+    >(Prisma.sql`
+      SELECT DISTINCT
+        k.session AS session_id,
+        se.name AS session_name,
+        k.term AS term_id,
+        te.name AS term_name,
+        k.class_id,
+        sc.name AS class_name,
+        k.subclass_id,
+        sbc.name AS subclass_name
+      FROM (
+        SELECT sb.session, sb.term, sb.class_id, sb.subclass_id
+        FROM student_billings sb
+        WHERE sb.student_id = ${normalizedStudentId}
+
+        UNION
+
+        SELECT sd.session, sd.term, sd.class_id, sd.subclass_id
+        FROM student_concession_discounts sd
+        WHERE sd.student_id = ${normalizedStudentId}
+      ) k
+      LEFT JOIN sessions se ON se.id = k.session
+      LEFT JOIN terms te ON te.id = k.term
+      LEFT JOIN school_classes sc ON sc.id = k.class_id
+      LEFT JOIN sub_classes sbc ON sbc.id = k.subclass_id
+      ORDER BY k.session DESC, k.term DESC, k.class_id ASC, k.subclass_id ASC
+    `);
+
+    return rows.map((row) => ({
+      sessionId: row.session_id,
+      session: row.session_name,
+      termId: row.term_id,
+      term: row.term_name,
+      classId: row.class_id,
+      class: row.class_name,
+      subclassId: row.subclass_id,
+      subclass: row.subclass_name,
+    }));
+  }
+
   // TODO: Implement this function and fix the type errors
   async studentsWithoutBillingReport(
     params: StudentBillingDiscountReportParams = {}
