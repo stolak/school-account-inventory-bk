@@ -17,6 +17,7 @@ export interface StudentData {
   guardianEmail: string | null;
   guardianContact: string | null;
   address: string | null;
+  imageUrl: string | null;
   status: StudentStatus;
   userId: string | null;
   createdById: string;
@@ -199,6 +200,7 @@ export class StudentService {
     guardianEmail?: string | null;
     guardianContact?: string | null;
     address?: string | null;
+    imageUrl?: string | null;
     status?: StudentStatus;
     createdById: string;
   }): Promise<StudentData> {
@@ -260,6 +262,7 @@ export class StudentService {
             guardianEmail,
             guardianContact: input.guardianContact ?? null,
             address: input.address ?? null,
+            imageUrl: input.imageUrl ?? null,
             createdById: input.createdById,
             userId,
             ...(input.status !== undefined ? { status: input.status } : {}),
@@ -414,6 +417,7 @@ export class StudentService {
       guardianEmail?: string | null;
       guardianContact?: string | null;
       address?: string | null;
+      imageUrl?: string | null;
       status?: StudentStatus;
     }
   ): Promise<StudentData> {
@@ -441,6 +445,7 @@ export class StudentService {
             ? { guardianContact: input.guardianContact }
             : {}),
           ...(input.address !== undefined ? { address: input.address } : {}),
+          ...(input.imageUrl !== undefined ? { imageUrl: input.imageUrl } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
           updatedAt: new Date(),
         },

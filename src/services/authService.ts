@@ -41,6 +41,7 @@ export interface AuthResponse {
           name: string;
           email: string;
           phoneNumber: string;
+          imageUrl: string | null;
           classid: string;
           subclassId: string;
           class: {
@@ -213,6 +214,7 @@ export class AuthService {
         phoneNumber: contact.phoneNumber ?? "",
         students: students.map((student) => ({
           ...mapStudent(student),
+          imageUrl: student.imageUrl ?? null,
           subclassId: student.subClassId ?? "",
         })),
       },

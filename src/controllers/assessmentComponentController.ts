@@ -35,6 +35,10 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *                 type: string
  *               name:
  *                 type: string
+ *               shortName:
+ *                 type: string
+ *                 nullable: true
+ *                 description: Optional; defaults to name when omitted
  *               maxScore:
  *                 type: number
  *               weight:
@@ -89,13 +93,21 @@ function queryString(query: Request["query"], key: string): string | undefined {
 export const assessmentComponentController = {
   create: async (req: Request, res: Response) => {
     try {
-      const { templateId, name, maxScore, weight, orderNo, status, isLocked } = req.body ?? {};
+      const { templateId, name, shortName, maxScore, weight, orderNo, status, isLocked } =
+        req.body ?? {};
 
       if (!templateId || typeof templateId !== "string" || !templateId.trim()) {
         return res.status(400).json({ success: false, message: "templateId is required" });
       }
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ success: false, message: "name is required" });
+      }
+      if (
+        shortName !== undefined &&
+        shortName !== null &&
+        typeof shortName !== "string"
+      ) {
+        return res.status(400).json({ success: false, message: "shortName must be a string or null" });
       }
 
       const parsedMaxScore = parseBodyDecimal(maxScore, "maxScore");
@@ -138,6 +150,9 @@ export const assessmentComponentController = {
       const created = await assessmentComponentService.create({
         templateId: templateId.trim(),
         name: name.trim(),
+        ...(shortName !== undefined
+          ? { shortName: shortName === null ? null : String(shortName).trim() || null }
+          : {}),
         maxScore: parsedMaxScore,
         weight: parsedWeight,
         orderNo: parsedOrderNo,
@@ -231,36 +246,39 @@ export const assessmentComponentController = {
    *         application/json:
    *           schema:
    *             type: object
-   *             properties:
-   *               templateId:
-   *                 type: string
-   *               name:
-   *                 type: string
-   *               maxScore:
-   *                 type: number
-   *               weight:
-   *                 type: number
-   *               orderNo:
-   *                 type: integer
-   *               status:
-   *                 type: string
-   *                 enum: [Active, Inactive, Archived]
-   *               isLocked:
-   *                 type: boolean
-   *     responses:
-   *       200:
-   *         description: Assessment component updated
-   *       400:
-   *         description: Validation error
-   *       404:
-   *         description: Not found
-   *       409:
-   *         description: Conflict
-   *       500:
-   *         description: Server error
-   *   delete:
-   *     summary: Delete an assessment component
-   *     tags: [AssessmentComponents]
+ *             properties:
+ *               templateId:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *               shortName:
+ *                 type: string
+ *                 nullable: true
+ *               maxScore:
+ *                 type: number
+ *               weight:
+ *                 type: number
+ *               orderNo:
+ *                 type: integer
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive, Archived]
+ *               isLocked:
+ *                 type: boolean
+ *     responses:
+ *       200:
+ *         description: Assessment component updated
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Not found
+ *       409:
+ *         description: Conflict
+ *       500:
+ *         description: Server error
+ *   delete:
+ *     summary: Delete an assessment component
+ *     tags: [AssessmentComponents]
    *     security:
    *       - bearerAuth: []
    *     parameters:
@@ -305,8 +323,9 @@ export const assessmentComponentController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { templateId, name, maxScore, weight, orderNo, status, isLocked } = req.body ?? {};
-      const fields = { templateId, name, maxScore, weight, orderNo, status, isLocked };
+      const { templateId, name, shortName, maxScore, weight, orderNo, status, isLocked } =
+        req.body ?? {};
+      const fields = { templateId, name, shortName, maxScore, weight, orderNo, status, isLocked };
       if (!Object.values(fields).some((v) => v !== undefined)) {
         return res.status(400).json({ success: false, message: "At least one field must be provided" });
       }
@@ -316,6 +335,13 @@ export const assessmentComponentController = {
       }
       if (name !== undefined && (typeof name !== "string" || !name.trim())) {
         return res.status(400).json({ success: false, message: "name must be a non-empty string" });
+      }
+      if (
+        shortName !== undefined &&
+        shortName !== null &&
+        typeof shortName !== "string"
+      ) {
+        return res.status(400).json({ success: false, message: "shortName must be a string or null" });
       }
 
       let parsedMaxScore: string | number | undefined;
@@ -361,6 +387,9 @@ export const assessmentComponentController = {
       const updated = await assessmentComponentService.update(id, {
         ...(templateId !== undefined ? { templateId: templateId.trim() } : {}),
         ...(name !== undefined ? { name: name.trim() } : {}),
+        ...(shortName !== undefined
+          ? { shortName: shortName === null ? null : String(shortName).trim() || null }
+          : {}),
         ...(parsedMaxScore !== undefined ? { maxScore: parsedMaxScore } : {}),
         ...(parsedWeight !== undefined ? { weight: parsedWeight } : {}),
         ...(parsedOrderNo !== undefined ? { orderNo: parsedOrderNo } : {}),

@@ -85,6 +85,9 @@ function parseGender(v: unknown): Gender | undefined {
  *               address:
  *                 type: string
  *                 nullable: true
+ *               imageUrl:
+ *                 type: string
+ *                 nullable: true
  *               status:
  *                 type: string
  *                 enum: [Active, Inactive, Graduated, Transferred, Suspended, Archived]
@@ -167,6 +170,7 @@ export const studentController = {
         guardianEmail,
         guardianContact,
         address,
+        imageUrl,
         status,
       } = body;
 
@@ -292,6 +296,16 @@ export const studentController = {
                   ? null
                   : typeof address === "string"
                     ? address.trim() || null
+                    : null,
+            }
+          : {}),
+        ...(imageUrl !== undefined
+          ? {
+              imageUrl:
+                imageUrl === null || imageUrl === ""
+                  ? null
+                  : typeof imageUrl === "string"
+                    ? imageUrl.trim() || null
                     : null,
             }
           : {}),
@@ -653,28 +667,31 @@ export const studentController = {
    *               guardianContact:
    *                 type: string
    *                 nullable: true
-   *               address:
-   *                 type: string
-   *                 nullable: true
-   *               status:
-   *                 type: string
-   *                 enum: [Active, Inactive, Graduated, Transferred, Suspended, Archived]
-   *     responses:
-   *       200:
-   *         description: Student updated
-   *       400:
-   *         description: Validation error
-   *       401:
-   *         description: Unauthorized
-   *       404:
-   *         description: Student or class not found
-   *       409:
-   *         description: Duplicate admission number
-   *       500:
-   *         description: Server error
-   *   delete:
-   *     summary: Delete a student
-   *     tags: [Students]
+ *               address:
+ *                 type: string
+ *                 nullable: true
+ *               imageUrl:
+ *                 type: string
+ *                 nullable: true
+ *               status:
+ *                 type: string
+ *                 enum: [Active, Inactive, Graduated, Transferred, Suspended, Archived]
+ *     responses:
+ *       200:
+ *         description: Student updated
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Student or class not found
+ *       409:
+ *         description: Duplicate admission number
+ *       500:
+ *         description: Server error
+ *   delete:
+ *     summary: Delete a student
+ *     tags: [Students]
    *     security:
    *       - bearerAuth: []
    *     parameters:
@@ -738,6 +755,7 @@ export const studentController = {
         guardianEmail,
         guardianContact,
         address,
+        imageUrl,
         status,
       } = body;
 
@@ -890,6 +908,16 @@ export const studentController = {
                   ? null
                   : typeof address === "string"
                     ? address.trim() || null
+                    : null,
+            }
+          : {}),
+        ...(imageUrl !== undefined
+          ? {
+              imageUrl:
+                imageUrl === null || imageUrl === ""
+                  ? null
+                  : typeof imageUrl === "string"
+                    ? imageUrl.trim() || null
                     : null,
             }
           : {}),

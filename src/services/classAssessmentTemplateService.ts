@@ -10,7 +10,7 @@ const include = {
       name: true,
       status: true,
       versionId: true,
-      components: { select: { id: true, name: true, maxScore: true, weight: true, orderNo: true } },
+      components: { select: { id: true, name: true, shortName: true, maxScore: true, weight: true, orderNo: true } },
     },
   },
   session: { select: { id: true, name: true, status: true } },

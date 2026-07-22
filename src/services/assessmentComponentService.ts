@@ -18,6 +18,7 @@ export interface AssessmentComponentData {
   templateId: string;
   template: Row["template"];
   name: string;
+  shortName: string | null;
   maxScore: string;
   weight: string;
   orderNo: number;
@@ -33,6 +34,7 @@ function mapRow(row: Row): AssessmentComponentData {
     templateId: rest.templateId,
     template: rest.template,
     name: rest.name,
+    shortName: rest.shortName,
     maxScore: rest.maxScore.toString(),
     weight: rest.weight.toString(),
     orderNo: rest.orderNo,
@@ -77,6 +79,7 @@ export class AssessmentComponentService {
   async create(input: {
     templateId: string;
     name: string;
+    shortName?: string | null;
     maxScore: string | number;
     weight: string | number;
     orderNo: number;
@@ -89,6 +92,11 @@ export class AssessmentComponentService {
     if (!templateId) throw new Error("templateId is required");
     await this.assertTemplateExists(templateId);
 
+    const shortName =
+      input.shortName === undefined || input.shortName === null || !String(input.shortName).trim()
+        ? name
+        : String(input.shortName).trim();
+
     const weight = parseDecimalNonNegative(input.weight, "weight");
     await this.assertTemplateWeightWithinLimit(templateId, weight);
 
@@ -96,6 +104,7 @@ export class AssessmentComponentService {
       data: {
         templateId,
         name,
+        shortName,
         maxScore: parseDecimalNonNegative(input.maxScore, "maxScore"),
         weight,
         orderNo: input.orderNo,
@@ -117,7 +126,10 @@ export class AssessmentComponentService {
     applyStatusFilter(where, params.status);
     if (params.templateId?.trim()) where.templateId = params.templateId.trim();
     if (params.isLocked !== undefined) where.isLocked = params.isLocked;
-    if (params.q?.trim()) where.name = { contains: params.q.trim() };
+    if (params.q?.trim()) {
+      const q = params.q.trim();
+      where.OR = [{ name: { contains: q } }, { shortName: { contains: q } }];
+    }
 
     const rows = await this.prisma.assessmentComponent.findMany({
       where,
@@ -137,6 +149,7 @@ export class AssessmentComponentService {
     input: {
       templateId?: string;
       name?: string;
+      shortName?: string | null;
       maxScore?: string | number;
       weight?: string | number;
       orderNo?: number;
@@ -146,7 +159,15 @@ export class AssessmentComponentService {
   ): Promise<AssessmentComponentData> {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Assessment component not found");
-    if (existing.isLocked && (input.maxScore !== undefined || input.weight !== undefined || input.orderNo !== undefined || input.templateId !== undefined || input.name !== undefined)) {
+    if (
+      existing.isLocked &&
+      (input.maxScore !== undefined ||
+        input.weight !== undefined ||
+        input.orderNo !== undefined ||
+        input.templateId !== undefined ||
+        input.name !== undefined ||
+        input.shortName !== undefined)
+    ) {
       throw new Error("Component is locked; only status and isLocked may be changed");
     }
     if (input.templateId !== undefined) {
@@ -166,12 +187,20 @@ export class AssessmentComponentService {
       await this.assertTemplateWeightWithinLimit(effectiveTemplateId, effectiveWeight, id);
     }
 
+    const shortName =
+      input.shortName === undefined
+        ? undefined
+        : input.shortName === null || !String(input.shortName).trim()
+          ? null
+          : String(input.shortName).trim();
+
     try {
       const row = await this.prisma.assessmentComponent.update({
         where: { id },
         data: {
           ...(input.templateId !== undefined ? { templateId: input.templateId.trim() } : {}),
           ...(input.name !== undefined ? { name: input.name.trim() } : {}),
+          ...(shortName !== undefined ? { shortName } : {}),
           ...(input.maxScore !== undefined
             ? { maxScore: parseDecimalNonNegative(input.maxScore, "maxScore") }
             : {}),

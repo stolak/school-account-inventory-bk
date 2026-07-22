@@ -8,7 +8,7 @@ export const assignmentInclude = {
   session: { select: { id: true, name: true, status: true } },
   term: { select: { id: true, name: true, status: true } },
   assignmentComponent: {
-    select: { id: true, name: true, maxScore: true, status: true },
+    select: { id: true, name: true, shortName: true, maxScore: true, status: true },
   },
   createdBy: { select: { id: true, firstName: true, lastName: true, email: true } },
   attachments: {
