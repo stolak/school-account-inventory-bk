@@ -1272,7 +1272,7 @@ async function main() {
         route: "/billing-items",
       },
       {
-        id: "mc000001-0000-4000-8000-000000000020",
+        id: "mc000001-0000-4000-8000-0000000004d",
         menuId: MENU_STUDENT_BILLINGS_ID,
         name: "Student billing",
         route: "/student-billing",

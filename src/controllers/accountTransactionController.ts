@@ -568,7 +568,9 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *   post:
  *     summary: Post student journal transfer (double entry)
  *     description: |
- *       Accepts global `studentId`, `manualRef`, `transactionDate` and an `entries` array.
+ *       Accepts global `studentId`, `transactionDate` and an `entries` array.
+ *       `manualRef` is optional; when omitted it is auto-generated. Provided or generated
+ *       values must be unique across existing journal and ledger rows.
  *       For each entry:
  *       1) First leg posts to the entry account using `transactionType` (`credit` or `debit`)
  *       2) Second leg posts opposite side to account from `STUDENT_ACCOUNT` setting,
@@ -580,10 +582,12 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         application/json:
  *           schema:
  *             type: object
- *             required: [studentId, manualRef, transactionDate, entries]
+ *             required: [studentId, transactionDate, entries]
  *             properties:
  *               studentId: { type: string }
- *               manualRef: { type: string }
+ *               manualRef:
+ *                 type: string
+ *                 description: Optional; auto-generated when omitted. Must not already exist.
  *               transactionDate: { type: string, format: date-time }
  *               entries:
  *                 type: array
@@ -603,6 +607,8 @@ import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryD
  *         description: Validation error
  *       404:
  *         description: Student or configured STUDENT_ACCOUNT not found
+ *       409:
+ *         description: manualRef already exists
  *       500:
  *         description: Server error
  *
@@ -730,7 +736,12 @@ export const accountTransactionController = {
     try {
       const body = req.body ?? {};
       const studentId = typeof body.studentId === "string" ? body.studentId.trim() : "";
-      const manualRef = typeof body.manualRef === "string" ? body.manualRef.trim() : "";
+      const manualRef =
+        body.manualRef === undefined || body.manualRef === null
+          ? undefined
+          : typeof body.manualRef === "string"
+            ? body.manualRef.trim()
+            : "";
       const transactionDate =
         typeof body.transactionDate === "string" || body.transactionDate instanceof Date
           ? new Date(body.transactionDate)
@@ -739,8 +750,14 @@ export const accountTransactionController = {
       if (!studentId) {
         return res.status(400).json({ success: false, message: "studentId is required" });
       }
-      if (!manualRef) {
-        return res.status(400).json({ success: false, message: "manualRef is required" });
+      if (body.manualRef !== undefined && body.manualRef !== null && typeof body.manualRef !== "string") {
+        return res.status(400).json({ success: false, message: "manualRef must be a string when provided" });
+      }
+      if (manualRef === "") {
+        return res.status(400).json({
+          success: false,
+          message: "manualRef cannot be empty when provided",
+        });
       }
       if (Number.isNaN(transactionDate.getTime())) {
         return res.status(400).json({ success: false, message: "transactionDate must be a valid date" });
@@ -797,7 +814,7 @@ export const accountTransactionController = {
 
       const data = await accountTransactionService.postStudentJournalTransfer({
         studentId,
-        manualRef,
+        ...(manualRef !== undefined ? { manualRef } : {}),
         transactionDate,
         postedBy,
         entries: entries.map((e) => ({
@@ -816,11 +833,17 @@ export const accountTransactionController = {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to post student journal transfer";
       const code =
-        message.includes("required") || message.includes("must be") || message.includes("non-empty")
-          ? 400
-          : message.includes("not found")
-            ? 404
-            : 500;
+        message.includes("already exists")
+          ? 409
+          : message.includes("required") ||
+              message.includes("must be") ||
+              message.includes("non-empty") ||
+              message.includes("cannot be empty") ||
+              message.includes("Could not generate")
+            ? 400
+            : message.includes("not found")
+              ? 404
+              : 500;
 
       return res.status(code).json({
         success: false,

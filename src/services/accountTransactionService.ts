@@ -452,7 +452,8 @@ export type StudentJournalTransferEntryInput = {
 
 export interface StudentJournalTransferInput {
   studentId: string;
-  manualRef: string;
+  /** Optional; auto-generated when omitted. Must be unique when provided or generated. */
+  manualRef?: string;
   transactionDate: Date;
   postedBy: string;
   entries: StudentJournalTransferEntryInput[];
@@ -2083,17 +2084,51 @@ export class AccountTransactionService {
     };
   }
 
+  private async assertManualRefAvailable(manualRef: string): Promise<void> {
+    const [existingJournal, existingLedger] = await Promise.all([
+      this.prisma.studentJournalTransfer.findFirst({
+        where: { manualReferenceNo: manualRef },
+        select: { id: true },
+      }),
+      this.prisma.accountTransaction.findFirst({
+        where: { manualRef },
+        select: { id: true },
+      }),
+    ]);
+
+    if (existingJournal || existingLedger) {
+      throw new Error(`manualRef already exists (${manualRef})`);
+    }
+  }
+
+  private async resolveUniqueManualRef(provided?: string): Promise<string> {
+    const trimmed = provided?.trim() ?? "";
+    if (trimmed) {
+      await this.assertManualRefAvailable(trimmed);
+      return trimmed;
+    }
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const candidate = generateReferenceNo("SJT-MR");
+      try {
+        await this.assertManualRefAvailable(candidate);
+        return candidate;
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.includes("already exists")) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error("Could not generate a unique manualRef");
+  }
+
   async postStudentJournalTransfer(
     input: StudentJournalTransferInput
   ): Promise<StudentJournalTransferResult> {
     const studentId = input.studentId.trim();
     if (!studentId) {
       throw new Error("studentId is required");
-    }
-
-    const manualRef = input.manualRef.trim();
-    if (!manualRef) {
-      throw new Error("manualRef is required");
     }
 
     if (!(input.transactionDate instanceof Date) || Number.isNaN(input.transactionDate.getTime())) {
@@ -2116,6 +2151,8 @@ export class AccountTransactionService {
     if (!student) {
       throw new Error("Student not found for studentId");
     }
+
+    const manualRef = await this.resolveUniqueManualRef(input.manualRef);
 
     const studentAccount =
       await defaultAccountSettingsService.getAccountChartBySettingsId("STUDENT_ACCOUNT");
