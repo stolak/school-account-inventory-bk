@@ -5,6 +5,11 @@ const router = Router();
 
 router.post("/bulk", studentAssessmentScoreController.createBulk);
 router.post("/", studentAssessmentScoreController.create);
+router.get("/student-result", studentAssessmentScoreController.studentResult);
+router.get(
+  "/students/:studentId/result-periods",
+  studentAssessmentScoreController.listStudentResultPeriods
+);
 router.get("/student-report", studentAssessmentScoreController.studentAssessmentReport);
 router.get("/student-score-report", studentAssessmentScoreController.studentSubjectScoreReport);
 router.get("/student-scores", studentAssessmentScoreController.studentSubjectScores);

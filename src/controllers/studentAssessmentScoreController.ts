@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { studentAssessmentScoreService } from "../services/studentAssessmentScoreService";
+import { studentResultService } from "../services/studentResultService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
 import { parseBodyDecimal } from "../utils/assessmentHttp";
 
@@ -128,6 +129,75 @@ function queryString(query: Request["query"], key: string): string | undefined {
  *         description: Validation error (including score exceeding component maxScore)
  *       409:
  *         description: Component locked or conflict
+ *       500:
+ *         description: Server error
+ */
+/**
+ * @openapi
+ * /api/v1/student-assessment-scores/student-result:
+ *   get:
+ *     summary: Combined student term result
+ *     description: |
+ *       Returns academic subject scores, behavioural scores, attendance summary,
+ *       and assessment remarks for a student in one response.
+ *       classId is resolved from the student's subject registration for the session/term.
+ *     tags: [StudentAssessmentScores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: sessionId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: termId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Combined student result
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Student or related data not found
+ *       500:
+ *         description: Server error
+ */
+/**
+ * @openapi
+ * /api/v1/student-assessment-scores/students/{studentId}/result-periods:
+ *   get:
+ *     summary: List assessment result periods for a student
+ *     description: |
+ *       Returns distinct class/session/term combinations where the student has
+ *       student assessment scores, ordered by session and term descending.
+ *     tags: [StudentAssessmentScores]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: studentId
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Student result periods
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Student not found
  *       500:
  *         description: Server error
  */
@@ -786,6 +856,57 @@ export const studentAssessmentScoreController = {
       });
     } catch (error: unknown) {
       return handleAssessmentError(res, error, "Failed to retrieve student subject score report");
+    }
+  },
+
+  studentResult: async (req: Request, res: Response) => {
+    try {
+      const studentId = queryString(req.query, "studentId");
+      const sessionId = queryString(req.query, "sessionId");
+      const termId = queryString(req.query, "termId");
+
+      if (!studentId?.trim()) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+      if (!sessionId?.trim()) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId?.trim()) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+
+      const result = await studentResultService.getStudentResult({
+        studentId: studentId.trim(),
+        sessionId: sessionId.trim(),
+        termId: termId.trim(),
+      });
+
+      return res.json({
+        success: true,
+        message: "Student result",
+        data: result,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve student result");
+    }
+  },
+
+  listStudentResultPeriods: async (req: Request, res: Response) => {
+    try {
+      const studentId = req.params.studentId?.trim();
+      if (!studentId) {
+        return res.status(400).json({ success: false, message: "studentId is required" });
+      }
+
+      const periods = await studentResultService.listStudentResultPeriods(studentId);
+
+      return res.json({
+        success: true,
+        message: "Student result periods retrieved successfully",
+        data: periods,
+      });
+    } catch (error: unknown) {
+      return handleAssessmentError(res, error, "Failed to retrieve student result periods");
     }
   },
 

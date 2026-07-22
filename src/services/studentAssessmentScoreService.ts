@@ -53,6 +53,7 @@ export interface ScoreSheetResult {
 export interface StudentComponentScoreEntry {
   componentId: string;
   component: string;
+  shortName: string | null;
   maxScore: number;
   score: number;
 }
@@ -67,7 +68,7 @@ export interface StudentSubjectScoreSummary {
 export interface StudentSubjectScoresResult {
   template: { id: string; name: string };
   gradeTemplate: { id: string; name: string; version: number } | null;
-  components: { id: string; name: string; maxScore: number; rank: number }[];
+  components: { id: string; name: string; shortName: string | null; maxScore: number; rank: number }[];
   students: StudentSubjectScoreSummary[];
 }
 
@@ -101,9 +102,12 @@ export interface StudentAssessmentReportSubject {
 export interface StudentAssessmentReportResult {
   admissionNumber: string;
   studentName: string;
+  consideredClassId: string;
   consideredClass: string;
   consideredSubclass?: string;
+  sessionId: string;
   session: string;
+  termId: string;
   term: string;
   subjects: StudentAssessmentReportSubject[];
   overallScore: number;
@@ -134,6 +138,7 @@ type GradeBand = {
 type AssessmentComponentRow = {
   id: string;
   name: string;
+  shortName: string | null;
   maxScore: Prisma.Decimal;
   orderNo: number;
 };
@@ -226,7 +231,7 @@ export class StudentAssessmentScoreService {
 
     const componentById = new Map<
       string,
-      { id: string; name: string; maxScore: Prisma.Decimal; orderNo: number }
+      { id: string; name: string; shortName: string | null; maxScore: Prisma.Decimal; orderNo: number }
     >();
     for (const assignment of assignments) {
       for (const component of assignment.template.components) {
@@ -328,6 +333,7 @@ export class StudentAssessmentScoreService {
     return components.map((component) => ({
       componentId: component.id,
       component: component.name,
+      shortName: component.shortName,
       maxScore: Number(component.maxScore.toString()),
       score: scoresForRegistration?.has(component.id)
         ? Number(scoresForRegistration.get(component.id)!.toString())
@@ -711,6 +717,7 @@ export class StudentAssessmentScoreService {
       components: components.map((component) => ({
         id: component.id,
         name: component.name,
+        shortName: component.shortName,
         maxScore: Number(component.maxScore.toString()),
         rank: component.orderNo,
       })),
@@ -719,6 +726,7 @@ export class StudentAssessmentScoreService {
         const componentScore = components.map((component) => ({
           componentId: component.id,
           component: component.name,
+          shortName: component.shortName,
           maxScore: Number(component.maxScore.toString()),
           score: scoresForStudent?.has(component.id)
             ? Number(scoresForStudent.get(component.id)!.toString())
@@ -760,10 +768,10 @@ export class StudentAssessmentScoreService {
     const studentRegistrations = await this.prisma.studentSubjectRegistration.findMany({
       where: { studentId, classId, sessionId, termId },
       include: {
-        class: { select: { name: true } },
-        subclass: { select: { name: true } },
-        session: { select: { name: true } },
-        term: { select: { name: true } },
+        class: { select: { id: true, name: true } },
+        subclass: { select: { id: true, name: true } },
+        session: { select: { id: true, name: true } },
+        term: { select: { id: true, name: true } },
         subject: { select: { id: true, name: true } },
       },
       orderBy: { subject: { name: "asc" } },
@@ -859,11 +867,14 @@ export class StudentAssessmentScoreService {
     return {
       admissionNumber: student.admissionNumber,
       studentName: `${student.firstName} ${student.lastName}`,
+      consideredClassId: firstRegistration.class.id,
       consideredClass: firstRegistration.class.name,
       ...(firstRegistration.subclass?.name
         ? { consideredSubclass: firstRegistration.subclass.name }
         : {}),
+      sessionId: firstRegistration.session.id,
       session: firstRegistration.session.name,
+      termId: firstRegistration.term.id,
       term: firstRegistration.term.name,
       subjects,
       overallScore,

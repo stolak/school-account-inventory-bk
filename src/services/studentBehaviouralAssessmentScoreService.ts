@@ -649,9 +649,6 @@ export class StudentBehaviouralAssessmentScoreService {
     const { template, components, gradeTemplate, gradingItems } = assignment;
 
     if (!student) throw new Error("Invalid studentId");
-    if (student.classId !== classId) {
-      throw new Error("studentId does not belong to the specified classId");
-    }
     if (!cls) throw new Error("Invalid classId");
     if (!session) throw new Error("Invalid sessionId");
     if (!term) throw new Error("Invalid termId");
