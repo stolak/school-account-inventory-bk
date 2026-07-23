@@ -955,6 +955,8 @@ async function main() {
       { route: "/student-collections", caption: "Student Collections" },
       { route: "/staff-collections", caption: "Staff Collections" },
       { route: "/my-assignments", caption: "My Assignments" },
+      { route: "/my-results", caption: "My results" },
+      { route: "/student-results", caption: "Student results" },
 
       // Analytics
 
@@ -1474,21 +1476,17 @@ async function main() {
     }
     console.log(`   ✓ menus linked to Super Admin and System Administrator roles`);
 
-    const myAssignmentsMenu = await prisma.menu.findUnique({
-      where: { route: "/my-assignments" },
-      select: { id: true },
-    });
-    if (myAssignmentsMenu) {
-      const existing = await prisma.roleMenu.findFirst({
-        where: { roleId: STUDENT_ROLE_ID, menuId: myAssignmentsMenu.id },
+    const studentMenuRoutes = ["/my-assignments", "/my-results"];
+    for (const route of studentMenuRoutes) {
+      const studentMenu = await prisma.menu.findUnique({
+        where: { route },
+        select: { id: true },
       });
-      if (!existing) {
-        await prisma.roleMenu.create({
-          data: { roleId: STUDENT_ROLE_ID, menuId: myAssignmentsMenu.id },
-        });
+      if (studentMenu) {
+        await ensureRoleMenu(STUDENT_ROLE_ID, studentMenu.id);
       }
     }
-    console.log("   ✓ My Assignments menu linked to Student role");
+    console.log("   ✓ Student menus linked to Student role");
 
     const parentMenuRoutes = [
       "/parent/assignments",
@@ -1513,6 +1511,15 @@ async function main() {
     console.log(
       "   ✓ School Management parent menu linked to Class Teacher and Subject Teacher with Assignments setup child only"
     );
+
+    const studentResultsMenu = await prisma.menu.findUnique({
+      where: { route: "/student-results" },
+      select: { id: true },
+    });
+    if (studentResultsMenu) {
+      await ensureRoleMenu(CLASS_TEACHER_ROLE_ID, studentResultsMenu.id);
+    }
+    console.log("   ✓ Student results menu linked to Class Teacher role");
 
     const registrarRoleMenuId = await ensureRoleMenu(REGISTRAR_ROLE_ID, MENU_SCHOOL_MANAGEMENT_ID);
     for (const childId of [
