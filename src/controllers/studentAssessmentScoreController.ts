@@ -893,7 +893,8 @@ export const studentAssessmentScoreController = {
 
   listStudentResultPeriods: async (req: Request, res: Response) => {
     try {
-      const studentId = req.params.studentId?.trim();
+      const studentId =
+        typeof req.params.studentId === "string" ? req.params.studentId.trim() : "";
       if (!studentId) {
         return res.status(400).json({ success: false, message: "studentId is required" });
       }
