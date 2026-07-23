@@ -979,8 +979,10 @@ async function main() {
       { route: "/payroll/salary-components", caption: "Salary components" },
       { route: "/payroll/salary-charts", caption: "Salary charts" },
       { route: "/payroll/report", caption: "Payroll reports" },
-      // perant
+      // parent
       { route: "/parent/assignments", caption: "Parent assignments" },
+      { route: "/parent/results", caption: "Results" },
+      { route: "/parent/billing", caption: "Billing" },
       // attendance
       { route: "/student-attendance", caption: "Attendance records" },
       // transportation
@@ -1488,14 +1490,21 @@ async function main() {
     }
     console.log("   ✓ My Assignments menu linked to Student role");
 
-    const parentAssignmentsMenu = await prisma.menu.findUnique({
-      where: { route: "/parent/assignments" },
-      select: { id: true },
-    });
-    if (parentAssignmentsMenu) {
-      await ensureRoleMenu(PARENT_ROLE_ID, parentAssignmentsMenu.id);
+    const parentMenuRoutes = [
+      "/parent/assignments",
+      "/parent/results",
+      "/parent/billing",
+    ];
+    for (const route of parentMenuRoutes) {
+      const parentMenu = await prisma.menu.findUnique({
+        where: { route },
+        select: { id: true },
+      });
+      if (parentMenu) {
+        await ensureRoleMenu(PARENT_ROLE_ID, parentMenu.id);
+      }
     }
-    console.log("   ✓ Parent assignments menu linked to Parent role");
+    console.log("   ✓ Parent menus linked to Parent role");
 
     for (const roleId of [CLASS_TEACHER_ROLE_ID, SUBJECT_TEACHER_ROLE_ID]) {
       const roleMenuId = await ensureRoleMenu(roleId, MENU_SCHOOL_MANAGEMENT_ID);
