@@ -19,6 +19,8 @@ function parseMysqlUrl(databaseUrl: string) {
     database,
     // Keep pool small for shared hosting (cPanel) process limits
     connectionLimit: Number(process.env.DATABASE_CONNECTION_LIMIT || 5),
+    // Avoid server-side prepared statement cache buildup with Prisma's dynamic SQL
+    prepareCacheLength: 0,
   };
 }
 

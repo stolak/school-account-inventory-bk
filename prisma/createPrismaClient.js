@@ -17,6 +17,7 @@ function parseMysqlUrl(databaseUrl) {
     password: decodeURIComponent(url.password),
     database,
     connectionLimit: Number(process.env.DATABASE_CONNECTION_LIMIT || 5),
+    prepareCacheLength: 0,
   };
 }
 

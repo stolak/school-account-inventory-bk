@@ -6601,7 +6601,7 @@ async function main() {
       `   ✓ ${transportVehicles.length} vehicles, ${transportVehicleRoutes.length} vehicle-routes, ${studentTransports.length} student transports`
     );
 
-    // Create merchant users for each merchant
+    console.log("✅ Database seeding completed successfully");
   } catch (error) {
     console.error("❌ Error during seeding:", error);
     throw error;

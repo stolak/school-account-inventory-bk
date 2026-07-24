@@ -17,7 +17,7 @@
     "test-liftpay-ids": "node scripts/test-liftpay-ids.js",
     "test-validate-account": "node scripts/test-validate-and-create-account.js",
     "db:reset": "npx prisma migrate reset",
-    "generate": "npx prisma generate"
+    "generate": "node node_modules/prisma/build/index.js generate"
   },
   "keywords": [],
   "author": "",
@@ -25,8 +25,8 @@
   "description": "",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.901.0",
-    "@prisma/adapter-mariadb": "^6.16.2",
-    "@prisma/client": "^6.16.2",
+    "@prisma/adapter-mariadb": "^6.19.3",
+    "@prisma/client": "^6.19.3",
     "@types/handlebars": "^4.0.40",
     "@types/multer": "^2.0.0",
     "@types/nodemailer": "^7.0.2",
@@ -41,7 +41,7 @@
     "mysql2": "^3.15.2",
     "nodemailer": "^7.0.9",
     "openai": "^6.10.0",
-    "prisma": "^6.16.2",
+    "prisma": "^6.19.3",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.1"
   },
