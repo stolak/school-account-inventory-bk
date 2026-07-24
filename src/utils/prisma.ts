@@ -1,15 +1,13 @@
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "./createPrismaClient";
 
-// Create a single PrismaClient instance to be reused across the application
-// This prevents connection pool exhaustion
-const prisma = new PrismaClient({
+// Single PrismaClient instance (JS client engine + MariaDB driver adapter).
+// Avoids the native Rust query engine, which can crash under concurrency on cPanel.
+const prisma = createPrismaClient({
   log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
 });
 
-// Handle graceful shutdown
 process.on("beforeExit", async () => {
   await prisma.$disconnect();
 });
 
 export default prisma;
-

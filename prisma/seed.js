@@ -1,9 +1,9 @@
-const { PrismaClient } = require("@prisma/client");
+const { createPrismaClient } = require("./createPrismaClient");
 const bcrypt = require("bcryptjs");
 const fs = require("fs");
 const path = require("path");
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 
 const SUPPLIER_SUBHEAD_SETTINGS_ID = "SUPPLIER_SUBHEAD";
 
