@@ -5,3 +5,6 @@ dist
 
 /src/generated/prisma
 /prisma/migrations
+
+# File-based application cache
+/cache
