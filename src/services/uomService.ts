@@ -96,7 +96,10 @@ export class UomService {
     return await this.prisma.uom.findUnique({ where: { id } });
   }
 
-  async updateUom(id: string, input: { name?: string; symbol?: string; status?: Status }): Promise<UomData> {
+  async updateUom(
+    id: string,
+    input: { name?: string; symbol?: string; status?: Status }
+  ): Promise<UomData> {
     try {
       return await this.prisma.uom.update({
         where: { id },
@@ -121,4 +124,3 @@ export class UomService {
 }
 
 export const uomService = new UomService();
-

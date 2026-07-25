@@ -1,5 +1,6 @@
 import prisma from "../utils/prisma";
 import { InventoryCategoryType, Prisma, Status } from "@prisma/client";
+import { deleteCache, deleteCacheByPrefix, getCache, setCache } from "../utils/fileCache";
 
 export interface CategoryData {
   id: string;
@@ -31,12 +32,47 @@ export interface ListCategoriesParams {
   limit?: number;
 }
 
+type ListCategoriesResult = {
+  categories: CategoryData[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+};
+
+const CACHE_PREFIX = "categories";
+const LIST_TTL_SECONDS = 600; // 10 minutes
+const ITEM_TTL_SECONDS = 600;
+
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
 function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
   return typeof e === "object" && e !== null && "code" in e && typeof (e as { code: unknown }).code === "string";
+}
+
+function listCacheKey(params: {
+  page: number;
+  limit: number;
+  status?: Status | "All";
+  categoryType?: InventoryCategoryType;
+  q?: string;
+}): string {
+  const status = params.status ?? "Active";
+  const categoryType = params.categoryType ?? "-";
+  const q = (params.q ?? "").trim().toLowerCase();
+  return `${CACHE_PREFIX}.list.p${params.page}.l${params.limit}.s${status}.t${categoryType}.q${q || "-"}`;
+}
+
+function itemCacheKey(id: string): string {
+  return `${CACHE_PREFIX}.id.${id}`;
+}
+
+async function invalidateCategoryCache(id?: string): Promise<void> {
+  await deleteCacheByPrefix(`${CACHE_PREFIX}.list`);
+  if (id) {
+    await deleteCache(itemCacheKey(id));
+  } else {
+    await deleteCacheByPrefix(`${CACHE_PREFIX}.id`);
+  }
 }
 
 export class CategoryService {
@@ -105,6 +141,9 @@ export class CategoryService {
         include: this.categoryInclude,
       });
 
+      await invalidateCategoryCache(created.id);
+      await setCache(itemCacheKey(created.id), created, ITEM_TTL_SECONDS);
+
       return created;
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
@@ -114,13 +153,22 @@ export class CategoryService {
     }
   }
 
-  async listCategories(params: ListCategoriesParams = {}): Promise<{
-    categories: CategoryData[];
-    pagination: { page: number; limit: number; total: number; totalPages: number };
-  }> {
+  async listCategories(params: ListCategoriesParams = {}): Promise<ListCategoriesResult> {
     const page = clampInt(params.page ?? 1, 1, 1_000_000);
     const limit = clampInt(params.limit ?? 20, 1, 100);
     const skip = (page - 1) * limit;
+    const cacheKey = listCacheKey({
+      page,
+      limit,
+      status: params.status,
+      categoryType: params.categoryType,
+      q: params.q,
+    });
+
+    const cached = await getCache<ListCategoriesResult>(cacheKey);
+    if (cached) {
+      return cached;
+    }
 
     const where: Prisma.CategoryWhereInput = {};
 
@@ -152,14 +200,32 @@ export class CategoryService {
 
     const totalPages = Math.max(1, Math.ceil(total / limit));
 
-    return {
+    const result: ListCategoriesResult = {
       categories: rows,
       pagination: { page, limit, total, totalPages },
     };
+
+    await setCache(cacheKey, result, LIST_TTL_SECONDS);
+    return result;
   }
 
   async getCategoryById(id: string): Promise<CategoryData | null> {
-    return await this.prisma.category.findUnique({ where: { id }, include: this.categoryInclude });
+    const cacheKey = itemCacheKey(id);
+    const cached = await getCache<CategoryData>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const row = await this.prisma.category.findUnique({
+      where: { id },
+      include: this.categoryInclude,
+    });
+
+    if (row) {
+      await setCache(cacheKey, row, ITEM_TTL_SECONDS);
+    }
+
+    return row;
   }
 
   async updateCategory(
@@ -206,7 +272,7 @@ export class CategoryService {
     }
 
     try {
-      return await this.prisma.category.update({
+      const updated = await this.prisma.category.update({
         where: { id },
         data: {
           ...(input.name !== undefined ? { name: input.name.trim() } : {}),
@@ -219,6 +285,11 @@ export class CategoryService {
         },
         include: this.categoryInclude,
       });
+
+      await invalidateCategoryCache(updated.id);
+      await setCache(itemCacheKey(updated.id), updated, ITEM_TTL_SECONDS);
+
+      return updated;
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
         throw new Error("Category name already exists");
@@ -240,7 +311,13 @@ export class CategoryService {
       throw new Error("Cannot delete category because it is referenced by subcategories or inventory items");
     }
 
-    return await this.prisma.category.delete({ where: { id }, include: this.categoryInclude });
+    const deleted = await this.prisma.category.delete({
+      where: { id },
+      include: this.categoryInclude,
+    });
+
+    await invalidateCategoryCache(id);
+    return deleted;
   }
 }
 

@@ -562,7 +562,24 @@ export class InventoryItemService {
   }
 
   async deleteInventoryItem(id: string): Promise<InventoryItemData> {
-    return await this.prisma.inventoryItem.delete({ where: { id } });
+    const inventoryTransactionCount = await this.prisma.inventoryTransaction.count({
+      where: { itemId: id },
+    });
+
+    if (inventoryTransactionCount > 0) {
+      throw new Error(
+        `Cannot delete inventory item because it is referenced by inventory transactions (${inventoryTransactionCount})`
+      );
+    }
+
+    try {
+      return await this.prisma.inventoryItem.delete({ where: { id } });
+    } catch (e) {
+      if (isPrismaKnownErrorWithCode(e) && e.code === "P2025") {
+        throw new Error("Inventory item not found");
+      }
+      throw e;
+    }
   }
 
   /**

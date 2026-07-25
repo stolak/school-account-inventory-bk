@@ -296,8 +296,11 @@ async function upsertStaffWithUser(hashedPassword, input) {
   };
 
   await prisma.staff.upsert({
-    where: { StaffNumber: normalizedStaffNumber },
-    update: staffData,
+    where: { id: input.id },
+    update: {
+      StaffNumber: normalizedStaffNumber,
+      ...staffData,
+    },
     create: {
       id: input.id,
       StaffNumber: normalizedStaffNumber,
@@ -4213,7 +4216,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909001",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a001",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909001",
+        StaffNumber: "SF-0001",
         email: "ngozi.okonkwo@staff.school.ng",
         name: "Dr. Ngozi Okonkwo",
         position: "principal",
@@ -4230,7 +4233,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909002",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a002",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909002",
+        StaffNumber: "SF-0002",
         email: "tunde.bello@staff.school.ng",
         name: "Mr. Tunde Bello",
         position: "vice_principal",
@@ -4247,7 +4250,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909003",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a003",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909003",
+        StaffNumber: "SF-0003",
         email: "ada.musa@staff.school.ng",
         name: "Mrs. Ada Musa",
         position: "class_teacher",
@@ -4264,7 +4267,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909004",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a004",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909004",
+        StaffNumber: "SF-0004",
         email: "james.eze@staff.school.ng",
         name: "Mr. James Eze",
         position: "subject_teacher",
@@ -4281,7 +4284,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909005",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a005",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909005",
+        StaffNumber: "SF-0005",
         email: "fatima.yusuf@staff.school.ng",
         name: "Mrs. Fatima Yusuf",
         position: "subject_teacher",
@@ -4298,7 +4301,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909006",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a006",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909006",
+        StaffNumber: "SF-0006",
         email: "chidi.okafor@staff.school.ng",
         name: "Mr. Chidi Okafor",
         position: "subject_teacher",
@@ -4315,7 +4318,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909007",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a007",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909007",
+        StaffNumber: "SF-0007",
         email: "bola.adeyemi@staff.school.ng",
         name: "Mrs. Bola Adeyemi",
         position: "admin",
@@ -4332,7 +4335,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909008",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a008",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909008",
+        StaffNumber: "SF-0008",
         email: "emmanuel.nwosu@staff.school.ng",
         name: "Mr. Emmanuel Nwosu",
         position: "class_teacher",
@@ -4349,7 +4352,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-345678909009",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a009",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-345678909009",
+        StaffNumber: "SF-0009",
         email: "ikechukwu.nwankwo@staff.school.ng",
         name: "Mr. Ikechukwu Nwankwo",
         position: "admin",
@@ -4366,7 +4369,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-34567890900a",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a00a",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900a",
+        StaffNumber: "SF-0010",
         email: "halima.bello@staff.school.ng",
         name: "Mrs. Halima Bello",
         position: "admin",
@@ -4383,7 +4386,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-34567890900b",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a00b",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900b",
+        StaffNumber: "SF-0011",
         email: "sani.ibrahim@staff.school.ng",
         name: "Mr. Sani Ibrahim",
         position: "admin",
@@ -4400,7 +4403,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-34567890900c",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a00c",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900c",
+        StaffNumber: "SF-0012",
         email: "michael.ode@staff.school.ng",
         name: "Mr. Michael Ode",
         position: "admin",
@@ -4417,7 +4420,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-34567890900d",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a00d",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900d",
+        StaffNumber: "SF-0013",
         email: "chinwe.okafor@staff.school.ng",
         name: "Mrs. Chinwe Okafor",
         position: "admin",
@@ -4434,7 +4437,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-34567890900e",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a00e",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900e",
+        StaffNumber: "SF-0014",
         email: "grace.okon@staff.school.ng",
         name: "Mrs. Grace Okon",
         position: "class_teacher",
@@ -4451,7 +4454,7 @@ async function main() {
       {
         id: "a8b9c0d1-e2f3-4234-a012-34567890900f",
         userId: "a8b9c0d1-e2f3-4234-a012-34567890a00f",
-        StaffNumber: "a8b9c0d1-e2f3-4234-a012-34567890900f",
+        StaffNumber: "SF-0015",
         email: "david.ibrahim@staff.school.ng",
         name: "Mr. David Ibrahim",
         position: "subject_teacher",

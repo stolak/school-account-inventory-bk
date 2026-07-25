@@ -1,6 +1,7 @@
 import prisma from "../utils/prisma";
 import { CategoryData } from "./categoryService";
 import { Status } from "@prisma/client";
+import { deleteCache, deleteCacheByPrefix, getCache, setCache } from "../utils/fileCache";
 
 export interface SubCategoryData {
   id: string;
@@ -21,12 +22,47 @@ export interface ListSubCategoriesParams {
   limit?: number;
 }
 
+type ListSubCategoriesResult = {
+  subCategories: SubCategoryData[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+};
+
+const CACHE_PREFIX = "sub-categories";
+const LIST_TTL_SECONDS = 600; // 10 minutes
+const ITEM_TTL_SECONDS = 600;
+
 function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
 function isPrismaKnownErrorWithCode(e: unknown): e is { code: string } {
   return typeof e === "object" && e !== null && "code" in e && typeof (e as any).code === "string";
+}
+
+function listCacheKey(params: {
+  page: number;
+  limit: number;
+  status?: Status | "All";
+  categoryId?: string;
+  q?: string;
+}): string {
+  const status = params.status ?? "Active";
+  const categoryId = (params.categoryId ?? "-").trim();
+  const q = (params.q ?? "").trim().toLowerCase();
+  return `${CACHE_PREFIX}.list.p${params.page}.l${params.limit}.s${status}.c${categoryId}.q${q || "-"}`;
+}
+
+function itemCacheKey(id: string): string {
+  return `${CACHE_PREFIX}.id.${id}`;
+}
+
+async function invalidateSubCategoryCache(id?: string): Promise<void> {
+  await deleteCacheByPrefix(`${CACHE_PREFIX}.list`);
+  if (id) {
+    await deleteCache(itemCacheKey(id));
+  } else {
+    await deleteCacheByPrefix(`${CACHE_PREFIX}.id`);
+  }
 }
 
 export class SubCategoryService {
@@ -49,7 +85,7 @@ export class SubCategoryService {
     try {
       await this.assertCategoryExists(input.categoryId);
 
-      return await this.prisma.subCategory.create({
+      const created = await this.prisma.subCategory.create({
         data: {
           name: input.name,
           description: input.description ?? null,
@@ -57,6 +93,11 @@ export class SubCategoryService {
           ...(input.status !== undefined ? { status: input.status } : {}),
         },
       });
+
+      await invalidateSubCategoryCache(created.id);
+      await setCache(itemCacheKey(created.id), created, ITEM_TTL_SECONDS);
+
+      return created;
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
         throw new Error("SubCategory name already exists for this category");
@@ -65,13 +106,22 @@ export class SubCategoryService {
     }
   }
 
-  async listSubCategories(params: ListSubCategoriesParams = {}): Promise<{
-    subCategories: SubCategoryData[];
-    pagination: { page: number; limit: number; total: number; totalPages: number };
-  }> {
+  async listSubCategories(params: ListSubCategoriesParams = {}): Promise<ListSubCategoriesResult> {
     const page = clampInt(params.page ?? 1, 1, 1_000_000);
     const limit = clampInt(params.limit ?? 20, 1, 100);
     const skip = (page - 1) * limit;
+    const cacheKey = listCacheKey({
+      page,
+      limit,
+      status: params.status,
+      categoryId: params.categoryId,
+      q: params.q,
+    });
+
+    const cached = await getCache<ListSubCategoriesResult>(cacheKey);
+    if (cached) {
+      return cached;
+    }
 
     const where: any = {};
     if (params.categoryId) {
@@ -110,14 +160,29 @@ export class SubCategoryService {
       ? rows.filter((sc) => sc.name.toLowerCase().includes(params.q!.toLowerCase()))
       : rows;
 
-    return {
+    const result: ListSubCategoriesResult = {
       subCategories,
       pagination: { page, limit, total, totalPages },
     };
+
+    await setCache(cacheKey, result, LIST_TTL_SECONDS);
+    return result;
   }
 
   async getSubCategoryById(id: string): Promise<SubCategoryData | null> {
-    return await this.prisma.subCategory.findUnique({ where: { id } });
+    const cacheKey = itemCacheKey(id);
+    const cached = await getCache<SubCategoryData>(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const row = await this.prisma.subCategory.findUnique({ where: { id } });
+
+    if (row) {
+      await setCache(cacheKey, row, ITEM_TTL_SECONDS);
+    }
+
+    return row;
   }
 
   async updateSubCategory(
@@ -129,7 +194,7 @@ export class SubCategoryService {
         await this.assertCategoryExists(input.categoryId);
       }
 
-      return await this.prisma.subCategory.update({
+      const updated = await this.prisma.subCategory.update({
         where: { id },
         data: {
           ...(input.name !== undefined ? { name: input.name } : {}),
@@ -139,6 +204,11 @@ export class SubCategoryService {
           updatedAt: new Date(),
         },
       });
+
+      await invalidateSubCategoryCache(updated.id);
+      await setCache(itemCacheKey(updated.id), updated, ITEM_TTL_SECONDS);
+
+      return updated;
     } catch (e) {
       if (isPrismaKnownErrorWithCode(e) && e.code === "P2002") {
         throw new Error("SubCategory name already exists for this category");
@@ -148,7 +218,6 @@ export class SubCategoryService {
   }
 
   async deleteSubCategory(id: string): Promise<SubCategoryData> {
-    console.log("deleteSubCategory", id);
     const inventoryItemCount = await this.prisma.inventoryItem.count({
       where: { subCategoryId: id },
     });
@@ -157,7 +226,9 @@ export class SubCategoryService {
       throw new Error("Cannot delete subcategory because it is referenced by inventory items");
     }
 
-    return await this.prisma.subCategory.delete({ where: { id } });
+    const deleted = await this.prisma.subCategory.delete({ where: { id } });
+    await invalidateSubCategoryCache(id);
+    return deleted;
   }
 }
 

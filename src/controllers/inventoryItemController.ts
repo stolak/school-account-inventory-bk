@@ -1,7 +1,12 @@
 import { Request, Response } from "express";
 import { inventoryItemService } from "../services/inventoryItemService";
 import { Status } from "@prisma/client";
-import { isNumberOrString, isStringOrNullOrUndefined, parseIntOrUndefined, routeParam } from "../utils/request";
+import {
+  isNumberOrString,
+  isStringOrNullOrUndefined,
+  parseIntOrUndefined,
+  routeParam,
+} from "../utils/request";
 import { parseQueryDateEndInclusive, parseQueryDateStart } from "../utils/queryDate";
 
 /**
@@ -244,37 +249,54 @@ export const inventoryItemController = {
       }
 
       if (!isNumberOrString(costPrice)) {
-        return res.status(400).json({ success: false, message: "costPrice is required (string or number)" });
+        return res
+          .status(400)
+          .json({ success: false, message: "costPrice is required (string or number)" });
       }
       if (!isNumberOrString(sellingPrice)) {
-        return res.status(400).json({ success: false, message: "sellingPrice is required (string or number)" });
+        return res
+          .status(400)
+          .json({ success: false, message: "sellingPrice is required (string or number)" });
       }
 
       if (!isStringOrNullOrUndefined(sku)) {
         return res.status(400).json({ success: false, message: "sku must be a string or null" });
       }
-      console.log("barcode", barcode);
+
       if (!isStringOrNullOrUndefined(barcode)) {
-        return res.status(400).json({ success: false, message: "barcode must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "barcode must be a string or null" });
       }
-      const normalizedBarcode = barcode === null || barcode === undefined||barcode.trim() === "" ? null : barcode.trim();
-      
-    
+      const normalizedBarcode =
+        barcode === null || barcode === undefined || barcode.trim() === "" ? null : barcode.trim();
+
       if (!isStringOrNullOrUndefined(categoryId)) {
-        return res.status(400).json({ success: false, message: "categoryId must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "categoryId must be a string or null" });
       }
       if (!isStringOrNullOrUndefined(subCategoryId)) {
-        return res.status(400).json({ success: false, message: "subCategoryId must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "subCategoryId must be a string or null" });
       }
       if (!isStringOrNullOrUndefined(brandId)) {
-        return res.status(400).json({ success: false, message: "brandId must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "brandId must be a string or null" });
       }
       if (!isStringOrNullOrUndefined(uomId)) {
         return res.status(400).json({ success: false, message: "uomId must be a string or null" });
       }
 
-      if (lowStockThreshold !== undefined && (typeof lowStockThreshold !== "number" || lowStockThreshold < 0)) {
-        return res.status(400).json({ success: false, message: "lowStockThreshold must be a number >= 0" });
+      if (
+        lowStockThreshold !== undefined &&
+        (typeof lowStockThreshold !== "number" || lowStockThreshold < 0)
+      ) {
+        return res
+          .status(400)
+          .json({ success: false, message: "lowStockThreshold must be a number >= 0" });
       }
 
       const createdById = (req as any).user?.id;
@@ -311,11 +333,14 @@ export const inventoryItemController = {
   listInventoryItems: async (req: Request, res: Response) => {
     try {
       const q = typeof req.query.q === "string" ? req.query.q : undefined;
-      const categoryId = typeof req.query.categoryId === "string" ? req.query.categoryId : undefined;
-      const subCategoryId = typeof req.query.subCategoryId === "string" ? req.query.subCategoryId : undefined;
+      const categoryId =
+        typeof req.query.categoryId === "string" ? req.query.categoryId : undefined;
+      const subCategoryId =
+        typeof req.query.subCategoryId === "string" ? req.query.subCategoryId : undefined;
       const brandId = typeof req.query.brandId === "string" ? req.query.brandId : undefined;
       const uomId = typeof req.query.uomId === "string" ? req.query.uomId : undefined;
-      const createdById = typeof req.query.createdById === "string" ? req.query.createdById : undefined;
+      const createdById =
+        typeof req.query.createdById === "string" ? req.query.createdById : undefined;
       const storeId = typeof req.query.storeId === "string" ? req.query.storeId : undefined;
       const statusRaw = typeof req.query.status === "string" ? req.query.status : undefined;
       const status =
@@ -599,30 +624,40 @@ export const inventoryItemController = {
       const { stores, items, categoryId, subCategoryId } = req.body ?? {};
 
       if (stores !== undefined && stores !== null && !Array.isArray(stores)) {
-        return res.status(400).json({ success: false, message: "stores must be an array, null, or omitted" });
+        return res
+          .status(400)
+          .json({ success: false, message: "stores must be an array, null, or omitted" });
       }
       if (items !== undefined && items !== null && !Array.isArray(items)) {
-        return res.status(400).json({ success: false, message: "items must be an array, null, or omitted" });
+        return res
+          .status(400)
+          .json({ success: false, message: "items must be an array, null, or omitted" });
       }
       if (
         categoryId !== undefined &&
         categoryId !== null &&
         (typeof categoryId !== "string" || !categoryId.trim())
       ) {
-        return res.status(400).json({ success: false, message: "categoryId must be a non-empty string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "categoryId must be a non-empty string" });
       }
       if (
         subCategoryId !== undefined &&
         subCategoryId !== null &&
         (typeof subCategoryId !== "string" || !subCategoryId.trim())
       ) {
-        return res.status(400).json({ success: false, message: "subCategoryId must be a non-empty string" });
+        return res
+          .status(400)
+          .json({ success: false, message: "subCategoryId must be a non-empty string" });
       }
 
       const data = await inventoryItemService.getInventoryBalanceMatrix({
         ...(stores !== undefined ? { stores } : {}),
         ...(items !== undefined ? { items } : {}),
-        ...(typeof categoryId === "string" && categoryId.trim() ? { categoryId: categoryId.trim() } : {}),
+        ...(typeof categoryId === "string" && categoryId.trim()
+          ? { categoryId: categoryId.trim() }
+          : {}),
         ...(typeof subCategoryId === "string" && subCategoryId.trim()
           ? { subCategoryId: subCategoryId.trim() }
           : {}),
@@ -634,7 +669,8 @@ export const inventoryItemController = {
         data,
       });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to retrieve inventory balance matrix";
+      const message =
+        error instanceof Error ? error.message : "Failed to retrieve inventory balance matrix";
       const code =
         message === "Invalid categoryId" ||
         message === "Invalid subCategoryId" ||
@@ -807,11 +843,22 @@ export const inventoryItemController = {
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const item = await inventoryItemService.getInventoryItemById(id);
-      if (!item) return res.status(404).json({ success: false, message: "Inventory item not found" });
+      if (!item)
+        return res.status(404).json({ success: false, message: "Inventory item not found" });
 
-      return res.json({ success: true, message: "Inventory item retrieved successfully", data: item });
+      return res.json({
+        success: true,
+        message: "Inventory item retrieved successfully",
+        data: item,
+      });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: "Failed to retrieve inventory item", error: error?.message });
+      return res
+        .status(500)
+        .json({
+          success: false,
+          message: "Failed to retrieve inventory item",
+          error: error?.message,
+        });
     }
   },
 
@@ -837,53 +884,87 @@ export const inventoryItemController = {
       if (name !== undefined && (typeof name !== "string" || !name.trim())) {
         return res.status(400).json({ success: false, message: "name must be a non-empty string" });
       }
-      
-      const normalizedBarcode = barcode === undefined ? undefined : barcode === null ? null : barcode.trim();
-     
+
+      const normalizedBarcode =
+        barcode === undefined ? undefined : barcode === null ? null : barcode.trim();
+
       if (categoryId !== undefined && !isStringOrNullOrUndefined(categoryId)) {
-        return res.status(400).json({ success: false, message: "categoryId must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "categoryId must be a string or null" });
       }
       if (subCategoryId !== undefined && !isStringOrNullOrUndefined(subCategoryId)) {
-        return res.status(400).json({ success: false, message: "subCategoryId must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "subCategoryId must be a string or null" });
       }
       if (brandId !== undefined && !isStringOrNullOrUndefined(brandId)) {
-        return res.status(400).json({ success: false, message: "brandId must be a string or null" });
+        return res
+          .status(400)
+          .json({ success: false, message: "brandId must be a string or null" });
       }
       if (uomId !== undefined && !isStringOrNullOrUndefined(uomId)) {
         return res.status(400).json({ success: false, message: "uomId must be a string or null" });
       }
       if (costPrice !== undefined && !isNumberOrString(costPrice)) {
-        return res.status(400).json({ success: false, message: "costPrice must be a string or number" });
+        return res
+          .status(400)
+          .json({ success: false, message: "costPrice must be a string or number" });
       }
       if (sellingPrice !== undefined && !isNumberOrString(sellingPrice)) {
-        return res.status(400).json({ success: false, message: "sellingPrice must be a string or number" });
+        return res
+          .status(400)
+          .json({ success: false, message: "sellingPrice must be a string or number" });
       }
-      if (lowStockThreshold !== undefined && (typeof lowStockThreshold !== "number" || lowStockThreshold < 0)) {
-        return res.status(400).json({ success: false, message: "lowStockThreshold must be a number >= 0" });
+      if (
+        lowStockThreshold !== undefined &&
+        (typeof lowStockThreshold !== "number" || lowStockThreshold < 0)
+      ) {
+        return res
+          .status(400)
+          .json({ success: false, message: "lowStockThreshold must be a number >= 0" });
       }
 
       if (status !== undefined && status !== Status.Active && status !== Status.Inactive) {
-        return res.status(400).json({ success: false, message: "status must be Active or Inactive" });
+        return res
+          .status(400)
+          .json({ success: false, message: "status must be Active or Inactive" });
       }
 
       const existing = await inventoryItemService.getInventoryItemById(id);
-      if (!existing) return res.status(404).json({ success: false, message: "Inventory item not found" });
+      if (!existing)
+        return res.status(404).json({ success: false, message: "Inventory item not found" });
 
       const updated = await inventoryItemService.updateInventoryItem(id, {
-        ...(sku !== undefined ? { sku: sku === undefined || sku === null || sku.trim() === "" ? null : sku.trim() } : {}),
+        ...(sku !== undefined
+          ? { sku: sku === undefined || sku === null || sku.trim() === "" ? null : sku.trim() }
+          : {}),
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(categoryId !== undefined ? { categoryId } : {}),
         ...(subCategoryId !== undefined ? { subCategoryId } : {}),
         ...(brandId !== undefined ? { brandId } : {}),
         ...(uomId !== undefined ? { uomId } : {}),
-        ...(normalizedBarcode !== undefined ? { barcode: normalizedBarcode === null || normalizedBarcode === undefined || normalizedBarcode.trim() === "" ? null : normalizedBarcode.trim() } : {}),
+        ...(normalizedBarcode !== undefined
+          ? {
+              barcode:
+                normalizedBarcode === null ||
+                normalizedBarcode === undefined ||
+                normalizedBarcode.trim() === ""
+                  ? null
+                  : normalizedBarcode.trim(),
+            }
+          : {}),
         ...(costPrice !== undefined ? { costPrice } : {}),
         ...(sellingPrice !== undefined ? { sellingPrice } : {}),
         ...(lowStockThreshold !== undefined ? { lowStockThreshold } : {}),
         ...(status !== undefined ? { status } : {}),
       });
 
-      return res.json({ success: true, message: "Inventory item updated successfully", data: updated });
+      return res.json({
+        success: true,
+        message: "Inventory item updated successfully",
+        data: updated,
+      });
     } catch (error: any) {
       const message = error?.message ?? "Failed to update inventory item";
       const status = message.includes("already exists") ? 409 : 500;
@@ -897,13 +978,23 @@ export const inventoryItemController = {
       if (!id) return res.status(400).json({ success: false, message: "id is required" });
 
       const existing = await inventoryItemService.getInventoryItemById(id);
-      if (!existing) return res.status(404).json({ success: false, message: "Inventory item not found" });
+      if (!existing)
+        return res.status(404).json({ success: false, message: "Inventory item not found" });
 
       const deleted = await inventoryItemService.deleteInventoryItem(id);
-      return res.json({ success: true, message: "Inventory item deleted successfully", data: deleted });
+      return res.json({
+        success: true,
+        message: "Inventory item deleted successfully",
+        data: deleted,
+      });
     } catch (error: any) {
-      return res.status(500).json({ success: false, message: "Failed to delete inventory item", error: error?.message });
+      const message = error?.message || "Failed to delete inventory item";
+      const status = message.includes("Cannot delete")
+        ? 409
+        : message === "Inventory item not found"
+          ? 404
+          : 500;
+      return res.status(status).json({ success: false, message });
     }
   },
 };
-

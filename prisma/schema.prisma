@@ -665,7 +665,7 @@ enum EmploymentType {
 
 model Staff {
   id                            String                         @id @default(uuid()) @db.Char(36)
-  StaffNumber                   String                         @unique @map("staff_number") @db.Char(36)
+  StaffNumber                   String                         @unique @map("staff_number") @db.VarChar(50)
   email                         String                         @unique
   name                          String
   position                      StaffPosition                  @default(teacher)
