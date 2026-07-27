@@ -4631,6 +4631,18 @@ async function main() {
         classId: classIds.ss1,
         status: "Active",
       },
+      {
+        id: "d5e6f7a8-b9c0-4123-d012-345678906006",
+        name: "A",
+        classId: classIds.jss3,
+        status: "Active",
+      },
+      {
+        id: "d5e6f7a8-b9c0-4123-d012-345678906007",
+        name: "A",
+        classId: classIds.ss2,
+        status: "Active",
+      },
     ];
 
     for (const sub of subClasses) {
@@ -4655,6 +4667,8 @@ async function main() {
       jss2A: "d5e6f7a8-b9c0-4123-d012-345678906003",
       jss2B: "d5e6f7a8-b9c0-4123-d012-345678906004",
       ss1A: "d5e6f7a8-b9c0-4123-d012-345678906005",
+      jss3A: "d5e6f7a8-b9c0-4123-d012-345678906006",
+      ss2A: "d5e6f7a8-b9c0-4123-d012-345678906007",
     };
 
     const students = [
@@ -4753,7 +4767,7 @@ async function main() {
         gender: "female",
         dateOfBirth: new Date("2011-06-30"),
         classId: classIds.jss3,
-        subClassId: null,
+        subClassId: subClassIds.jss3A,
         guardianName: "Alhaji Yusuf Ibrahim",
         guardianEmail: "yusuf.ibrahim@email.com",
         guardianContact: "+2348011111005",
@@ -4815,7 +4829,7 @@ async function main() {
         gender: "male",
         dateOfBirth: new Date("2009-05-22"),
         classId: classIds.ss2,
-        subClassId: null,
+        subClassId: subClassIds.ss2A,
         guardianName: "Mrs. Bola Ojo",
         guardianEmail: "bola.ojo@email.com",
         guardianContact: "+2348011111008",
@@ -5167,6 +5181,20 @@ async function main() {
         sessionId: seededSession.id,
         termId: seededTerm.id,
       },
+      {
+        id: "c5d6e7f8-a9b0-4123-d456-789012ab0110",
+        classId: classIds.jss3,
+        templateId: AT.JSS,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "d6e7f8a9-b0c1-4234-e567-890123ab0111",
+        classId: classIds.ss2,
+        templateId: AT.SS,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
     ];
 
     for (const row of classAssessmentTemplates) {
@@ -5244,6 +5272,62 @@ async function main() {
         classId: classIds.jss2,
         subclassId: null,
         subjectId: SUB.CIV,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "a5b6c7d8-e9f0-4178-b234-567890ab0100",
+        classId: classIds.jss3,
+        subclassId: null,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "b6c7d8e9-f0a1-4289-c345-678901ab0101",
+        classId: classIds.jss3,
+        subclassId: null,
+        subjectId: SUB.ENG,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "c7d8e9f0-a1b2-4390-d456-789012ab0102",
+        classId: classIds.ss1,
+        subclassId: null,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "d8e9f0a1-b2c3-4401-e567-890123ab0103",
+        classId: classIds.ss1,
+        subclassId: null,
+        subjectId: SUB.ENG,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "e9f0a1b2-c3d4-4512-f678-901234ab0104",
+        classId: classIds.ss1,
+        subclassId: null,
+        subjectId: SUB.CRS,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "f0a1b2c3-d4e5-4623-a789-012345ab0105",
+        classId: classIds.ss2,
+        subclassId: null,
+        subjectId: SUB.ENG,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: "a1b2c3d4-e5f6-4734-b890-123456ab0106",
+        classId: classIds.ss2,
+        subclassId: null,
+        subjectId: SUB.CRS,
         sessionId: seededSession.id,
         termId: seededTerm.id,
       },
@@ -5370,13 +5454,32 @@ async function main() {
       CHIOMA: "e6f7a8b9-c0d1-4234-e012-345678907001",
       IBRAHIM: "e6f7a8b9-c0d1-4234-e012-345678907002",
       GRACE: "e6f7a8b9-c0d1-4234-e012-345678907003",
+      DAVID: "e6f7a8b9-c0d1-4234-e012-345678907004",
+      AMINA: "e6f7a8b9-c0d1-4234-e012-345678907005",
+      EMMANUEL: "e6f7a8b9-c0d1-4234-e012-345678907006",
+      FATIMA: "e6f7a8b9-c0d1-4234-e012-345678907007",
+      SAMUEL: "e6f7a8b9-c0d1-4234-e012-345678907008",
     };
 
     const SSR = {
       CHIOMA_MTH: "a5b6c7d8-e9f0-4178-b234-567890ab0024",
       CHIOMA_ENG: "b6c7d8e9-f0a1-4289-c345-678901ab0025",
+      CHIOMA_BST: "c7d8e9f0-a1b2-4390-d456-789012ab0120",
       IBRAHIM_MTH: "c7d8e9f0-a1b2-4390-d456-789012ab0026",
+      IBRAHIM_ENG: "d8e9f0a1-b2c3-4401-e567-890123ab0121",
       GRACE_MTH: "d8e9f0a1-b2c3-4401-e567-890123ab0027",
+      GRACE_CIV: "e9f0a1b2-c3d4-4512-f678-901234ab0122",
+      DAVID_MTH: "f0a1b2c3-d4e5-4623-a789-012345ab0123",
+      DAVID_CIV: "a1b2c3d4-e5f6-4734-b890-123456ab0124",
+      AMINA_MTH: "b2c3d4e5-f6a7-4845-c901-234567ab0125",
+      AMINA_ENG: "c3d4e5f6-a7b8-4956-d012-345678ab0126",
+      EMMANUEL_MTH: "d4e5f6a7-b8c9-4067-e123-456789ab0127",
+      EMMANUEL_ENG: "e5f6a7b8-c9d0-4178-f234-567890ab0128",
+      EMMANUEL_CRS: "f6a7b8c9-d0e1-4289-a345-678901ab0129",
+      FATIMA_ENG: "a7b8c9d0-e1f2-4390-b456-789012ab0130",
+      FATIMA_CRS: "b8c9d0e1-f2a3-4401-c567-890123ab0131",
+      SAMUEL_ENG: "c9d0e1f2-a3b4-4512-d678-901234ab0132",
+      SAMUEL_CRS: "d0e1f2a3-b4c5-4623-e789-012345ab0133",
     };
 
     const studentSubjectRegistrations = [
@@ -5399,6 +5502,15 @@ async function main() {
         termId: seededTerm.id,
       },
       {
+        id: SSR.CHIOMA_BST,
+        studentId: STU.CHIOMA,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        subjectId: SUB.BST,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
         id: SSR.IBRAHIM_MTH,
         studentId: STU.IBRAHIM,
         classId: classIds.jss1,
@@ -5408,11 +5520,128 @@ async function main() {
         termId: seededTerm.id,
       },
       {
+        id: SSR.IBRAHIM_ENG,
+        studentId: STU.IBRAHIM,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1B,
+        subjectId: SUB.ENG,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
         id: SSR.GRACE_MTH,
         studentId: STU.GRACE,
         classId: classIds.jss2,
         subclassId: subClassIds.jss2A,
         subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.GRACE_CIV,
+        studentId: STU.GRACE,
+        classId: classIds.jss2,
+        subclassId: subClassIds.jss2A,
+        subjectId: SUB.CIV,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.DAVID_MTH,
+        studentId: STU.DAVID,
+        classId: classIds.jss2,
+        subclassId: subClassIds.jss2B,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.DAVID_CIV,
+        studentId: STU.DAVID,
+        classId: classIds.jss2,
+        subclassId: subClassIds.jss2B,
+        subjectId: SUB.CIV,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.AMINA_MTH,
+        studentId: STU.AMINA,
+        classId: classIds.jss3,
+        subclassId: subClassIds.jss3A,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.AMINA_ENG,
+        studentId: STU.AMINA,
+        classId: classIds.jss3,
+        subclassId: subClassIds.jss3A,
+        subjectId: SUB.ENG,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.EMMANUEL_MTH,
+        studentId: STU.EMMANUEL,
+        classId: classIds.ss1,
+        subclassId: subClassIds.ss1A,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.EMMANUEL_ENG,
+        studentId: STU.EMMANUEL,
+        classId: classIds.ss1,
+        subclassId: subClassIds.ss1A,
+        subjectId: SUB.ENG,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.EMMANUEL_CRS,
+        studentId: STU.EMMANUEL,
+        classId: classIds.ss1,
+        subclassId: subClassIds.ss1A,
+        subjectId: SUB.CRS,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.FATIMA_ENG,
+        studentId: STU.FATIMA,
+        classId: classIds.ss1,
+        subclassId: subClassIds.ss1A,
+        subjectId: SUB.ENG,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.FATIMA_CRS,
+        studentId: STU.FATIMA,
+        classId: classIds.ss1,
+        subclassId: subClassIds.ss1A,
+        subjectId: SUB.CRS,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.SAMUEL_ENG,
+        studentId: STU.SAMUEL,
+        classId: classIds.ss2,
+        subclassId: subClassIds.ss2A,
+        subjectId: SUB.ENG,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+      },
+      {
+        id: SSR.SAMUEL_CRS,
+        studentId: STU.SAMUEL,
+        classId: classIds.ss2,
+        subclassId: subClassIds.ss2A,
+        subjectId: SUB.CRS,
         sessionId: seededSession.id,
         termId: seededTerm.id,
       },
@@ -5433,69 +5662,73 @@ async function main() {
       });
     }
 
-    const studentAssessmentScores = [
-      {
-        id: "e9f0a1b2-c3d4-4512-f678-901234ab0028",
-        studentSubjectRegistrationId: SSR.CHIOMA_MTH,
-        classId: classIds.jss1,
-        subclassId: subClassIds.jss1A,
-        subjectId: SUB.MTH,
-        componentId: AC.JSS_CA1,
-        termId: seededTerm.id,
-        sessionId: seededSession.id,
-        score: 8.5,
-      },
-      {
-        id: "f0a1b2c3-d4e5-4623-a789-012345ab0029",
-        studentSubjectRegistrationId: SSR.CHIOMA_MTH,
-        classId: classIds.jss1,
-        subclassId: subClassIds.jss1A,
-        subjectId: SUB.MTH,
-        componentId: AC.JSS_CA2,
-        termId: seededTerm.id,
-        sessionId: seededSession.id,
-        score: 9,
-      },
-      {
-        id: "a1b2c3d4-e5f6-4734-b890-123456ab0030",
-        studentSubjectRegistrationId: SSR.CHIOMA_MTH,
-        classId: classIds.jss1,
-        subclassId: subClassIds.jss1A,
-        subjectId: SUB.MTH,
-        componentId: AC.JSS_MID,
-        termId: seededTerm.id,
-        sessionId: seededSession.id,
-        score: 17,
-      },
-      {
-        id: "b2c3d4e5-f6a7-4845-c901-234567ab0031",
-        studentSubjectRegistrationId: SSR.IBRAHIM_MTH,
-        classId: classIds.jss1,
-        subclassId: subClassIds.jss1B,
-        subjectId: SUB.MTH,
-        componentId: AC.JSS_CA1,
-        termId: seededTerm.id,
-        sessionId: seededSession.id,
-        score: 7,
-      },
-      {
-        id: "c3d4e5f6-a7b8-4956-d012-345678ab0032",
-        studentSubjectRegistrationId: SSR.GRACE_MTH,
-        classId: classIds.jss2,
-        subclassId: subClassIds.jss2A,
-        subjectId: SUB.MTH,
-        componentId: AC.JSS_CA1,
-        termId: seededTerm.id,
-        sessionId: seededSession.id,
-        score: 10,
-      },
+    const jssClassIds = new Set([classIds.jss1, classIds.jss2, classIds.jss3]);
+    const jssComponents = [
+      { componentId: AC.JSS_CA1, maxScore: 10 },
+      { componentId: AC.JSS_CA2, maxScore: 10 },
+      { componentId: AC.JSS_MID, maxScore: 20 },
+      { componentId: AC.JSS_EXAM, maxScore: 60 },
     ];
+    const ssComponents = [
+      { componentId: AC.SS_CA, maxScore: 40 },
+      { componentId: AC.SS_EXAM, maxScore: 60 },
+    ];
+
+    const studentPerformanceTier = {
+      [STU.CHIOMA]: 0.88,
+      [STU.IBRAHIM]: 0.72,
+      [STU.GRACE]: 0.84,
+      [STU.DAVID]: 0.63,
+      [STU.AMINA]: 0.9,
+      [STU.EMMANUEL]: 0.78,
+      [STU.FATIMA]: 0.7,
+      [STU.SAMUEL]: 0.58,
+    };
+
+    const subjectScoreOffsets = {
+      [SUB.MTH]: 0,
+      [SUB.ENG]: -0.03,
+      [SUB.BST]: 0.02,
+      [SUB.CIV]: -0.01,
+      [SUB.CRS]: 0.01,
+    };
+
+    let assessmentScoreSeq = 28;
+    const studentAssessmentScores = [];
+
+    for (const registration of studentSubjectRegistrations) {
+      const tier =
+        (studentPerformanceTier[registration.studentId] ?? 0.7) +
+        (subjectScoreOffsets[registration.subjectId] ?? 0);
+      const components = jssClassIds.has(registration.classId) ? jssComponents : ssComponents;
+
+      components.forEach((component, componentIndex) => {
+        const variance = ((componentIndex % 3) - 1) * 0.04;
+        const rawScore = component.maxScore * Math.min(0.98, Math.max(0.45, tier + variance));
+        const score = Math.round(rawScore * 10) / 10;
+
+        studentAssessmentScores.push({
+          id: `e9f0a1b2-c3d4-4${String(assessmentScoreSeq).padStart(3, "0")}-f678-901234ab0000`,
+          studentSubjectRegistrationId: registration.id,
+          studentId: registration.studentId,
+          classId: registration.classId,
+          subclassId: registration.subclassId,
+          subjectId: registration.subjectId,
+          componentId: component.componentId,
+          termId: seededTerm.id,
+          sessionId: seededSession.id,
+          score,
+        });
+        assessmentScoreSeq += 1;
+      });
+    }
 
     for (const row of studentAssessmentScores) {
       await prisma.studentAssessmentScore.upsert({
         where: { id: row.id },
         update: {
           studentSubjectRegistrationId: row.studentSubjectRegistrationId,
+          studentId: row.studentId,
           classId: row.classId,
           subclassId: row.subclassId,
           subjectId: row.subjectId,
@@ -5799,78 +6032,87 @@ async function main() {
       });
     }
 
-    const studentBehaviouralAssessmentScores = [
+    const behaviouralComponents = [
+      BAC.PUNCTUALITY,
+      BAC.NEATNESS,
+      BAC.POLITENESS,
+      BAC.PARTICIPATION,
+      BAC.HONESTY,
+    ];
+
+    const studentPlacement = [
       {
-        id: "e3f4a5b6-c7d8-4123-a345-678901ab0052",
         studentId: STU.CHIOMA,
-        behaviouralAssessmentComponentId: BAC.PUNCTUALITY,
         classId: classIds.jss1,
         subclassId: subClassIds.jss1A,
-        sessionId: seededSession.id,
-        termId: seededTerm.id,
-        score: 5,
+        conductTier: 0.95,
       },
       {
-        id: "f4a5b6c7-d8e9-4234-b456-789012ab0053",
-        studentId: STU.CHIOMA,
-        behaviouralAssessmentComponentId: BAC.NEATNESS,
-        classId: classIds.jss1,
-        subclassId: subClassIds.jss1A,
-        sessionId: seededSession.id,
-        termId: seededTerm.id,
-        score: 4,
-      },
-      {
-        id: "a5b6c7d8-e9f0-4345-c567-890123ab0054",
-        studentId: STU.CHIOMA,
-        behaviouralAssessmentComponentId: BAC.POLITENESS,
-        classId: classIds.jss1,
-        subclassId: subClassIds.jss1A,
-        sessionId: seededSession.id,
-        termId: seededTerm.id,
-        score: 5,
-      },
-      {
-        id: "d8e9f0a1-b2c3-4678-f890-123456ab0057",
         studentId: STU.IBRAHIM,
-        behaviouralAssessmentComponentId: BAC.PUNCTUALITY,
         classId: classIds.jss1,
         subclassId: subClassIds.jss1B,
-        sessionId: seededSession.id,
-        termId: seededTerm.id,
-        score: 3,
+        conductTier: 0.72,
       },
       {
-        id: "e9f0a1b2-c3d4-4789-a901-234567ab0058",
-        studentId: STU.IBRAHIM,
-        behaviouralAssessmentComponentId: BAC.NEATNESS,
-        classId: classIds.jss1,
-        subclassId: subClassIds.jss1B,
-        sessionId: seededSession.id,
-        termId: seededTerm.id,
-        score: 4,
-      },
-      {
-        id: "a1b2c3d4-e5f6-4901-c123-456789ab0060",
         studentId: STU.GRACE,
-        behaviouralAssessmentComponentId: BAC.PUNCTUALITY,
         classId: classIds.jss2,
         subclassId: subClassIds.jss2A,
-        sessionId: seededSession.id,
-        termId: seededTerm.id,
-        score: 4,
+        conductTier: 0.88,
       },
       {
-        id: "b2c3d4e5-f6a7-4012-d234-567890ab0061",
-        studentId: STU.GRACE,
-        behaviouralAssessmentComponentId: BAC.NEATNESS,
+        studentId: STU.DAVID,
         classId: classIds.jss2,
-        subclassId: subClassIds.jss2A,
-        sessionId: seededSession.id,
-        termId: seededTerm.id,
-        score: 5,
+        subclassId: subClassIds.jss2B,
+        conductTier: 0.68,
+      },
+      {
+        studentId: STU.AMINA,
+        classId: classIds.jss3,
+        subclassId: subClassIds.jss3A,
+        conductTier: 0.92,
+      },
+      {
+        studentId: STU.EMMANUEL,
+        classId: classIds.ss1,
+        subclassId: subClassIds.ss1A,
+        conductTier: 0.8,
+      },
+      {
+        studentId: STU.FATIMA,
+        classId: classIds.ss1,
+        subclassId: subClassIds.ss1A,
+        conductTier: 0.76,
+      },
+      {
+        studentId: STU.SAMUEL,
+        classId: classIds.ss2,
+        subclassId: subClassIds.ss2A,
+        conductTier: 0.62,
       },
     ];
+
+    let behaviouralScoreSeq = 52;
+    const studentBehaviouralAssessmentScores = [];
+
+    for (const placement of studentPlacement) {
+      behaviouralComponents.forEach((componentId, componentIndex) => {
+        const variance = ((componentIndex % 2) - 0.5) * 0.6;
+        const rawScore = 5 * Math.min(1, Math.max(0.4, placement.conductTier + variance / 5));
+        const score = Math.round(rawScore * 10) / 10;
+
+        studentBehaviouralAssessmentScores.push({
+          id: `e3f4a5b6-c7d8-4${String(behaviouralScoreSeq).padStart(3, "0")}-a345-678901ab0000`,
+          studentId: placement.studentId,
+          behaviouralAssessmentComponentId: componentId,
+          classId: placement.classId,
+          subclassId: placement.subclassId,
+          sessionId: seededSession.id,
+          termId: seededTerm.id,
+          score,
+        });
+        behaviouralScoreSeq += 1;
+      });
+    }
 
     for (const row of studentBehaviouralAssessmentScores) {
       await prisma.studentBehaviouralAssessmentScore.upsert({
@@ -5889,7 +6131,11 @@ async function main() {
     }
 
     await prisma.classAssessmentTemplate.updateMany({
-      where: { classId: { in: [classIds.jss1, classIds.jss2] } },
+      where: {
+        classId: {
+          in: [classIds.jss1, classIds.jss2, classIds.jss3, classIds.ss1, classIds.ss2],
+        },
+      },
       data: {
         gradeTemplateId: GT.JSS,
         behaviouralTemplateId: BAT.JSS,
@@ -6037,6 +6283,309 @@ async function main() {
     }
 
     console.log(`   ✓ ${defaultClassRemarkSetups.length} default class remark setups`);
+
+    // ─── Assignments & student submissions ───
+    console.log("📚 Seeding assignments and student submissions...");
+
+    await prisma.studentAssignmentAttachment.deleteMany({});
+    await prisma.studentAssignment.deleteMany({});
+    await prisma.assignmentAttachment.deleteMany({});
+    await prisma.assignment.deleteMany({});
+
+    const ASG = {
+      JSS1_MTH: "f1a2b3c4-d5e6-4789-a123-456789ab0200",
+      JSS1_ENG: "f1a2b3c4-d5e6-4789-a123-456789ab0201",
+      JSS2_MTH: "f1a2b3c4-d5e6-4789-a123-456789ab0202",
+      SS1_CRS: "f1a2b3c4-d5e6-4789-a123-456789ab0203",
+    };
+
+    const assignmentDeadline = new Date("2026-07-15T23:59:59.000Z");
+    const submittedAt = new Date("2026-07-10T14:30:00.000Z");
+    const gradedAt = new Date("2026-07-12T09:15:00.000Z");
+
+    const assignments = [
+      {
+        id: ASG.JSS1_MTH,
+        topic: "Fractions and Decimals",
+        question:
+          "Solve the following: (a) Convert 3/8 to a decimal. (b) Add 2¾ and 1⅖. Show all working.",
+        classId: classIds.jss1,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        assignmentComponentId: AC.JSS_CA1,
+        deadline: assignmentDeadline,
+        status: "Pending",
+        createdById: STAFF_USER.ADA,
+      },
+      {
+        id: ASG.JSS1_ENG,
+        topic: "Descriptive Essay — My Community",
+        question:
+          "Write a descriptive essay of 250–300 words about your community. Include sensory details and a clear introduction and conclusion.",
+        classId: classIds.jss1,
+        subjectId: SUB.ENG,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        assignmentComponentId: AC.JSS_CA2,
+        deadline: assignmentDeadline,
+        status: "Pending",
+        createdById: STAFF_USER.ADA,
+      },
+      {
+        id: ASG.JSS2_MTH,
+        topic: "Linear Equations",
+        question:
+          "Solve for x: (a) 3x + 7 = 22 (b) 2(x - 4) = 10 (c) 5x - 3 = 2x + 9. Show each step clearly.",
+        classId: classIds.jss2,
+        subjectId: SUB.MTH,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        assignmentComponentId: AC.JSS_CA1,
+        deadline: assignmentDeadline,
+        status: "Pending",
+        createdById: STAFF_USER.JAMES,
+      },
+      {
+        id: ASG.SS1_CRS,
+        topic: "The Good Samaritan",
+        question:
+          "Read Luke 10:25–37. In 200–250 words, explain the moral lesson of the parable and how it applies to school life today.",
+        classId: classIds.ss1,
+        subjectId: SUB.CRS,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        assignmentComponentId: AC.SS_CA,
+        deadline: assignmentDeadline,
+        status: "Pending",
+        createdById: adminUserId,
+      },
+    ];
+
+    for (const row of assignments) {
+      await prisma.assignment.upsert({
+        where: { id: row.id },
+        update: {
+          topic: row.topic,
+          question: row.question,
+          classId: row.classId,
+          subjectId: row.subjectId,
+          sessionId: row.sessionId,
+          termId: row.termId,
+          assignmentComponentId: row.assignmentComponentId,
+          deadline: row.deadline,
+          status: row.status,
+          createdById: row.createdById,
+        },
+        create: row,
+      });
+    }
+
+    const assignmentAttachments = [
+      {
+        id: "a2b3c4d5-e6f7-4890-a234-567890ab0210",
+        assignmentId: ASG.JSS1_MTH,
+        url: "https://cdn.school.ng/assignments/jss1-maths-fractions-worksheet.pdf",
+      },
+      {
+        id: "b3c4d5e6-f7a8-4901-b345-678901ab0211",
+        assignmentId: ASG.JSS1_ENG,
+        url: "https://cdn.school.ng/assignments/jss1-english-essay-rubric.pdf",
+      },
+      {
+        id: "c4d5e6f7-a8b9-4012-c456-789012ab0212",
+        assignmentId: ASG.SS1_CRS,
+        url: "https://cdn.school.ng/assignments/ss1-crs-good-samaritan-passage.pdf",
+      },
+    ];
+
+    for (const row of assignmentAttachments) {
+      await prisma.assignmentAttachment.upsert({
+        where: { id: row.id },
+        update: { assignmentId: row.assignmentId, url: row.url },
+        create: row,
+      });
+    }
+
+    const studentAssignments = [
+      {
+        id: "d5e6f7a8-b9c0-4123-d012-345678ab0220",
+        assignmentId: ASG.JSS1_MTH,
+        studentId: STU.CHIOMA,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        answer:
+          "(a) 3/8 = 0.375\n(b) 2¾ + 1⅖ = 11/4 + 7/5 = 55/20 + 28/20 = 83/20 = 4 3/20",
+        score: 8.5,
+        status: "Graded",
+        submittedAt,
+        gradedAt,
+        gradedBy: STAFF_USER.ADA,
+      },
+      {
+        id: "e6f7a8b9-c0d1-4234-e012-345678ab0221",
+        assignmentId: ASG.JSS1_MTH,
+        studentId: STU.IBRAHIM,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1B,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        answer: "(a) 0.375\n(b) I converted to improper fractions and got 4 1/5.",
+        score: null,
+        status: "Submitted",
+        submittedAt,
+        gradedAt: null,
+        gradedBy: null,
+      },
+      {
+        id: "f7a8b9c0-d1e2-4345-f123-456789ab0222",
+        assignmentId: ASG.JSS1_ENG,
+        studentId: STU.CHIOMA,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        answer:
+          "My community is a lively neighbourhood in Lekki where neighbours greet one another every morning...",
+        score: 9,
+        status: "Graded",
+        submittedAt,
+        gradedAt,
+        gradedBy: STAFF_USER.ADA,
+      },
+      {
+        id: "a8b9c0d1-e2f3-4456-a234-567890ab0223",
+        assignmentId: ASG.JSS1_ENG,
+        studentId: STU.IBRAHIM,
+        classId: classIds.jss1,
+        subclassId: subClassIds.jss1B,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        answer: null,
+        score: null,
+        status: "Pending",
+        submittedAt: null,
+        gradedAt: null,
+        gradedBy: null,
+      },
+      {
+        id: "b9c0d1e2-f3a4-4567-b345-678901ab0224",
+        assignmentId: ASG.JSS2_MTH,
+        studentId: STU.GRACE,
+        classId: classIds.jss2,
+        subclassId: subClassIds.jss2A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        answer: "(a) x = 5 (b) x = 9 (c) x = 4",
+        score: 9.5,
+        status: "Graded",
+        submittedAt,
+        gradedAt,
+        gradedBy: STAFF_USER.JAMES,
+      },
+      {
+        id: "c0d1e2f3-a4b5-4678-c456-789012ab0225",
+        assignmentId: ASG.JSS2_MTH,
+        studentId: STU.DAVID,
+        classId: classIds.jss2,
+        subclassId: subClassIds.jss2B,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        answer: "(a) x = 5 (b) x = 9 (c) x = 3 — please check part (c).",
+        score: null,
+        status: "Submitted",
+        submittedAt,
+        gradedAt: null,
+        gradedBy: null,
+      },
+      {
+        id: "d1e2f3a4-b5c6-4789-d567-890123ab0226",
+        assignmentId: ASG.SS1_CRS,
+        studentId: STU.EMMANUEL,
+        classId: classIds.ss1,
+        subclassId: subClassIds.ss1A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        answer:
+          "The Good Samaritan teaches us to help others regardless of background. At school, this means standing up for classmates and offering help without prejudice.",
+        score: 35,
+        status: "Graded",
+        submittedAt,
+        gradedAt,
+        gradedBy: adminUserId,
+      },
+      {
+        id: "e2f3a4b5-c6d7-4890-e678-901234ab0227",
+        assignmentId: ASG.SS1_CRS,
+        studentId: STU.FATIMA,
+        classId: classIds.ss1,
+        subclassId: subClassIds.ss1A,
+        sessionId: seededSession.id,
+        termId: seededTerm.id,
+        answer: null,
+        score: null,
+        status: "Pending",
+        submittedAt: null,
+        gradedAt: null,
+        gradedBy: null,
+      },
+    ];
+
+    for (const row of studentAssignments) {
+      await prisma.studentAssignment.upsert({
+        where: { id: row.id },
+        update: {
+          assignmentId: row.assignmentId,
+          studentId: row.studentId,
+          classId: row.classId,
+          subclassId: row.subclassId,
+          sessionId: row.sessionId,
+          termId: row.termId,
+          answer: row.answer,
+          score: row.score,
+          status: row.status,
+          submittedAt: row.submittedAt,
+          gradedAt: row.gradedAt,
+          gradedBy: row.gradedBy,
+        },
+        create: row,
+      });
+    }
+
+    const studentAssignmentAttachments = [
+      {
+        id: "f3a4b5c6-d7e8-4901-a789-012345ab0230",
+        studentAssignmentId: "d5e6f7a8-b9c0-4123-d012-345678ab0220",
+        url: "https://cdn.school.ng/submissions/chioma-fractions-working-scan.jpg",
+      },
+      {
+        id: "a4b5c6d7-e8f9-4012-b890-123456ab0231",
+        studentAssignmentId: "f7a8b9c0-d1e2-4345-f123-456789ab0222",
+        url: "https://cdn.school.ng/submissions/chioma-essay-draft.docx",
+      },
+      {
+        id: "b5c6d7e8-f9a0-4123-c901-234567ab0232",
+        studentAssignmentId: "b9c0d1e2-f3a4-4567-b345-678901ab0224",
+        url: "https://cdn.school.ng/submissions/grace-linear-equations.pdf",
+      },
+    ];
+
+    for (const row of studentAssignmentAttachments) {
+      await prisma.studentAssignmentAttachment.upsert({
+        where: { id: row.id },
+        update: { studentAssignmentId: row.studentAssignmentId, url: row.url },
+        create: row,
+      });
+    }
+
+    console.log(
+      `   ✓ ${assignments.length} assignments, ${assignmentAttachments.length} assignment attachments`
+    );
+    console.log(
+      `   ✓ ${studentAssignments.length} student assignments, ${studentAssignmentAttachments.length} submission attachments`
+    );
 
     // Class default billings (amounts per class for current session / term)
     console.log("📋 Seeding class default billings...");
