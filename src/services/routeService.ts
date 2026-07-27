@@ -1,5 +1,5 @@
 import prisma from "../utils/prisma";
-import { isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
+import { isPrismaKnownErrorWithCode, parseDecimalNonNegative } from "../utils/assessmentHttp";
 import { Prisma, Status } from "@prisma/client";
 
 const include = {
@@ -51,6 +51,9 @@ export interface RouteData {
   id: string;
   name: string;
   description: string | null;
+  homeToSchoolCost: string | null;
+  schoolToHomeCost: string | null;
+  roundTripCost: string | null;
   status: Status;
   createdAt: Date;
   updatedAt: Date;
@@ -59,11 +62,19 @@ export interface RouteData {
   _count: Row["_count"];
 }
 
+function decimalToString(value: Prisma.Decimal | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return value.toString();
+}
+
 function mapRow(row: Row): RouteData {
   return {
     id: row.id,
     name: row.name,
     description: row.description,
+    homeToSchoolCost: decimalToString(row.homeToSchoolCost),
+    schoolToHomeCost: decimalToString(row.schoolToHomeCost),
+    roundTripCost: decimalToString(row.roundTripCost),
     status: row.status,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -77,16 +88,32 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function parseOptionalCost(
+  value: string | number | null | undefined,
+  fieldName: string
+): Prisma.Decimal | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null) return null;
+  return parseDecimalNonNegative(value, fieldName);
+}
+
 export class RouteService {
   private prisma = prisma;
 
   async create(input: {
     name: string;
     description?: string | null;
+    homeToSchoolCost?: string | number | null;
+    schoolToHomeCost?: string | number | null;
+    roundTripCost?: string | number | null;
     status?: Status;
   }): Promise<RouteData> {
     const name = input.name.trim();
     if (!name) throw new Error("name is required");
+
+    const homeToSchoolCost = parseOptionalCost(input.homeToSchoolCost, "homeToSchoolCost");
+    const schoolToHomeCost = parseOptionalCost(input.schoolToHomeCost, "schoolToHomeCost");
+    const roundTripCost = parseOptionalCost(input.roundTripCost, "roundTripCost");
 
     try {
       const row = await this.prisma.route.create({
@@ -96,6 +123,9 @@ export class RouteService {
             input.description === undefined || input.description === null
               ? null
               : String(input.description).trim() || null,
+          ...(homeToSchoolCost !== undefined ? { homeToSchoolCost } : {}),
+          ...(schoolToHomeCost !== undefined ? { schoolToHomeCost } : {}),
+          ...(roundTripCost !== undefined ? { roundTripCost } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
         },
         include,
@@ -159,7 +189,14 @@ export class RouteService {
 
   async update(
     id: string,
-    input: { name?: string; description?: string | null; status?: Status }
+    input: {
+      name?: string;
+      description?: string | null;
+      homeToSchoolCost?: string | number | null;
+      schoolToHomeCost?: string | number | null;
+      roundTripCost?: string | number | null;
+      status?: Status;
+    }
   ): Promise<RouteData> {
     const existing = await this.getById(id);
     if (!existing) throw new Error("Route not found");
@@ -167,6 +204,10 @@ export class RouteService {
     if (input.name !== undefined && !input.name.trim()) {
       throw new Error("name cannot be empty");
     }
+
+    const homeToSchoolCost = parseOptionalCost(input.homeToSchoolCost, "homeToSchoolCost");
+    const schoolToHomeCost = parseOptionalCost(input.schoolToHomeCost, "schoolToHomeCost");
+    const roundTripCost = parseOptionalCost(input.roundTripCost, "roundTripCost");
 
     try {
       const row = await this.prisma.route.update({
@@ -179,6 +220,9 @@ export class RouteService {
                   input.description === null ? null : String(input.description).trim() || null,
               }
             : {}),
+          ...(homeToSchoolCost !== undefined ? { homeToSchoolCost } : {}),
+          ...(schoolToHomeCost !== undefined ? { schoolToHomeCost } : {}),
+          ...(roundTripCost !== undefined ? { roundTripCost } : {}),
           ...(input.status !== undefined ? { status: input.status } : {}),
         },
         include,

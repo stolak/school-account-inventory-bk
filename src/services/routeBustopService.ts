@@ -3,7 +3,7 @@ import { isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
 import { Prisma } from "@prisma/client";
 
 const include = {
-  route: { select: { id: true, name: true, status: true } },
+  route: { select: { id: true, name: true, homeToSchoolCost: true, schoolToHomeCost: true, roundTripCost: true, status: true } },
   bustop: {
     select: {
       id: true,

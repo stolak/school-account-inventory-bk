@@ -12,7 +12,7 @@ const include = {
     select: {
       id: true,
       routeId: true,
-      route: { select: { id: true, name: true, description: true, status: true } },
+      route: { select: { id: true, name: true, description: true, homeToSchoolCost: true, schoolToHomeCost: true, roundTripCost: true, status: true } },
       createdAt: true,
     },
   },

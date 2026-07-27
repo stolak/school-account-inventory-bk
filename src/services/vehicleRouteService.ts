@@ -13,7 +13,7 @@ const include = {
       driver: { select: { id: true, name: true, StaffNumber: true } },
     },
   },
-  route: { select: { id: true, name: true, description: true, status: true } },
+  route: { select: { id: true, name: true, description: true, homeToSchoolCost: true, schoolToHomeCost: true, roundTripCost: true, status: true } },
 } satisfies Prisma.VehicleRouteInclude;
 
 export type VehicleRouteData = Prisma.VehicleRouteGetPayload<{ include: typeof include }>;

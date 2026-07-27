@@ -6104,6 +6104,64 @@ async function main() {
       `   ✓ ${classDefaultBillings.length} class default billings (2025/2026, Third Term)`
     );
 
+    // Student billings — apply class defaults to each seeded student for current session/term
+    console.log("💳 Seeding student billings...");
+    let studentBillingCount = 0;
+    const billingApprovedAt = new Date("2026-04-01T09:00:00.000Z");
+
+    for (const student of students) {
+      const applicableDefaults = classDefaultBillings.filter(
+        (row) =>
+          row.classId === student.classId &&
+          (row.subclassId === null || row.subclassId === student.subClassId)
+      );
+
+      const referentId = `STB-SEED-${student.admissionNumber}`;
+
+      for (const row of applicableDefaults) {
+        const existing = await prisma.studentBilling.findFirst({
+          where: {
+            studentId: student.id,
+            session: row.session,
+            term: row.term,
+            billingId: row.billingId,
+          },
+          select: { id: true },
+        });
+
+        const data = {
+          studentId: student.id,
+          classId: student.classId,
+          subclassId: student.subClassId ?? null,
+          session: row.session,
+          term: row.term,
+          billingId: row.billingId,
+          amount: row.amount,
+          referentId,
+          status: "APPROVED",
+          createdBy: adminUserId,
+          approvedBy: adminUserId,
+          approvedAt: billingApprovedAt,
+          isPosted: false,
+          postedBy: null,
+          postedAt: null,
+        };
+
+        if (existing) {
+          await prisma.studentBilling.update({
+            where: { id: existing.id },
+            data,
+          });
+        } else {
+          await prisma.studentBilling.create({ data });
+        }
+        studentBillingCount += 1;
+      }
+    }
+    console.log(
+      `   ✓ ${studentBillingCount} student billing lines for ${students.length} students (APPROVED, unposted)`
+    );
+
     // Donated inventory (stock-in via donation transactions)
     console.log("🎁 Seeding donated inventory transactions...");
     const STORE_MAIN = "a3a4b5c6-d7e8-4890-a012-345678904001";
@@ -6332,12 +6390,18 @@ async function main() {
         id: TRANSPORT.routes.lekki,
         name: "Lekki Corridor",
         description: "Admiralty Way through Jakande to school gate",
+        homeToSchoolCost: 2500,
+        schoolToHomeCost: 2500,
+        roundTripCost: 4500,
         status: "Active",
       },
       {
         id: TRANSPORT.routes.ikeja,
         name: "Ikeja Express",
         description: "Alausa and Ikeja City Mall to school gate",
+        homeToSchoolCost: 2000,
+        schoolToHomeCost: 2000,
+        roundTripCost: 3500,
         status: "Active",
       },
     ];
@@ -6348,6 +6412,9 @@ async function main() {
         update: {
           name: route.name,
           description: route.description,
+          homeToSchoolCost: route.homeToSchoolCost,
+          schoolToHomeCost: route.schoolToHomeCost,
+          roundTripCost: route.roundTripCost,
           status: route.status,
         },
         create: route,

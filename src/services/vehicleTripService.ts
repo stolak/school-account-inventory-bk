@@ -18,7 +18,7 @@ const include = {
     select: {
       id: true,
       routeId: true,
-      route: { select: { id: true, name: true, status: true } },
+      route: { select: { id: true, name: true, homeToSchoolCost: true, schoolToHomeCost: true, roundTripCost: true, status: true } },
     },
     orderBy: { createdAt: "asc" as const },
   },
@@ -681,7 +681,7 @@ export class VehicleTripService {
               classId: true,
             },
           },
-          route: { select: { id: true, name: true, status: true } },
+          route: { select: { id: true, name: true, homeToSchoolCost: true, schoolToHomeCost: true, roundTripCost: true, status: true } },
           bustop: {
             select: { id: true, name: true, latitude: true, longitude: true, status: true },
           },

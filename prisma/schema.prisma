@@ -2051,9 +2051,13 @@ model VehicleRoute {
 }
 
 model Route {
-  id                String             @id @default(uuid()) @db.Char(36)
-  name              String             @map("name") @db.VarChar(50)
+  id   String @id @default(uuid()) @db.Char(36)
+  name String @map("name") @db.VarChar(50)
+
   description       String?            @map("description") @db.Text
+  homeToSchoolCost  Decimal?           @default(0) @map("home_to_school_cost") @db.Decimal(12, 2)
+  schoolToHomeCost  Decimal?           @default(0) @map("school_to_home_cost") @db.Decimal(12, 2)
+  roundTripCost     Decimal?           @default(0) @map("round_trip_cost") @db.Decimal(12, 2)
   createdAt         DateTime           @default(now()) @map("created_at")
   updatedAt         DateTime           @updatedAt @map("updated_at")
   vehicleRoutes     VehicleRoute[]

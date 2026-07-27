@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { Status } from "@prisma/client";
 import { routeService } from "../services/routeService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
+import { parseBodyDecimal } from "../utils/assessmentHttp";
 import { parseIntOrUndefined } from "../utils/request";
 
 function queryString(query: Request["query"], key: string): string | undefined {
@@ -14,6 +15,19 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
   if (raw === "All") return "All";
   if (raw === Status.Active || raw === Status.Inactive || raw === Status.Archived) return raw;
   return "invalid";
+}
+
+function parseOptionalCostField(
+  raw: unknown,
+  fieldName: string
+): { ok: true; value?: string | number | null } | { ok: false; message: string } {
+  if (raw === undefined) return { ok: true };
+  if (raw === null) return { ok: true, value: null };
+  const parsed = parseBodyDecimal(raw, fieldName);
+  if (parsed === "missing" || parsed === "invalid") {
+    return { ok: false, message: `${fieldName} must be a number or null` };
+  }
+  return { ok: true, value: parsed };
 }
 
 /**
@@ -36,6 +50,15 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  *                 type: string
  *               description:
  *                 type: string
+ *                 nullable: true
+ *               homeToSchoolCost:
+ *                 type: number
+ *                 nullable: true
+ *               schoolToHomeCost:
+ *                 type: number
+ *                 nullable: true
+ *               roundTripCost:
+ *                 type: number
  *                 nullable: true
  *               status:
  *                 type: string
@@ -118,6 +141,15 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
  *               description:
  *                 type: string
  *                 nullable: true
+ *               homeToSchoolCost:
+ *                 type: number
+ *                 nullable: true
+ *               schoolToHomeCost:
+ *                 type: number
+ *                 nullable: true
+ *               roundTripCost:
+ *                 type: number
+ *                 nullable: true
  *               status:
  *                 type: string
  *                 enum: [Active, Inactive, Archived]
@@ -153,7 +185,14 @@ function parseStatus(raw: unknown): Status | "All" | undefined | "invalid" {
 export const routeController = {
   create: async (req: Request, res: Response) => {
     try {
-      const { name, description, status } = req.body ?? {};
+      const {
+        name,
+        description,
+        homeToSchoolCost,
+        schoolToHomeCost,
+        roundTripCost,
+        status,
+      } = req.body ?? {};
       if (!name || typeof name !== "string" || !name.trim()) {
         return res.status(400).json({ success: false, message: "name is required" });
       }
@@ -166,11 +205,21 @@ export const routeController = {
         });
       }
 
+      const homeCost = parseOptionalCostField(homeToSchoolCost, "homeToSchoolCost");
+      if (!homeCost.ok) return res.status(400).json({ success: false, message: homeCost.message });
+      const schoolCost = parseOptionalCostField(schoolToHomeCost, "schoolToHomeCost");
+      if (!schoolCost.ok) return res.status(400).json({ success: false, message: schoolCost.message });
+      const roundCost = parseOptionalCostField(roundTripCost, "roundTripCost");
+      if (!roundCost.ok) return res.status(400).json({ success: false, message: roundCost.message });
+
       const created = await routeService.create({
         name: name.trim(),
         ...(description !== undefined
           ? { description: description === null ? null : String(description) }
           : {}),
+        ...(homeCost.value !== undefined ? { homeToSchoolCost: homeCost.value } : {}),
+        ...(schoolCost.value !== undefined ? { schoolToHomeCost: schoolCost.value } : {}),
+        ...(roundCost.value !== undefined ? { roundTripCost: roundCost.value } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
       });
 
@@ -236,11 +285,26 @@ export const routeController = {
       const id = requireRouteId(req, res);
       if (!id) return;
 
-      const { name, description, status } = req.body ?? {};
-      if (name === undefined && description === undefined && status === undefined) {
+      const {
+        name,
+        description,
+        homeToSchoolCost,
+        schoolToHomeCost,
+        roundTripCost,
+        status,
+      } = req.body ?? {};
+      if (
+        name === undefined &&
+        description === undefined &&
+        homeToSchoolCost === undefined &&
+        schoolToHomeCost === undefined &&
+        roundTripCost === undefined &&
+        status === undefined
+      ) {
         return res.status(400).json({
           success: false,
-          message: "At least one of name, description, or status must be provided",
+          message:
+            "At least one of name, description, homeToSchoolCost, schoolToHomeCost, roundTripCost, or status must be provided",
         });
       }
       if (name !== undefined && (typeof name !== "string" || !name.trim())) {
@@ -255,11 +319,21 @@ export const routeController = {
         });
       }
 
+      const homeCost = parseOptionalCostField(homeToSchoolCost, "homeToSchoolCost");
+      if (!homeCost.ok) return res.status(400).json({ success: false, message: homeCost.message });
+      const schoolCost = parseOptionalCostField(schoolToHomeCost, "schoolToHomeCost");
+      if (!schoolCost.ok) return res.status(400).json({ success: false, message: schoolCost.message });
+      const roundCost = parseOptionalCostField(roundTripCost, "roundTripCost");
+      if (!roundCost.ok) return res.status(400).json({ success: false, message: roundCost.message });
+
       const updated = await routeService.update(id, {
         ...(name !== undefined ? { name: name.trim() } : {}),
         ...(description !== undefined
           ? { description: description === null ? null : String(description) }
           : {}),
+        ...(homeCost.value !== undefined ? { homeToSchoolCost: homeCost.value } : {}),
+        ...(schoolCost.value !== undefined ? { schoolToHomeCost: schoolCost.value } : {}),
+        ...(roundCost.value !== undefined ? { roundTripCost: roundCost.value } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
       });
 
