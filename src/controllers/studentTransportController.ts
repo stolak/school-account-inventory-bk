@@ -31,6 +31,12 @@ function parseSubscriptionType(
   return "invalid";
 }
 
+function parseBoolean(raw: unknown): boolean | undefined | "invalid" {
+  if (raw === undefined) return undefined;
+  if (typeof raw === "boolean") return raw;
+  return "invalid";
+}
+
 /**
  * @openapi
  * /api/v1/student-transports:
@@ -72,6 +78,13 @@ function parseSubscriptionType(
  *               subscriptionType:
  *                 type: string
  *                 enum: [RoundTrip, OneWaySchool, OneWayHome]
+ *               canReversed:
+ *                 type: boolean
+ *                 default: false
+ *                 description: |
+ *                   When amount changes for an already posted subscription in the same period,
+ *                   set true to counter-post the previous charge before posting the new plan.
+ *                   Defaults to false and blocks the request.
  *     responses:
  *       201:
  *         description: Student transport assigned
@@ -165,6 +178,13 @@ function parseSubscriptionType(
  *               subscriptionType:
  *                 type: string
  *                 enum: [RoundTrip, OneWaySchool, OneWayHome]
+ *               canReversed:
+ *                 type: boolean
+ *                 default: false
+ *                 description: |
+ *                   When amount changes for an already posted subscription in the same period,
+ *                   set true to counter-post the previous charge before posting the new plan.
+ *                   Defaults to false and blocks the request.
  *     responses:
  *       200:
  *         description: Student transport upserted
@@ -245,6 +265,13 @@ function parseSubscriptionType(
  *               subscriptionType:
  *                 type: string
  *                 enum: [RoundTrip, OneWaySchool, OneWayHome]
+ *               canReversed:
+ *                 type: boolean
+ *                 default: false
+ *                 description: |
+ *                   When amount changes for an already posted subscription in the same period,
+ *                   set true to counter-post the previous charge before posting the new plan.
+ *                   Defaults to false and blocks the request.
  *     responses:
  *       200:
  *         description: Student transport updated
@@ -284,6 +311,7 @@ export const studentTransportController = {
         bustopId,
         status,
         subscriptionType,
+        canReversed,
         sessionId,
         termId,
         classId,
@@ -313,12 +341,20 @@ export const studentTransportController = {
           message: "subscriptionType must be one of RoundTrip, OneWaySchool, OneWayHome",
         });
       }
+      const parsedCanReversed = parseBoolean(canReversed);
+      if (parsedCanReversed === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "canReversed must be a boolean",
+        });
+      }
 
       const created = await studentTransportService.create({
         studentId: studentId.trim(),
         routeId: routeId.trim(),
         bustopId: bustopId.trim(),
         actedBy,
+        ...(parsedCanReversed !== undefined ? { canReversed: parsedCanReversed } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
         ...(parsedSubscriptionType !== undefined
           ? { subscriptionType: parsedSubscriptionType }
@@ -353,6 +389,7 @@ export const studentTransportController = {
         bustopId,
         status,
         subscriptionType,
+        canReversed,
         sessionId,
         termId,
         classId,
@@ -382,12 +419,20 @@ export const studentTransportController = {
           message: "subscriptionType must be one of RoundTrip, OneWaySchool, OneWayHome",
         });
       }
+      const parsedCanReversed = parseBoolean(canReversed);
+      if (parsedCanReversed === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "canReversed must be a boolean",
+        });
+      }
 
       const row = await studentTransportService.upsert({
         studentId: studentId.trim(),
         routeId: routeId.trim(),
         bustopId: bustopId.trim(),
         actedBy,
+        ...(parsedCanReversed !== undefined ? { canReversed: parsedCanReversed } : {}),
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
         ...(parsedSubscriptionType !== undefined
           ? { subscriptionType: parsedSubscriptionType }
@@ -513,6 +558,7 @@ export const studentTransportController = {
         bustopId,
         status,
         subscriptionType,
+        canReversed,
         sessionId,
         termId,
         classId,
@@ -547,9 +593,17 @@ export const studentTransportController = {
           message: "subscriptionType must be one of RoundTrip, OneWaySchool, OneWayHome",
         });
       }
+      const parsedCanReversed = parseBoolean(canReversed);
+      if (parsedCanReversed === "invalid") {
+        return res.status(400).json({
+          success: false,
+          message: "canReversed must be a boolean",
+        });
+      }
 
       const updated = await studentTransportService.update(id, {
         actedBy,
+        ...(parsedCanReversed !== undefined ? { canReversed: parsedCanReversed } : {}),
         ...(routeId !== undefined ? { routeId: String(routeId) } : {}),
         ...(bustopId !== undefined ? { bustopId: String(bustopId) } : {}),
         ...(sessionId !== undefined ? { sessionId: String(sessionId) } : {}),

@@ -74,7 +74,11 @@ export class StudentTransportService {
   private async syncTransportBilling(
     tx: Prisma.TransactionClient,
     subscription: StudentTransportData,
-    actedBy: string
+    actedBy: string,
+    options?: {
+      previousSubscription?: StudentTransportData | null;
+      canReversed?: boolean;
+    }
   ): Promise<void> {
     if (subscription.status !== Status.Active) return;
 
@@ -134,19 +138,75 @@ export class StudentTransportService {
     const subclassId = student.subClassId ?? null;
     const postedAt = new Date();
     const remarks = `Transport subscription billing for ${subscription.route.name} (${subscriptionType})`;
+    const previousSubscription = options?.previousSubscription ?? null;
+    const previousSubscriptionType =
+      previousSubscription?.subscriptionType ?? TransportSubscriptionType.RoundTrip;
+    // Prefer previous subscription plan amount; fall back to already-posted billing amount.
+    const previousAmount = previousSubscription
+      ? this.getTransportAmount(previousSubscription.route, previousSubscriptionType)
+      : existingBilling
+        ? decimalToNumber(existingBilling.amount)
+        : null;
+    const amountChanged = previousAmount !== null && previousAmount !== amount;
 
-    if (existingBilling?.isPosted) {
-      const postedAmount = decimalToNumber(existingBilling.amount);
+    // Same amount as previous plan: allow update freely (canReversed not required).
+    if (existingBilling?.isPosted && !amountChanged) {
       if (
-        postedAmount !== amount ||
         existingBilling.classId !== subscription.classId ||
         (existingBilling.subclassId ?? null) !== subclassId
       ) {
-        throw new Error(
-          "This transport subscription has already been billed and posted for the period. Reverse or adjust the billing before changing the subscription charge."
-        );
+        await tx.studentBilling.update({
+          where: { id: existingBilling.id },
+          data: {
+            classId: subscription.classId,
+            subclassId,
+          },
+        });
       }
       return;
+    }
+
+    // Amount changed for an already-posted period charge: require canReversed, then counter-post.
+    if (existingBilling?.isPosted && amountChanged) {
+      if (!options?.canReversed) {
+        throw new Error(
+          "Transport amount changed from the previous subscription. Retry with canReversed=true to counter-post the previous charge before posting the new one."
+        );
+      }
+
+      const postedAmount = decimalToNumber(existingBilling.amount);
+      const reversalRef = generateReferenceNo("STRREV");
+      const reversalManualRef = `STB-REV-${existingBilling.id}`;
+      const reversalRemarks = previousSubscription
+        ? `Transport subscription reversal for previous plan ${previousSubscription.route.name} (${previousSubscriptionType}) before posting ${subscription.route.name} (${subscriptionType})`
+        : `Transport subscription reversal before posting ${subscription.route.name} (${subscriptionType})`;
+
+      await accountTransactionService.debitAccount(
+        {
+          accountId: String(transportIncomeAccount.accountId),
+          amount: postedAmount,
+          ref: reversalRef,
+          manualRef: reversalManualRef,
+          transactionDate: postedAt.toISOString(),
+          postedBy: actedBy,
+          remarks: reversalRemarks,
+        },
+        tx
+      );
+
+      await accountTransactionService.creditAccount(
+        {
+          accountId: String(studentReceivableAccount.accountId),
+          amount: postedAmount,
+          ref: reversalRef,
+          manualRef: reversalManualRef,
+          accountSub: subscription.studentId,
+          transactionDate: postedAt.toISOString(),
+          postedBy: actedBy,
+          remarks: reversalRemarks,
+        },
+        tx
+      );
     }
 
     const billingRow = existingBilling
@@ -304,6 +364,7 @@ export class StudentTransportService {
     status: Status;
     subscriptionType?: TransportSubscriptionType;
     actedBy?: string;
+    canReversed?: boolean;
   }): Promise<StudentTransportData> {
     await this.assertRefs({
       studentId: input.studentId,
@@ -324,7 +385,7 @@ export class StudentTransportService {
               termId: input.termId,
             },
           },
-          select: { id: true },
+          include,
         });
 
         if (input.status === Status.Active) {
@@ -390,7 +451,10 @@ export class StudentTransportService {
         });
 
         if (input.actedBy?.trim()) {
-          await this.syncTransportBilling(tx, subscription, input.actedBy.trim());
+          await this.syncTransportBilling(tx, subscription, input.actedBy.trim(), {
+            previousSubscription: existing,
+            canReversed: input.canReversed,
+          });
         }
 
         return subscription;
@@ -418,6 +482,7 @@ export class StudentTransportService {
     termId?: string;
     classId?: string;
     actedBy?: string;
+    canReversed?: boolean;
   }): Promise<StudentTransportData> {
     const studentId = input.studentId.trim();
     const routeId = input.routeId.trim();
@@ -442,6 +507,7 @@ export class StudentTransportService {
       classId,
       status,
       actedBy: input.actedBy,
+      canReversed: input.canReversed,
       ...(input.subscriptionType !== undefined
         ? { subscriptionType: input.subscriptionType }
         : {}),
@@ -458,6 +524,7 @@ export class StudentTransportService {
     termId?: string;
     classId?: string;
     actedBy?: string;
+    canReversed?: boolean;
   }): Promise<StudentTransportData> {
     return this.create(input);
   }
@@ -530,6 +597,7 @@ export class StudentTransportService {
       termId?: string;
       classId?: string;
       actedBy?: string;
+      canReversed?: boolean;
     }
   ): Promise<StudentTransportData> {
     const existing = await this.getById(id);
@@ -628,7 +696,10 @@ export class StudentTransportService {
         });
 
         if (input.actedBy?.trim()) {
-          await this.syncTransportBilling(tx, subscription, input.actedBy.trim());
+          await this.syncTransportBilling(tx, subscription, input.actedBy.trim(), {
+            previousSubscription: existing,
+            canReversed: input.canReversed,
+          });
         }
 
         return subscription;
