@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { Status, TransportSubscriptionType } from "@prisma/client";
+import { getAuthenticatedUserId } from "../middlewares/auth";
 import { studentTransportService } from "../services/studentTransportService";
 import { handleAssessmentError, requireRouteId } from "../utils/assessmentController";
 import { parseIntOrUndefined, routeParam } from "../utils/request";
@@ -272,6 +273,11 @@ function parseSubscriptionType(
 export const studentTransportController = {
   create: async (req: Request, res: Response) => {
     try {
+      const actedBy = getAuthenticatedUserId(req);
+      if (!actedBy) {
+        return res.status(401).json({ success: false, message: "Authentication required" });
+      }
+
       const {
         studentId,
         routeId,
@@ -312,6 +318,7 @@ export const studentTransportController = {
         studentId: studentId.trim(),
         routeId: routeId.trim(),
         bustopId: bustopId.trim(),
+        actedBy,
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
         ...(parsedSubscriptionType !== undefined
           ? { subscriptionType: parsedSubscriptionType }
@@ -335,6 +342,11 @@ export const studentTransportController = {
 
   upsert: async (req: Request, res: Response) => {
     try {
+      const actedBy = getAuthenticatedUserId(req);
+      if (!actedBy) {
+        return res.status(401).json({ success: false, message: "Authentication required" });
+      }
+
       const {
         studentId,
         routeId,
@@ -375,6 +387,7 @@ export const studentTransportController = {
         studentId: studentId.trim(),
         routeId: routeId.trim(),
         bustopId: bustopId.trim(),
+        actedBy,
         ...(parsedStatus !== undefined ? { status: parsedStatus } : {}),
         ...(parsedSubscriptionType !== undefined
           ? { subscriptionType: parsedSubscriptionType }
@@ -487,6 +500,11 @@ export const studentTransportController = {
 
   update: async (req: Request, res: Response) => {
     try {
+      const actedBy = getAuthenticatedUserId(req);
+      if (!actedBy) {
+        return res.status(401).json({ success: false, message: "Authentication required" });
+      }
+
       const id = requireRouteId(req, res);
       if (!id) return;
 
@@ -531,6 +549,7 @@ export const studentTransportController = {
       }
 
       const updated = await studentTransportService.update(id, {
+        actedBy,
         ...(routeId !== undefined ? { routeId: String(routeId) } : {}),
         ...(bustopId !== undefined ? { bustopId: String(bustopId) } : {}),
         ...(sessionId !== undefined ? { sessionId: String(sessionId) } : {}),

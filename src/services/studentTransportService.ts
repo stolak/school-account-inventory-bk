@@ -1,7 +1,10 @@
 import prisma from "../utils/prisma";
 import { isPrismaKnownErrorWithCode } from "../utils/assessmentHttp";
-import { Prisma, Status, TransportSubscriptionType } from "@prisma/client";
+import { Prisma, Status, StudentBillingStatus, TransportSubscriptionType } from "@prisma/client";
 import { activePeriodService } from "./activePeriodService";
+import { accountTransactionService } from "./accountTransactionService";
+import { defaultAccountSettingsService } from "./defaultAccountSettingsService";
+import { generateReferenceNo } from "../utils/referenceNo";
 
 const include = {
   student: {
@@ -29,8 +32,195 @@ function clampInt(n: number, min: number, max: number) {
   return Math.max(min, Math.min(max, n));
 }
 
+function decimalToNumber(value: unknown): number {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  if (typeof value === "object" && value !== null && "toString" in value) {
+    const parsed = Number.parseFloat(String(value));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
 export class StudentTransportService {
   private prisma = prisma;
+
+  private getTransportAmount(
+    route: Pick<
+      StudentTransportData["route"],
+      "homeToSchoolCost" | "schoolToHomeCost" | "roundTripCost" | "name"
+    >,
+    subscriptionType: TransportSubscriptionType
+  ): number {
+    const amount =
+      subscriptionType === TransportSubscriptionType.OneWaySchool
+        ? decimalToNumber(route.homeToSchoolCost)
+        : subscriptionType === TransportSubscriptionType.OneWayHome
+          ? decimalToNumber(route.schoolToHomeCost)
+          : decimalToNumber(route.roundTripCost);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      throw new Error(
+        `Transport amount is not configured for route ${route.name} and subscription type ${subscriptionType}`
+      );
+    }
+
+    return amount;
+  }
+
+  private async syncTransportBilling(
+    tx: Prisma.TransactionClient,
+    subscription: StudentTransportData,
+    actedBy: string
+  ): Promise<void> {
+    if (subscription.status !== Status.Active) return;
+
+    const subscriptionType = subscription.subscriptionType ?? TransportSubscriptionType.RoundTrip;
+    const amount = this.getTransportAmount(subscription.route, subscriptionType);
+    const reference = `STRANS-${subscription.id}`;
+
+    const [studentReceivableAccount, transportIncomeAccount, billingItem, student] = await Promise.all([
+      defaultAccountSettingsService.getAccountChartBySettingsId("STUDENT_ACCOUNT", tx),
+      defaultAccountSettingsService.getAccountChartBySettingsId("TRANSPORTATION_ACCOUNT", tx),
+      tx.billingItem.findFirst({
+        where: { code: "TRANS" },
+        select: { id: true, name: true },
+      }),
+      tx.student.findUnique({
+        where: { id: subscription.studentId },
+        select: { id: true, subClassId: true },
+      }),
+    ]);
+
+    if (!studentReceivableAccount.accountId) {
+      throw new Error(
+        "Student receivable account chart is required before posting transportation billings contact the system administrator"
+      );
+    }
+    if (!transportIncomeAccount.accountId) {
+      throw new Error(
+        "Transportation income account chart is required before posting transportation billings contact the system administrator"
+      );
+    }
+    if (!billingItem) {
+      throw new Error("Transportation billing item (code: TRANS) is required before billing transport");
+    }
+    if (!student) {
+      throw new Error("Student not found for transport billing");
+    }
+
+    const existingBilling = await tx.studentBilling.findFirst({
+      where: {
+        studentId: subscription.studentId,
+        billingId: billingItem.id,
+        session: subscription.sessionId,
+        term: subscription.termId,
+        referentId: reference,
+      },
+      select: {
+        id: true,
+        amount: true,
+        classId: true,
+        subclassId: true,
+        status: true,
+        isPosted: true,
+        referentId: true,
+      },
+    });
+
+    const subclassId = student.subClassId ?? null;
+    const postedAt = new Date();
+    const remarks = `Transport subscription billing for ${subscription.route.name} (${subscriptionType})`;
+
+    if (existingBilling?.isPosted) {
+      const postedAmount = decimalToNumber(existingBilling.amount);
+      if (
+        postedAmount !== amount ||
+        existingBilling.classId !== subscription.classId ||
+        (existingBilling.subclassId ?? null) !== subclassId
+      ) {
+        throw new Error(
+          "This transport subscription has already been billed and posted for the period. Reverse or adjust the billing before changing the subscription charge."
+        );
+      }
+      return;
+    }
+
+    const billingRow = existingBilling
+      ? await tx.studentBilling.update({
+          where: { id: existingBilling.id },
+          data: {
+            classId: subscription.classId,
+            subclassId,
+            amount,
+            status: StudentBillingStatus.APPROVED,
+            approvedBy: actedBy,
+            approvedAt: postedAt,
+            createdBy: actedBy,
+          },
+        })
+      : await tx.studentBilling.create({
+          data: {
+            studentId: subscription.studentId,
+            classId: subscription.classId,
+            subclassId,
+            session: subscription.sessionId,
+            term: subscription.termId,
+            billingId: billingItem.id,
+            amount,
+            referentId: reference || generateReferenceNo("STRANS"),
+            status: StudentBillingStatus.APPROVED,
+            createdBy: actedBy,
+            approvedBy: actedBy,
+            approvedAt: postedAt,
+            postedBy: null,
+            postedAt: null,
+            isPosted: false,
+          },
+        });
+
+    const manualReference = `STB-${billingRow.id}`;
+    const transactionDate = postedAt.toISOString();
+
+    await accountTransactionService.debitAccount(
+      {
+        accountId: String(studentReceivableAccount.accountId),
+        amount,
+        ref: billingRow.referentId?.trim() || reference,
+        manualRef: manualReference,
+        accountSub: subscription.studentId,
+        transactionDate,
+        postedBy: actedBy,
+        remarks,
+      },
+      tx
+    );
+
+    await accountTransactionService.creditAccount(
+      {
+        accountId: String(transportIncomeAccount.accountId),
+        amount,
+        ref: billingRow.referentId?.trim() || reference,
+        manualRef: manualReference,
+        transactionDate,
+        postedBy: actedBy,
+        remarks,
+      },
+      tx
+    );
+
+    await tx.studentBilling.update({
+      where: { id: billingRow.id },
+      data: {
+        isPosted: true,
+        postedBy: actedBy,
+        postedAt,
+      },
+    });
+  }
 
   private async resolveSessionAndTerm(input: {
     sessionId?: string;
@@ -113,6 +303,7 @@ export class StudentTransportService {
     classId: string;
     status: Status;
     subscriptionType?: TransportSubscriptionType;
+    actedBy?: string;
   }): Promise<StudentTransportData> {
     await this.assertRefs({
       studentId: input.studentId,
@@ -166,7 +357,7 @@ export class StudentTransportService {
           }
         }
 
-        return tx.studentTransport.upsert({
+        const subscription = await tx.studentTransport.upsert({
           where: {
             studentId_sessionId_termId: {
               studentId: input.studentId,
@@ -197,6 +388,12 @@ export class StudentTransportService {
           },
           include,
         });
+
+        if (input.actedBy?.trim()) {
+          await this.syncTransportBilling(tx, subscription, input.actedBy.trim());
+        }
+
+        return subscription;
       });
     } catch (e) {
       if (e instanceof Error && e.message.includes("already has an active")) {
@@ -220,6 +417,7 @@ export class StudentTransportService {
     sessionId?: string;
     termId?: string;
     classId?: string;
+    actedBy?: string;
   }): Promise<StudentTransportData> {
     const studentId = input.studentId.trim();
     const routeId = input.routeId.trim();
@@ -243,6 +441,7 @@ export class StudentTransportService {
       termId,
       classId,
       status,
+      actedBy: input.actedBy,
       ...(input.subscriptionType !== undefined
         ? { subscriptionType: input.subscriptionType }
         : {}),
@@ -258,6 +457,7 @@ export class StudentTransportService {
     sessionId?: string;
     termId?: string;
     classId?: string;
+    actedBy?: string;
   }): Promise<StudentTransportData> {
     return this.create(input);
   }
@@ -329,6 +529,7 @@ export class StudentTransportService {
       sessionId?: string;
       termId?: string;
       classId?: string;
+      actedBy?: string;
     }
   ): Promise<StudentTransportData> {
     const existing = await this.getById(id);
@@ -410,7 +611,7 @@ export class StudentTransportService {
           }
         }
 
-        return tx.studentTransport.update({
+        const subscription = await tx.studentTransport.update({
           where: { id },
           data: {
             ...(input.routeId !== undefined ? { routeId } : {}),
@@ -425,6 +626,12 @@ export class StudentTransportService {
           },
           include,
         });
+
+        if (input.actedBy?.trim()) {
+          await this.syncTransportBilling(tx, subscription, input.actedBy.trim());
+        }
+
+        return subscription;
       });
     } catch (e) {
       if (e instanceof Error && e.message.includes("already has an active")) {

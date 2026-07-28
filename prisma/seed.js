@@ -2483,6 +2483,11 @@ async function main() {
         accountId: 23,
       },
       {
+        settingsId: "TRANSPORTATION_ACCOUNT",
+        settings: "Default income account for student transportation subscriptions and billings",
+        accountId: 18,
+      },
+      {
         settingsId: "ADMINISTRATIVE_ASSET_ACCOUNT",
         settings:
           "Default asset (cash) ledger administrative expenses are paid from — Cashier Ledger - School Admin",
