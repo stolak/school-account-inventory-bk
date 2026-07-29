@@ -1,5 +1,6 @@
 import prisma from "../utils/prisma";
-import { Prisma } from "@prisma/client";
+import { Prisma, StudentBillingStatus } from "@prisma/client";
+import { generateReferenceNo } from "../utils/referenceNo";
 
 export type ClassDefaultBillingRow = Prisma.ClassDefaultBillingGetPayload<Record<string, never>>;
 
@@ -21,6 +22,26 @@ type CreateClassDefaultBillingInput = {
 };
 
 type UpdateClassDefaultBillingInput = Partial<CreateClassDefaultBillingInput>;
+
+export type ApplyClassDefaultBillingsToStudentsInput = {
+  sessionId: string;
+  termId: string;
+  classId: string;
+  subclassId?: string;
+  createdBy: string;
+};
+
+export type ApplyClassDefaultBillingsToStudentsResult = {
+  sessionId: string;
+  termId: string;
+  classId: string;
+  subclassId: string | null;
+  defaultBillingCount: number;
+  studentCount: number;
+  created: number;
+  updated: number;
+  skippedApproved: number;
+};
 
 export class ClassDefaultBillingService {
   private prisma = prisma;
@@ -217,6 +238,164 @@ export class ClassDefaultBillingService {
 
   async delete(id: number): Promise<ClassDefaultBillingRow> {
     return this.prisma.classDefaultBilling.delete({ where: { id } });
+  }
+
+  /**
+   * Load class default billings for a period/class (and optional subclass),
+   * then create/update DRAFT student billings for matching students.
+   * Already APPROVED student billing items for the same student/billing/session/term are skipped.
+   */
+  async applyToStudents(
+    input: ApplyClassDefaultBillingsToStudentsInput
+  ): Promise<ApplyClassDefaultBillingsToStudentsResult> {
+    const sessionId = this.normalizeStringRequired(input.sessionId, "sessionId");
+    const termId = this.normalizeStringRequired(input.termId, "termId");
+    const classId = this.normalizeStringRequired(input.classId, "classId");
+    const subclassId = this.normalizeStringOptional(input.subclassId) ?? null;
+    const createdBy = this.normalizeStringRequired(input.createdBy, "createdBy");
+
+    const [session, term, schoolClass] = await Promise.all([
+      this.prisma.session.findUnique({ where: { id: sessionId }, select: { id: true } }),
+      this.prisma.term.findUnique({ where: { id: termId }, select: { id: true } }),
+      this.prisma.schoolClass.findUnique({ where: { id: classId }, select: { id: true } }),
+    ]);
+    if (!session) throw new Error("Invalid sessionId");
+    if (!term) throw new Error("Invalid termId");
+    if (!schoolClass) throw new Error("Invalid classId");
+
+    if (subclassId) {
+      const subclass = await this.prisma.subClass.findUnique({
+        where: { id: subclassId },
+        select: { id: true, classId: true },
+      });
+      if (!subclass) throw new Error("Invalid subclassId");
+      if (subclass.classId !== classId) {
+        throw new Error("subclassId does not belong to the specified classId");
+      }
+    }
+
+    const defaultWhere: Prisma.ClassDefaultBillingWhereInput = {
+      classId,
+      session: sessionId,
+      term: termId,
+      ...(subclassId
+        ? { OR: [{ subclassId: null }, { subclassId }] }
+        : {}),
+    };
+
+    const defaults = await this.prisma.classDefaultBilling.findMany({
+      where: defaultWhere,
+      orderBy: [{ billingId: "asc" }, { id: "asc" }],
+    });
+
+    if (defaults.length === 0) {
+      throw new Error(
+        "No class default billings found for the specified session, term, and class"
+      );
+    }
+
+    const students = await this.prisma.student.findMany({
+      where: {
+        classId,
+        ...(subclassId ? { subClassId: subclassId } : {}),
+      },
+      select: {
+        id: true,
+        classId: true,
+        subClassId: true,
+        admissionNumber: true,
+      },
+      orderBy: { admissionNumber: "asc" },
+    });
+
+    let created = 0;
+    let updated = 0;
+    let skippedApproved = 0;
+
+    await this.prisma.$transaction(async (tx) => {
+      for (const student of students) {
+        const applicableDefaults = defaults.filter(
+          (row) => row.subclassId === null || row.subclassId === student.subClassId
+        );
+
+        for (const def of applicableDefaults) {
+          const existing = await tx.studentBilling.findFirst({
+            where: {
+              studentId: student.id,
+              billingId: def.billingId,
+              session: sessionId,
+              term: termId,
+            },
+            select: {
+              id: true,
+              status: true,
+              isPosted: true,
+            },
+          });
+
+          if (existing?.status === StudentBillingStatus.APPROVED) {
+            skippedApproved += 1;
+            continue;
+          }
+
+          const amount = Number(def.amount);
+          if (!Number.isFinite(amount) || amount < 0) {
+            throw new Error(
+              `Invalid amount on class default billing id ${def.id} for billingId ${def.billingId}`
+            );
+          }
+
+          if (existing) {
+            await tx.studentBilling.update({
+              where: { id: existing.id },
+              data: {
+                classId: student.classId ?? classId,
+                subclassId: student.subClassId,
+                amount,
+                status: StudentBillingStatus.DRAFT,
+                approvedBy: null,
+                approvedAt: null,
+                createdBy,
+              },
+            });
+            updated += 1;
+          } else {
+            await tx.studentBilling.create({
+              data: {
+                studentId: student.id,
+                classId: student.classId ?? classId,
+                subclassId: student.subClassId,
+                session: sessionId,
+                term: termId,
+                billingId: def.billingId,
+                amount,
+                referentId: generateReferenceNo("STB"),
+                status: StudentBillingStatus.DRAFT,
+                createdBy,
+                approvedBy: null,
+                approvedAt: null,
+                postedBy: null,
+                postedAt: null,
+                isPosted: false,
+              },
+            });
+            created += 1;
+          }
+        }
+      }
+    });
+
+    return {
+      sessionId,
+      termId,
+      classId,
+      subclassId,
+      defaultBillingCount: defaults.length,
+      studentCount: students.length,
+      created,
+      updated,
+      skippedApproved,
+    };
   }
 }
 

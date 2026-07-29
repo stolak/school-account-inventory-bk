@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { parseIntOrUndefined } from "../utils/request";
 import { classDefaultBillingService } from "../services/classDefaultBillingService";
+import { getAuthenticatedUserId } from "../middlewares/auth";
 
 function parseNumberOrUndefined(v: unknown): number | undefined {
   if (typeof v === "number") {
@@ -109,6 +110,37 @@ function asStringOrNullOrUndefined(v: unknown): string | null | undefined {
  *       201: { description: Created }
  *       400: { description: Validation error }
  *       404: { description: One or more billing items not found }
+ *       500: { description: Server error }
+ */
+/**
+ * @openapi
+ * /api/v1/class-default-billings/apply-to-students:
+ *   post:
+ *     summary: Apply class default billings to matching students
+ *     description: |
+ *       Loads class default billings for sessionId + termId + classId (and optional subclassId),
+ *       then creates or updates DRAFT student billings for all matching students.
+ *       Existing APPROVED student billing items for the same student/billing/session/term are skipped.
+ *     tags: [ClassDefaultBillings]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sessionId, termId, classId]
+ *             properties:
+ *               sessionId: { type: string }
+ *               termId: { type: string }
+ *               classId: { type: string }
+ *               subclassId: { type: string }
+ *     responses:
+ *       200: { description: Applied }
+ *       400: { description: Validation error }
+ *       401: { description: Unauthorized }
+ *       404: { description: Defaults or related records not found }
  *       500: { description: Server error }
  */
 export const classDefaultBillingController = {
@@ -228,6 +260,55 @@ export const classDefaultBillingController = {
       const status = message.includes("not found")
         ? 404
         : message.includes("required") || message.includes("must be") || message.includes("invalid")
+          ? 400
+          : 500;
+      return res.status(status).json({ success: false, message });
+    }
+  },
+
+  applyToStudents: async (req: Request, res: Response) => {
+    try {
+      const createdBy = getAuthenticatedUserId(req);
+      if (!createdBy) {
+        return res.status(401).json({ success: false, message: "Unauthorized" });
+      }
+
+      const body = req.body ?? {};
+      const sessionId = asTrimmedString(body.sessionId);
+      const termId = asTrimmedString(body.termId);
+      const classId = asTrimmedString(body.classId);
+      const subclassId = asTrimmedString(body.subclassId);
+
+      if (!sessionId) {
+        return res.status(400).json({ success: false, message: "sessionId is required" });
+      }
+      if (!termId) {
+        return res.status(400).json({ success: false, message: "termId is required" });
+      }
+      if (!classId) {
+        return res.status(400).json({ success: false, message: "classId is required" });
+      }
+
+      const result = await classDefaultBillingService.applyToStudents({
+        sessionId,
+        termId,
+        classId,
+        createdBy,
+        ...(subclassId ? { subclassId } : {}),
+      });
+
+      return res.json({
+        success: true,
+        message: "Class default billings applied to students successfully",
+        data: result,
+      });
+    } catch (error: any) {
+      const message = error?.message ?? "Failed to apply class default billings to students";
+      const status = message.includes("not found") || message.includes("Invalid")
+        ? 404
+        : message.includes("required") ||
+            message.includes("must be") ||
+            message.includes("does not belong")
           ? 400
           : 500;
       return res.status(status).json({ success: false, message });
