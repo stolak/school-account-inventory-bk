@@ -6762,6 +6762,99 @@ async function main() {
       `   ✓ ${classDefaultBillings.length} class default billings (2025/2026, Third Term)`
     );
 
+    const session2026_27 = await prisma.session.findUnique({
+      where: { name: "2026/2027" },
+      select: { id: true },
+    });
+    const termFirst = await prisma.term.findUnique({
+      where: { name: "First Term" },
+      select: { id: true },
+    });
+    if (!session2026_27 || !termFirst) {
+      throw new Error("Failed to resolve 2026/2027 session or First Term for class default billings");
+    }
+
+    const SUBCLASS_JSS1B = "d5e6f7a8-b9c0-4123-d012-345678906002";
+    const SUBCLASS_JSS2A = "d5e6f7a8-b9c0-4123-d012-345678906003";
+    const SUBCLASS_JSS2B = "d5e6f7a8-b9c0-4123-d012-345678906004";
+    const SUBCLASS_SS1A = "d5e6f7a8-b9c0-4123-d012-345678906005";
+    const SUBCLASS_JSS3A = "d5e6f7a8-b9c0-4123-d012-345678906006";
+    const SUBCLASS_SS2A = "d5e6f7a8-b9c0-4123-d012-345678906007";
+
+    const classDefaultBillings2026FirstTerm = [
+      // JSS 1A
+      { id: 27, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1A, billingId: 1, amount: 125000 },
+      { id: 28, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1A, billingId: 2, amount: 5000 },
+      { id: 29, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1A, billingId: 3, amount: 10000 },
+      { id: 30, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1A, billingId: 4, amount: 8000 },
+      { id: 31, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1A, billingId: 5, amount: 25000 },
+      { id: 32, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1A, billingId: 8, amount: 3000 },
+      { id: 33, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1A, billingId: 9, amount: 2000 },
+      // JSS 1B
+      { id: 34, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1B, billingId: 1, amount: 125000 },
+      { id: 35, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1B, billingId: 2, amount: 5000 },
+      { id: 36, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1B, billingId: 3, amount: 10000 },
+      { id: 37, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1B, billingId: 4, amount: 8000 },
+      { id: 38, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1B, billingId: 8, amount: 3000 },
+      { id: 39, classId: CLASS_JSS1, subclassId: SUBCLASS_JSS1B, billingId: 9, amount: 2000 },
+      // JSS 2A
+      { id: 40, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2A, billingId: 1, amount: 140000 },
+      { id: 41, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2A, billingId: 2, amount: 5000 },
+      { id: 42, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2A, billingId: 3, amount: 10000 },
+      { id: 43, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2A, billingId: 4, amount: 8000 },
+      { id: 44, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2A, billingId: 8, amount: 3500 },
+      { id: 45, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2A, billingId: 9, amount: 2000 },
+      // JSS 2B
+      { id: 46, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2B, billingId: 1, amount: 140000 },
+      { id: 47, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2B, billingId: 2, amount: 5000 },
+      { id: 48, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2B, billingId: 3, amount: 10000 },
+      { id: 49, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2B, billingId: 4, amount: 8000 },
+      { id: 50, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2B, billingId: 8, amount: 3500 },
+      { id: 51, classId: CLASS_JSS2, subclassId: SUBCLASS_JSS2B, billingId: 9, amount: 2000 },
+      // JSS 3A
+      { id: 52, classId: CLASS_JSS3, subclassId: SUBCLASS_JSS3A, billingId: 1, amount: 155000 },
+      { id: 53, classId: CLASS_JSS3, subclassId: SUBCLASS_JSS3A, billingId: 2, amount: 5000 },
+      { id: 54, classId: CLASS_JSS3, subclassId: SUBCLASS_JSS3A, billingId: 3, amount: 12000 },
+      { id: 55, classId: CLASS_JSS3, subclassId: SUBCLASS_JSS3A, billingId: 8, amount: 4000 },
+      { id: 56, classId: CLASS_JSS3, subclassId: SUBCLASS_JSS3A, billingId: 4, amount: 8000 },
+      // SS 1A
+      { id: 57, classId: CLASS_SS1, subclassId: SUBCLASS_SS1A, billingId: 1, amount: 190000 },
+      { id: 58, classId: CLASS_SS1, subclassId: SUBCLASS_SS1A, billingId: 2, amount: 7500 },
+      { id: 59, classId: CLASS_SS1, subclassId: SUBCLASS_SS1A, billingId: 3, amount: 15000 },
+      { id: 60, classId: CLASS_SS1, subclassId: SUBCLASS_SS1A, billingId: 4, amount: 10000 },
+      { id: 61, classId: CLASS_SS1, subclassId: SUBCLASS_SS1A, billingId: 8, amount: 5000 },
+      { id: 62, classId: CLASS_SS1, subclassId: SUBCLASS_SS1A, billingId: 6, amount: 45000 },
+      // SS 2A
+      { id: 63, classId: CLASS_SS2, subclassId: SUBCLASS_SS2A, billingId: 1, amount: 210000 },
+      { id: 64, classId: CLASS_SS2, subclassId: SUBCLASS_SS2A, billingId: 2, amount: 7500 },
+      { id: 65, classId: CLASS_SS2, subclassId: SUBCLASS_SS2A, billingId: 3, amount: 15000 },
+      { id: 66, classId: CLASS_SS2, subclassId: SUBCLASS_SS2A, billingId: 8, amount: 5000 },
+      { id: 67, classId: CLASS_SS2, subclassId: SUBCLASS_SS2A, billingId: 4, amount: 10000 },
+      { id: 68, classId: CLASS_SS2, subclassId: SUBCLASS_SS2A, billingId: 6, amount: 45000 },
+    ].map((row) => ({
+      ...row,
+      session: session2026_27.id,
+      term: termFirst.id,
+    }));
+
+    for (const row of classDefaultBillings2026FirstTerm) {
+      await prisma.classDefaultBilling.upsert({
+        where: { id: row.id },
+        update: {
+          classId: row.classId,
+          subclassId: row.subclassId,
+          session: row.session,
+          term: row.term,
+          billingId: row.billingId,
+          amount: row.amount,
+        },
+        create: row,
+      });
+    }
+    console.log(
+      `   ✓ ${classDefaultBillings2026FirstTerm.length} class default billings for all subclasses (2026/2027, First Term)`
+    );
+
     // Student billings — apply class defaults to each seeded student for current session/term
     console.log("💳 Seeding student billings...");
     let studentBillingCount = 0;
