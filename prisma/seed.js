@@ -4845,6 +4845,110 @@ async function main() {
       },
     ];
 
+    const MIN_STUDENTS_PER_SUBCLASS = 10;
+    const subclassStudentTargets = [
+      { subClassId: subClassIds.jss1A, classId: classIds.jss1, slug: "jss1a", birthYear: 2013 },
+      { subClassId: subClassIds.jss1B, classId: classIds.jss1, slug: "jss1b", birthYear: 2013 },
+      { subClassId: subClassIds.jss2A, classId: classIds.jss2, slug: "jss2a", birthYear: 2012 },
+      { subClassId: subClassIds.jss2B, classId: classIds.jss2, slug: "jss2b", birthYear: 2012 },
+      { subClassId: subClassIds.jss3A, classId: classIds.jss3, slug: "jss3a", birthYear: 2011 },
+      { subClassId: subClassIds.ss1A, classId: classIds.ss1, slug: "ss1a", birthYear: 2010 },
+      { subClassId: subClassIds.ss2A, classId: classIds.ss2, slug: "ss2a", birthYear: 2009 },
+    ];
+    const maleFirstNames = [
+      "Tunde",
+      "Chidi",
+      "Emeka",
+      "Yusuf",
+      "Segun",
+      "Kelechi",
+      "Hassan",
+      "Victor",
+      "Daniel",
+      "Michael",
+    ];
+    const femaleFirstNames = [
+      "Ada",
+      "Ngozi",
+      "Halima",
+      "Blessing",
+      "Zainab",
+      "Chiamaka",
+      "Aisha",
+      "Precious",
+      "Mary",
+      "Joy",
+    ];
+    const lastNames = [
+      "Okafor",
+      "Adeyemi",
+      "Mohammed",
+      "Abubakar",
+      "Nwankwo",
+      "Suleiman",
+      "Ekanem",
+      "Garba",
+      "Obi",
+      "Lawal",
+    ];
+    const cities = [
+      "Lagos",
+      "Abuja",
+      "Kano",
+      "Port Harcourt",
+      "Ibadan",
+      "Enugu",
+      "Kaduna",
+      "Benin City",
+    ];
+
+    let generatedStudentSeq = students.length + 1;
+    for (const target of subclassStudentTargets) {
+      const currentCount = students.filter((row) => row.subClassId === target.subClassId).length;
+      const needed = MIN_STUDENTS_PER_SUBCLASS - currentCount;
+      if (needed <= 0) continue;
+
+      for (let i = 0; i < needed; i += 1) {
+        const seq = generatedStudentSeq;
+        const gender = seq % 2 === 0 ? "female" : "male";
+        const firstNamePool = gender === "female" ? femaleFirstNames : maleFirstNames;
+        const firstName = firstNamePool[i % firstNamePool.length];
+        const lastName = lastNames[(seq + i) % lastNames.length];
+        const admissionNumber = `ADM2025${String(seq).padStart(4, "0")}`;
+        const month = String(((seq + i) % 12) + 1).padStart(2, "0");
+        const day = String(((seq * 3 + i) % 28) + 1).padStart(2, "0");
+        const withPortalAccount = seq % 3 !== 0;
+        const studentEmail = withPortalAccount
+          ? `${firstName.toLowerCase()}.${lastName.toLowerCase()}.${target.slug}${String(i + 1).padStart(2, "0")}@student.school.ng`
+          : null;
+
+        students.push({
+          id: `e6f7a8b9-c0d1-4234-e012-345678907${String(seq).padStart(3, "0")}`,
+          ...(withPortalAccount
+            ? { userId: `f1a2b3c4-d5e6-4789-a001-22222222${String(2000 + seq).slice(-4)}` }
+            : {}),
+          guardianUserId: `f1a2b3c4-d5e6-4789-a001-22222222${String(3000 + seq).slice(-4)}`,
+          admissionNumber,
+          firstName,
+          middleName: seq % 4 === 0 ? "Seed" : null,
+          lastName,
+          studentEmail,
+          gender,
+          dateOfBirth: new Date(`${target.birthYear}-${month}-${day}`),
+          classId: target.classId,
+          subClassId: target.subClassId,
+          guardianName: `${gender === "female" ? "Mrs." : "Mr."} ${lastName} Parent`,
+          guardianEmail: `guardian.${target.slug}.${String(i + 1).padStart(2, "0")}@email.com`,
+          guardianContact: `+2348012${String(100000 + seq).slice(-6)}`,
+          address: `${((seq + i) % 40) + 1} ${cities[(seq + i) % cities.length]} Street`,
+          imageUrl: `https://randomuser.me/api/portraits/${gender === "female" ? "women" : "men"}/${(seq % 70) + 1}.jpg`,
+          status: "Active",
+          createdById: adminUserId,
+        });
+        generatedStudentSeq += 1;
+      }
+    }
+
     let studentLedgerCount = 0;
     let studentUserCount = 0;
     let guardianUserCount = 0;
